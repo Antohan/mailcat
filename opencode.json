@@ -11,8 +11,8 @@
         { "action": "shell", "resource": "git status*", "effect": "allow" },
         { "action": "shell", "resource": "git diff*", "effect": "allow" },
         { "action": "shell", "resource": "git log*", "effect": "allow" },
-        { "action": "shell", "resource": "git add*", "effect": "deny" },
-        { "action": "shell", "resource": "git commit*", "effect": "deny" },
+        { "action": "shell", "resource": "git add*", "effect": "allow" },
+        { "action": "shell", "resource": "git commit*", "effect": "allow" },
         { "action": "shell", "resource": "security*", "effect": "deny" },
         { "action": "shell", "resource": "git push*", "effect": "deny" },
         { "action": "shell", "resource": "rm -rf*", "effect": "deny" }

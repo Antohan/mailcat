@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:GetAttachmentResponse>
+      <m:ResponseMessages>
+        <m:GetAttachmentResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:Attachments>
+            <t:FileAttachment>
+              <t:AttachmentId Id="AAMkAGI2ATT1="/>
+              <t:Name>report.pdf</t:Name>
+              <t:ContentType>application/pdf</t:ContentType>
+              <t:Content>UERGLUJJTkFSWS1DT05URU5ULW1haWxjYXQtdGVzdC0xMjM=</t:Content>
+            </t:FileAttachment>
+          </m:Attachments>
+        </m:GetAttachmentResponseMessage>
+      </m:ResponseMessages>
+    </m:GetAttachmentResponse>
+  </soap:Body>
+</soap:Envelope>

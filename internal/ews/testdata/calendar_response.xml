@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:FindItemResponse>
+      <m:ResponseMessages>
+        <m:FindItemResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:RootFolder TotalItemsInView="3" IncludesLastItemInRange="true">
+            <t:Items>
+              <t:CalendarItem>
+                <t:ItemId Id="AAMkAGI2CAL1=" ChangeKey="DwAAABYAAA"/>
+                <t:Subject>Синк команды</t:Subject>
+                <t:Start>2026-11-17T10:00:00Z</t:Start>
+                <t:End>2026-11-17T10:30:00Z</t:End>
+                <t:Location>Zoom</t:Location>
+                <t:CalendarItemType>Occurrence</t:CalendarItemType>
+                <t:Organizer>
+                  <t:Mailbox>
+                    <t:Name>Иванов И.</t:Name>
+                    <t:EmailAddress>ivanov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:Organizer>
+                <t:MyResponseType>Accept</t:MyResponseType>
+                <t:RequiredAttendees>
+                  <t:Mailbox>
+                    <t:Name>Петрова А.</t:Name>
+                    <t:EmailAddress>apetrova@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                  <t:Mailbox>
+                    <t:Name>Сидоров В.</t:Name>
+                    <t:EmailAddress>vsidorov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:RequiredAttendees>
+              </t:CalendarItem>
+              <t:CalendarItem>
+                <t:ItemId Id="AAMkAGI2CAL2=" ChangeKey="DwAAABYAAB"/>
+                <t:Subject>Планирование Q4</t:Subject>
+                <t:Start>2026-11-18T14:00:00Z</t:Start>
+                <t:End>2026-11-18T15:00:00Z</t:End>
+                <t:Location>Переговорная 3</t:Location>
+                <t:CalendarItemType>Single</t:CalendarItemType>
+                <t:Organizer>
+                  <t:Mailbox>
+                    <t:Name>Петрова А.</t:Name>
+                    <t:EmailAddress>apetrova@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:Organizer>
+                <t:MyResponseType>Tentative</t:MyResponseType>
+                <t:RequiredAttendees>
+                  <t:Mailbox>
+                    <t:Name>Иванов И.</t:Name>
+                    <t:EmailAddress>ivanov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:RequiredAttendees>
+                <t:OptionalAttendees>
+                  <t:Mailbox>
+                    <t:Name>Кузнецов Д.</t:Name>
+                    <t:EmailAddress>dkuznetsov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:OptionalAttendees>
+              </t:CalendarItem>
+              <t:CalendarItem>
+                <t:ItemId Id="AAMkAGI2CAL3=" ChangeKey="DwAAABYAAC"/>
+                <t:Subject>1:1 с руководителем</t:Subject>
+                <t:Start>2026-11-20T11:00:00Z</t:Start>
+                <t:End>2026-11-20T11:45:00Z</t:End>
+                <t:Location>Skype</t:Location>
+                <t:CalendarItemType>Exception</t:CalendarItemType>
+                <t:Organizer>
+                  <t:Mailbox>
+                    <t:Name>Смирнов Н.</t:Name>
+                    <t:EmailAddress>nsmirnov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:Organizer>
+                <t:MyResponseType>NoResponseReceived</t:MyResponseType>
+              </t:CalendarItem>
+            </t:Items>
+          </m:RootFolder>
+        </m:FindItemResponseMessage>
+      </m:ResponseMessages>
+    </m:FindItemResponse>
+  </soap:Body>
+</soap:Envelope>

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:FindItemResponse>
+      <m:ResponseMessages>
+        <m:FindItemResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:RootFolder IndexedPagingOffset="3" TotalItemsInView="6" IncludesLastItemInRange="false">
+            <t:Items>
+              <t:Message>
+                <t:ItemId Id="AAMkAGI2MDE=" ChangeKey="CQAAABYA0AA="/>
+                <t:Subject>Отчёт Q3</t:Subject>
+                <t:DateTimeReceived>2026-11-17T10:12:44Z</t:DateTimeReceived>
+                <t:IsRead>false</t:IsRead>
+                <t:HasAttachments>true</t:HasAttachments>
+                <t:From>
+                  <t:Mailbox>
+                    <t:Name>Иванов И.</t:Name>
+                    <t:EmailAddress>ivanov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:From>
+              </t:Message>
+              <t:Message>
+                <t:ItemId Id="AAMkAGI2MDI=" ChangeKey="CQAAABYA0AB="/>
+                <t:Subject>Ссылка для встречи</t:Subject>
+                <t:DateTimeReceived>2026-11-17T09:30:00Z</t:DateTimeReceived>
+                <t:IsRead>true</t:IsRead>
+                <t:HasAttachments>false</t:HasAttachments>
+                <t:From>
+                  <t:Mailbox>
+                    <t:Name>Петрова А.</t:Name>
+                    <t:EmailAddress>apetrova@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:From>
+              </t:Message>
+              <t:Message>
+                <t:ItemId Id="AAMkAGI2MDM=" ChangeKey="CQAAABYA0AC="/>
+                <t:Subject>Re: бюджет на Q4</t:Subject>
+                <t:DateTimeReceived>2026-11-16T17:45:10Z</t:DateTimeReceived>
+                <t:IsRead>true</t:IsRead>
+                <t:HasAttachments>false</t:HasAttachments>
+                <t:From>
+                  <t:Mailbox>
+                    <t:Name>Сидоров В.</t:Name>
+                    <t:EmailAddress>vsidorov@company.example</t:EmailAddress>
+                  </t:Mailbox>
+                </t:From>
+              </t:Message>
+            </t:Items>
+          </m:RootFolder>
+        </m:FindItemResponseMessage>
+      </m:ResponseMessages>
+    </m:FindItemResponse>
+  </soap:Body>
+</soap:Envelope>
