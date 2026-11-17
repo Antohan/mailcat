@@ -1,0 +1,40 @@
+# Пример конфигурации mailcat.
+# Скопируйте в ~/.config/mailcat/config.toml и заполните свои значения.
+# Права на файл: chmod 600. Пароль здесь НЕ хранится (он в Keychain).
+
+# Адрес сервера Exchange (только https).
+server = "https://mail.company.example"
+
+# Логин: DOMAIN\\user или user@company.example (выберите формат, который
+# принимает ваш сервер).
+username = "COMPANY\\ivanov"
+
+# Корпоративный корневой сертификат (PEM). Изолируется внутри приложения —
+# в системное хранилище macOS НЕ добавляется. Пусто = доверять системным корням
+# (если у сервера публичный сертификат).
+ca_path = "~/.config/mailcat/company-root-ca.pem"
+
+# Домен организации — для метки [ВНЕШН] у писем со стороны.
+org_domain = "company.example"
+
+# Параметры чтения.
+page_size = 50                 # писем на страницу в списках
+max_attachment_mb = 100        # отказ скачивать вложения больше этого размера
+
+[ui]
+language = "ru"                # MVP поддерживает только "ru"
+
+[notify]
+# Уведомления macOS о новых письмах (работают, пока запущен TUI).
+enabled = true
+interval_sec = 60           # период опроса, минимум 30
+min_importance = "normal"   # low | normal | high — уведомлять о важности не ниже
+only_external = false       # true = уведомлять только о [ВНЕШН] письмах
+senders = []                # пусто = все; иначе адреса или домены: ["boss@corp.ru", "@hr.corp.ru"]
+keywords = []               # подстроки в теме (без учёта регистра): ["срочно", "инцидент"]
+show_subject = true         # false = только «Новое письмо от …» (приватность)
+sound = true
+
+[log]
+# Лог-файл (без секретов). Пусто = не логировать в файл.
+file = "~/.local/state/mailcat/mailcat.log"

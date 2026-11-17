@@ -1,0 +1,16 @@
+# Секреты и конфиг приложения — не коммитить
+config.toml
+*.pem
+mailcat.log
+
+# Артефакты Go
+bin/
+dist/
+*.test
+coverage.out
+
+# macOS
+.DS_Store
+
+# Локальные фикстуры живого сервера (если появятся)
+local/
