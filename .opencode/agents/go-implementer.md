@@ -32,3 +32,8 @@ Token discipline (AGENTS.md, "Token budget rules") is mandatory: one session =
 one task, then a report of at most five lines and a full stop; batch shell
 calls; read narrowly; never paste file contents; `/check` once per task; no
 second task in the same session.
+
+Decisions (AGENTS.md, "Decisions and invariants"): when a choice is not obvious
+from the code, put a three-line `// WHY:` comment at the spot someone would try
+to simplify, and one line under `Не трогать` in `docs/HANDOFF.md`. Write it while
+you are making the decision, not at the end of the stage.

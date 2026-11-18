@@ -14,7 +14,7 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 | --- | --- |
 | `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
 | `docs/PLAN.md` | stages, tasks, DoD — read only the current stage's section |
-| `docs/ARCHITECTURE.md` | packages, data flow, decisions |
+| `docs/ARCHITECTURE.md` | packages, data flow; §3 is the list of invariants |
 | `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML |
 | `docs/SECURITY.md` | mandatory security checklist |
 | `docs/TESTING.md` | what and how to test; manual smoke in §5 |
@@ -91,8 +91,8 @@ for the `ews-specialist` / `security-reviewer` subagents.
 (never appended), newest on top, finished lines deleted.
 
 Fields: `Сделано` (commit hashes only) / `Дальше` (task and exactly what to
-read) / `Открыто` (smoke checks and TODOs for the user) / `Не трогать` (and
-why).
+read) / `Открыто` (smoke checks and TODOs for the user) / `Не трогать`
+(invariants of the current stage, in triplet form — see below).
 
 The code is the truth, the handoff is navigation. When they disagree, trust the
 code and delete the stale line — do not repair it.
@@ -107,3 +107,20 @@ code and delete the stale line — do not repair it.
 
 A stage is done when every DoD point of that stage in PLAN.md is met. Live-server
 checks are unavailable here: mark them as TODO for the user (`TESTING.md §5`).
+
+## Decisions and invariants
+
+A non-obvious choice gets recorded where the next person would try to "simplify"
+it — an inline comment in the code, three lines:
+
+```go
+// WHY: response is discarded by generation, not by folder name.
+// Why: a late reply from the previous folder overwrites the loaded list.
+// Not to do: compare folder names — after A→B→A the old reply looks fresh.
+```
+
+A decision made during a stage also gets one line in `HANDOFF.md` → `Не трогать`.
+Only what survives its stage moves into `docs/ARCHITECTURE.md §3`; the rest is
+deleted. Never read §3 or the handoff as prose — use them to check the invariant
+you are about to break. Every finding from `security-reviewer` becomes one such
+invariant line, otherwise the same mistake comes back next stage.

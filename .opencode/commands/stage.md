@@ -12,6 +12,8 @@ section of stage $ARGUMENTS in `docs/PLAN.md`. Do not open other documents.
 3. Ask the user only on real ambiguity.
 4. Close the task: `/check` → commit `stage<N>: <done>` → tick the checkbox in
    PLAN.md → rewrite `docs/HANDOFF.md` (≤25 lines, newest on top).
+   End of stage only: move the invariants from `Не трогать` that survived into
+   `docs/ARCHITECTURE.md §3`, delete the rest.
 5. Report in at most five lines: what changed, what was verified, what is next.
    Then say that the task is closed and the next one needs a new session — and
    stop.

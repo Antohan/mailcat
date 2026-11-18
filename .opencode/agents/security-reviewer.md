@@ -21,7 +21,11 @@ Procedure:
 2. Read the changes you were given in the task (diff or stage); read whole files
    only when the diff is not enough to judge.
 3. Walk every point of the checklist §1–§8 and golden rules 1–5 from AGENTS.md.
-4. Look especially for:
+4. Check the invariants that were already broken once: `docs/ARCHITECTURE.md §3`
+   and `Не трогать` in `docs/HANDOFF.md` — only those parts, never the whole
+   files. A violated invariant is ВАЖНО even when it is outside the diff; that
+   regression loop is the reason the list exists.
+5. Look especially for:
    - `InsecureSkipVerify`, `RootCAs: nil` when `ca_path` is set, global
      `http.Client` outside `internal/ews`;
    - EWS text reaching tview around `security.Sanitize` / `tview.Escape`;
@@ -29,7 +33,7 @@ Procedure:
    - password or secrets in logs, errors, config;
    - `os/exec` calls with unvalidated arguments (attachment names, URLs);
    - opening or downloading without limits and confirmation.
-5. Answer with a table: severity (КРИТИЧНО / ВАЖНО / ЗАМЕЧАНИЕ), file:line,
+6. Answer with a table: severity (КРИТИЧНО / ВАЖНО / ЗАМЕЧАНИЕ), file:line,
    checklist point, what is violated, how to fix. No violations → say exactly
    that: «Чек-лист пройден, критичных замечаний нет» plus the list of points
    checked.

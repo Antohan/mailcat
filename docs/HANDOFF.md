@@ -1,26 +1,23 @@
-# HANDOFF — состояние после этапа 5
+# HANDOFF — после этапа 5
 
-Перезаписывается в конце каждого этапа: ≤25 строк, новое сверху, закрытое
-удаляется. Код — истина, этот файл — навигация.
+≤25 строк, новое сверху, закрытое удаляется. Код — истина, файл — навигация.
+«Не трогать» — инварианты этапа; выжившие уходят в ARCHITECTURE.md §3.
 
 Сделано: 309332b, 31b956e, 2507572, 3bbff28 — этап 5 (doctor, очистка
-вложений, perm-warnings, in-flight + gen-защита пагинации, README).
+вложений, perm-warnings, gen + in-flight пагинация, README).
 
-Дальше: этап 6, задача 6.2 (`internal/notify/watcher.go`). Читать PLAN.md §этап 6
-и `internal/notify/rules.go`.
+Дальше: 6.2 `internal/notify/watcher.go` — PLAN.md §этап 6, `rules.go`.
 
-Начато, не закоммичено (рабочее дерево):
-- задача 6.1 вчерне готова: `internal/notify/` (rules.go + rules_test.go, новые);
-- изменены `internal/security/phishing.go`, `internal/ui/format.go`,
-  добавлены `internal/security/policy_test.go`, `internal/platform/notify_test.go`;
-- `./scripts/check.sh` красный: `internal/platform/notify_test.go:19` —
-  undefined `appleScriptEscape`. До коммита дописать функцию в
-  `internal/platform` и получить зелёный прогон.
+Начато, не закоммичено: 6.1 вчерне (`internal/notify/`); изменены
+security/phishing.go, ui/format.go; добавлены security/policy_test.go,
+platform/notify_test.go. check.sh красный: notify_test.go:19 — undefined
+appleScriptEscape; дописать функцию и получить зелёный прогон.
 
-Открыто для пользователя:
-- smoke по TESTING.md §5 (два экрана, n/p, ошибка при выключенном VPN) — живой
-  сервер здесь недоступен;
-- чекбоксы в PLAN.md не отмечены ни для одного этапа — привести в соответствие.
+Открыто: smoke TESTING.md §5 (2 экрана, n/p, VPN); чекбоксы PLAN.md не отмечены.
 
-Не трогать: `internal/ui/links.go` — URL в реестре ссылок показывается
-намеренно, экранируется отдельно (SECURITY §3).
+Не трогать:
+- links.go — URL показывается целиком: видно, куда идёт (SECURITY §4.2).
+  Не делать: обрезать — «показанный ≠ открываемый» и есть фишинг.
+- mail.go (`gen`) — ответ отбрасывается по поколению: поздний ответ прежней
+  папки затирает список. Не делать: сравнивать имя папки — при A→B→A
+  старый ответ станет «свежим».
