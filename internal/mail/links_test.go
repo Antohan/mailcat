@@ -85,13 +85,14 @@ func TestRenderBodyNoLinks(t *testing.T) {
 	}
 }
 
-// TestRenderBodySanitized: escape-инъекция в тексте ссылки остаётся для
-// санитайзера UI (реестр не глотает её молча).
+// TestRenderBodySanitized: escape-инъекция в тексте якоря не проходит в
+// отрендеренное тело (html2text вычищает C0 из HTML-пути; текстовый путь
+// санитизируется на UI — санитайзер там уже стоит).
 func TestRenderBodySanitized(t *testing.T) {
 	reg := NewLinkRegistry()
 	html := "<a href=\"https://x.example/a\">текст\x1b]8;;http://evil\x1b\\инъекция</a>"
 	body := reg.RenderBodyHTML(html)
-	if !strings.ContainsRune(body, '\x1b') {
-		t.Errorf("реестр проглотил escape-инъекцию — Sanitize на UI её не увидит: %q", body)
+	if strings.ContainsRune(body, '\x1b') {
+		t.Errorf("escape-инъекция прошла в отрендеренное тело: %q", body)
 	}
 }
