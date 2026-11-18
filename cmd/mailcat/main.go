@@ -85,6 +85,10 @@ func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 		fmt.Fprintf(stderr, "Конфигурация некорректна: %v\n", err)
 		return 1
 	}
+	// SECURITY.md §6: предупреждать о широких правах конфига/каталога.
+	for _, warn := range platform.CheckFilePerms(path) {
+		fmt.Fprintf(stderr, "внимание: %s\n", warn)
+	}
 
 	log, closer, lerr := platform.NewLogger(cfg.Log.File)
 	if lerr != nil {

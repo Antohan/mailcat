@@ -67,3 +67,21 @@ func NewLogger(path string) (*slog.Logger, func(), error) {
 	closer := func() { _ = f.Close() }
 	return slog.New(slog.NewTextHandler(f, nil)), closer, nil
 }
+
+// CheckFilePerms предупреждает (возвращает строки-предупреждения), если файл
+// конфигурации или его каталог доступны шире, чем 0600/0700 (SECURITY.md §6).
+func CheckFilePerms(path string) []string {
+	var warns []string
+	dir := filepath.Dir(path)
+	if st, err := os.Stat(dir); err == nil && st.Mode().Perm()&0o077 != 0 {
+		warns = append(warns, fmt.Sprintf(
+			"каталог %s доступен другим пользователям (права %v) — выполните: chmod 700 %s",
+			dir, st.Mode().Perm(), dir))
+	}
+	if st, err := os.Stat(path); err == nil && st.Mode().Perm()&0o077 != 0 {
+		warns = append(warns, fmt.Sprintf(
+			"файл %s доступен другим пользователям (права %v) — выполните: chmod 600 %s",
+			path, st.Mode().Perm(), path))
+	}
+	return warns
+}

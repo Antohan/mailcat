@@ -29,6 +29,8 @@ type mailScreen struct {
 	items      []mail.MessageSummary
 	offset     int  // Offset следующей страницы FindItem
 	lastPage   bool // IncludesLastItemInRange последней страницы
+	loading    bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
+	gen        int  // поколение выбора папки: устаревшие ответы отбрасываются
 
 	pageSize int
 }
@@ -173,23 +175,38 @@ func (s *mailScreen) refreshFolder() {
 }
 
 // loadMessages догружает страницу писем (FindItem, offset — курсор пагинации).
+// Ответ устаревшего запроса (папка/offset сменились) отбрасывается.
 func (s *mailScreen) loadMessages() {
+	if s.loading {
+		return
+	}
+	s.loading = true
+	s.gen++
+	gen := s.gen
 	s.app.setStatus("Загрузка писем…")
 	offset := s.offset
+	folder := s.folder
 	go func() {
 		var page ews.Page
 		var err error
-		if s.folder.ID == "" {
+		if folder.ID == "" {
 			page, err = s.app.client.FindDistinguishedMessages(s.app.ctx, "inbox", s.pageSize, offset)
 		} else {
-			page, err = s.app.client.FindMessages(s.app.ctx, s.folder, s.pageSize, offset)
+			page, err = s.app.client.FindMessages(s.app.ctx, folder, s.pageSize, offset)
 		}
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.loading = false
+				s.app.showError(err)
+			})
 			return
 		}
 		added := mail.MessageSummaries(page.Items)
 		s.app.tapp.QueueUpdateDraw(func() {
+			s.loading = false
+			if s.gen != gen {
+				return // папка уже сменилась — ответ устарел
+			}
 			s.items = append(s.items, added...)
 			s.offset = page.NextOffset
 			s.lastPage = page.IncludesLast
@@ -224,9 +241,10 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	}
 }
 
-// maybeLoadNextPage подгружает следующую страницу при достижении конца списка.
+// maybeLoadNextPage подгружает следующую страницу при достижении конца списка;
+// повторный запуск при загрузке в полёте игнорируется.
 func (s *mailScreen) maybeLoadNextPage(row int) {
-	if s.lastPage || row < len(s.items)-2 {
+	if s.loading || s.lastPage || row < len(s.items)-2 {
 		return
 	}
 	if _, more := ews.NextOffset(ews.Page{NextOffset: s.offset, IncludesLast: s.lastPage}); more {
