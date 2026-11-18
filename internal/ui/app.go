@@ -20,6 +20,7 @@ const (
 	pageMail        = "mail"
 	pageCalendar    = "calendar"
 	pageDetails     = "details"
+	pageEvent       = "event"
 	pageLinks       = "links"
 	pageAttachments = "attachments"
 	pageConfirm     = "confirm"
@@ -32,6 +33,7 @@ type App struct {
 	pages  *tview.Pages
 	status *tview.TextView
 	detail *tview.TextView // экран деталей письма (страница pageDetails)
+	event  *tview.TextView // экран деталей встречи (страница pageEvent)
 
 	cfg    *config.Config
 	client *ews.Client
@@ -44,7 +46,8 @@ type App struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	mail *mailScreen
+	mail     *mailScreen
+	calendar *calendarScreen
 }
 
 // New собирает приложение. Пароль уже получен вызывающим (Keychain), клиент
@@ -64,10 +67,8 @@ func New(cfg *config.Config, client *ews.Client) *App {
 	a.mail = newMailScreen(a)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
 
-	calendarPlaceholder := tview.NewTextView().
-		SetTextAlign(tview.AlignCenter).
-		SetText("Календарь будет реализован на этапе 4 разработки.\n\nНажмите 1, чтобы вернуться к почте.")
-	a.pages.AddPage(pageCalendar, calendarPlaceholder, true, false)
+	a.calendar = newCalendarScreen(a)
+	a.pages.AddPage(pageCalendar, a.calendar.root, true, false)
 
 	details := tview.NewTextView().
 		SetWrap(true).
@@ -93,6 +94,28 @@ func New(cfg *config.Config, client *ews.Client) *App {
 	})
 	a.detail = details
 	a.pages.AddPage(pageDetails, details, true, false)
+
+	event := tview.NewTextView().
+		SetWrap(true).
+		SetScrollable(true).
+		SetDynamicColors(false)
+	event.SetBorder(true).SetTitle(" Встреча ")
+	event.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEsc:
+			a.pages.SwitchToPage(pageCalendar)
+			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'g', 'G':
+				a.showLinks(a.currentLinks)
+				return nil
+			}
+		}
+		return event
+	})
+	a.event = event
+	a.pages.AddPage(pageEvent, event, true, false)
 
 	root := tview.NewFlex().
 		SetDirection(tview.FlexRow).
@@ -124,6 +147,7 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 			a.pages.SwitchToPage(pageMail)
 			return nil
 		case '2':
+			a.calendar.ensureLoaded()
 			a.pages.SwitchToPage(pageCalendar)
 			return nil
 		case 'q':
@@ -162,6 +186,26 @@ func (a *App) showDetails(m mail.Message) {
 	a.pages.SwitchToPage(pageDetails)
 	a.tapp.SetFocus(a.detail)
 	a.setStatus("Esc — к списку · g ссылки · v вложения · q выход")
+}
+
+// showEventDetails выводит детали встречи; ссылки на созвон из «Места» —
+// через реестр (модал g, как в письмах; PLAN.md этап 4).
+func (a *App) showEventDetails(ev mail.Event) {
+	reg := mail.NewLinkRegistry()
+	text := FormatEventDetails(ev)
+	if ev.Location != "" {
+		rendered := reg.RenderBody(ev.Location)
+		if len(reg.List()) > 0 {
+			text += "\nСсылки: " + security.Sanitize(rendered) + "\n(g — все ссылки)"
+		}
+	}
+	a.currentLinks = reg.List()
+	a.currentAttachments = nil
+	a.event.SetText(security.Sanitize(text))
+	a.event.ScrollToBeginning()
+	a.pages.SwitchToPage(pageEvent)
+	a.tapp.SetFocus(a.event)
+	a.setStatus("Esc — к календарю · g ссылки · 1 почта · q выход")
 }
 
 // setStatus выводит подсказку/статус в строку состояния (текст наш, не из EWS).
