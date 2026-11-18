@@ -14,6 +14,10 @@ import (
 // tlsVersion12 — минимально допустимая версия TLS (SECURITY.md §1).
 const tlsVersion12 = tls.VersionTLS12
 
+// NewTLSConfig — экспорт конструктора изолированной TLS-конфигурации
+// (используется doctor'ом для шага 2; SECURITY.md §1).
+func NewTLSConfig(caPath string) (*tls.Config, error) { return newTLSConfig(caPath) }
+
 // newTLSConfig строит tls.Config для соединений с Exchange.
 // Если caPath не пуст — доверие ТОЛЬКО приватному пулу из этого PEM-файла;
 // системное хранилище macOS не используется. Если пуст — системные корни

@@ -173,21 +173,6 @@ func TestRunFoldersEWSerror(t *testing.T) {
 	}
 }
 
-// TestDoctorPlaceholder: doctor — заглушка до этапа 5.
-func TestDoctorPlaceholder(t *testing.T) {
-	home := fakeHome(t)
-	writeConfig(t, home, validConfig)
-	var out, errb bytes.Buffer
-	tr := &testRuntime{}
-	code := run([]string{"doctor"}, &out, &errb, tr.runtime())
-	if code != 1 {
-		t.Errorf("code = %d, хочу 1", code)
-	}
-	if !strings.Contains(errb.String(), "этапе 5") {
-		t.Errorf("stderr: %q", errb.String())
-	}
-}
-
 // TestUnknownAndNoArgs: неизвестная команда и вызов без аргументов — usage, код 2.
 func TestUnknownAndNoArgs(t *testing.T) {
 	fakeHome(t)

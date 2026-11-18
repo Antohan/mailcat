@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 
 	"mailcat/internal/config"
 	"mailcat/internal/ews"
@@ -38,7 +39,12 @@ func mainRuntime() runtime {
 }
 
 func main() {
-	osExit(run(os.Args[1:], os.Stdout, os.Stderr, mainRuntime()))
+	code := run(os.Args[1:], os.Stdout, os.Stderr, mainRuntime())
+	// Временные копии вложений не переживают выход (PLAN.md этап 5).
+	if err := security.CleanupTempDir(); err != nil {
+		fmt.Fprintln(os.Stderr, "внимание: не удалось очистить временные файлы:", err)
+	}
+	osExit(code)
 }
 
 // osExit — переменная для тестов (подменять exit-код без os.Exit).
@@ -96,8 +102,7 @@ func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 
 	switch argv[0] {
 	case "doctor":
-		fmt.Fprintln(stderr, "Диагностика будет реализована на этапе 5 разработки.")
-		return 1
+		return runDoctor(stderr, cfg, realDoctorDeps())
 	case "folders":
 		return runFolders(stdout, stderr, cfg, rt)
 	default: // run
@@ -149,6 +154,29 @@ func runFolders(stdout, stderr io.Writer, cfg *config.Config, rt runtime) int {
 			security.Sanitize(f.DisplayName), f.TotalCount, f.UnreadCount)
 	}
 	return 0
+}
+
+// keychainPasswordFor получает пароль из Keychain; если записи нет —
+// предлагает создать (PLAN.md этап 5): security add-generic-password -w без
+// значения запрашивает пароль скрыто, терминал наследуется.
+func keychainPasswordFor(cfg *config.Config) (string, error) {
+	pass, err := platform.KeychainPassword()
+	if err == nil {
+		return pass, nil
+	}
+	fmt.Fprintln(os.Stderr, "Запись mailcat не найдена в Keychain (или пароль устарел).")
+	fmt.Fprintf(os.Stderr, "Создать запись для %s? Введите y и пароль будет запрошен скрыто (y/n): ", cfg.Username)
+	var answer string
+	_, _ = fmt.Fscanln(os.Stdin, &answer)
+	if answer != "y" && answer != "Y" && answer != "д" && answer != "Д" {
+		return "", err
+	}
+	cmd := exec.Command("security", "add-generic-password", "-a", cfg.Username, "-s", "mailcat", "-w")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if addErr := cmd.Run(); addErr != nil {
+		return "", fmt.Errorf("создание записи Keychain (попробуйте вручную: security add-generic-password -a %s -s mailcat -w): %w", cfg.Username, addErr)
+	}
+	return platform.KeychainPassword()
 }
 
 func usage(w io.Writer) {

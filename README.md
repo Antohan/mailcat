@@ -6,19 +6,19 @@ AI-агента (opencode + GLM). Код появится в результат�
 
 ## Что здесь лежит
 
-| Файл/каталог | Назначение |
-|---|---|
-| `AGENTS.md` | инструкции, которые opencode читает автоматически |
-| `docs/PLAN.md` | поэтапный план (этапы 0–6, Definition of Done) |
-| `docs/ARCHITECTURE.md` | архитектура будущего приложения |
-| `docs/EWS-REFERENCE.md` | точные SOAP-шаблоны Exchange — источник правды по протоколу |
-| `docs/SECURITY.md` | обязательный чек-лист безопасности |
-| `docs/TESTING.md` | тесты + ручные smoke-сценарии |
-| `config.example.toml` | формат конфига приложения |
-| `opencode.json` | права агента и настройки |
-| `.opencode/agents/` | субагенты: go-implementer, ews-specialist, security-reviewer |
-| `.opencode/skills/ews-reference/` | скил с шаблонами EWS (анти-галлюцинации) |
-| `.opencode/commands/` | `/stage`, `/check` |
+| Файл/каталог                      | Назначение                                                   |
+| --------------------------------- | ------------------------------------------------------------ |
+| `AGENTS.md`                       | инструкции, которые opencode читает автоматически            |
+| `docs/PLAN.md`                    | поэтапный план (этапы 0–6, Definition of Done)               |
+| `docs/ARCHITECTURE.md`            | архитектура будущего приложения                              |
+| `docs/EWS-REFERENCE.md`           | точные SOAP-шаблоны Exchange — источник правды по протоколу  |
+| `docs/SECURITY.md`                | обязательный чек-лист безопасности                           |
+| `docs/TESTING.md`                 | тесты + ручные smoke-сценарии                                |
+| `config.example.toml`             | формат конфига приложения                                    |
+| `opencode.json`                   | права агента и настройки                                     |
+| `.opencode/agents/`               | субагенты: go-implementer, ews-specialist, security-reviewer |
+| `.opencode/skills/ews-reference/` | скил с шаблонами EWS (анти-галлюцинации)                     |
+| `.opencode/commands/`             | `/stage`, `/check`                                           |
 
 ## Быстрый старт
 
@@ -28,13 +28,43 @@ AI-агента (opencode + GLM). Код появится в результат�
    `curl -fsSL https://opencode.ai/install | bash`, затем `opencode auth login`
    или блок `providers` из примера ниже.
 3. **Подготовьте данные для приложения** (понадобятся на этапе дымовых тестов):
-   - файл корпоративного root-CA в PEM → `~/.config/mailcat/company-root-ca.pem`
-   - пароль в Keychain: `security add-generic-password -a "$USER" -s mailcat -w`
-   - `cp config.example.toml ~/.config/mailcat/config.toml` и заполнить
+    - файл корпоративного root-CA в PEM → `~/.config/mailcat/company-root-ca.pem`
+    - пароль в Keychain: `security add-generic-password -a "$USER" -s mailcat -w`
+    - `cp config.example.toml ~/.config/mailcat/config.toml` и заполнить
 4. **Запустите сессию разработки**: `opencode`, затем команда
    `/stage 0` — агент начнёт с этапа 0 плана и пойдёт по этапам.
 5. После каждой задачи агент прогоняет `/check`; этапы завершаются
    smoke-сценариями из `docs/TESTING.md §5` (нужен VPN и живой сервер).
+
+## Модели агентов и экономия квоты
+
+Квота GLM-планов расходуется на каждый вызов модели, а агентная сессия — это
+десятки вызовов. Обязательные правила экономии зашиты в `AGENTS.md`
+(раздел «Экономия квоты»); главные: одна сессия = одна задача, чтение только
+указанных разделов, реализация без обсуждений, `/check` раз в задачу.
+
+Раскладка моделей (уже прописана в `.opencode/agents/*.md`):
+
+| Агент                          | Модель                  | Когда                                        |
+| ------------------------------ | ----------------------- | -------------------------------------------- |
+| `go-implementer`               | Flash (по умолчанию)    | рутина: этапы 0, 2, 3, 5, точечные правки    |
+| `go-implementer` (этапы 1 и 4) | флагман через `/models` | EWS-ядро и календарь — дизайн-решения        |
+| `ews-specialist`               | флагман                 | XML-схема — самое рискованное место          |
+| `security-reviewer`            | флагман                 | вызывается редко; качество ревью важнее цены |
+
+Замените ID `zai/glm-5.3-flash` / `zai/glm-5.3` на реальные из вашей установки
+(посмотреть: `/models` в opencode), если они отличаются. Нюанс: если тариф
+считает квоту простым счётчиком запросов (Flash = флагман), выгода от Flash
+невелика — тогда решают правила экономии, а не модели.
+
+Шаблон промпта для типовой задачи:
+
+```text
+Задача: этап 0, задача «internal/config» из docs/PLAN.md.
+Читай ТОЛЬКО: раздел «Этап 0» в docs/PLAN.md и config.example.toml.
+Сразу реализуй без плана и вопросов.
+По завершении: /check, коммит «stage0: config».
+```
 
 ## Подключение модели GLM (если не настроено глобально)
 
@@ -42,16 +72,16 @@ AI-агента (opencode + GLM). Код появится в результат�
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "zai-glm": {
-      "npm": "@ai-sdk/openai-compatible",
-      "options": { "baseURL": "https://api.z.ai/api/anthropic" },
-      "models": {
-        "glm-5.3": {}
-      }
-    }
-  }
+    "$schema": "https://opencode.ai/config.json",
+    "provider": {
+        "zai-glm": {
+            "npm": "@ai-sdk/openai-compatible",
+            "options": { "baseURL": "https://api.z.ai/api/anthropic" },
+            "models": {
+                "glm-5.3": {},
+            },
+        },
+    },
 }
 ```
 
@@ -78,10 +108,10 @@ AI-агента (opencode + GLM). Код появится в результат�
 
 ## Почему такие решения (кратко)
 
-| Решение | Причина |
-|---|---|
-| Go + TUI (tview) | нет браузерного движка → меньше поверхность атаки; HTML писем → текст |
-| Свой EWS-клиент | готовые Go-обёртки EWS заброшены; 4 операции дешевле написать по шаблонам |
-| Basic → NTLM | типично для on-prem; go-ntlmssp поддерживается Microsoft/Azure |
-| Изолированный CA-пул | корп. сертификат доверителен только внутри приложения |
-| Read-only whitelist | mailsafe by construction: клиент не может отправить/удалить |
+| Решение              | Причина                                                                   |
+| -------------------- | ------------------------------------------------------------------------- |
+| Go + TUI (tview)     | нет браузерного движка → меньше поверхность атаки; HTML писем → текст     |
+| Свой EWS-клиент      | готовые Go-обёртки EWS заброшены; 4 операции дешевле написать по шаблонам |
+| Basic → NTLM         | типично для on-prem; go-ntlmssp поддерживается Microsoft/Azure            |
+| Изолированный CA-пул | корп. сертификат доверителен только внутри приложения                     |
+| Read-only whitelist  | mailsafe by construction: клиент не может отправить/удалить               |
