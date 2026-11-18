@@ -234,6 +234,16 @@ func (s *mailScreen) maybeLoadNextPage(row int) {
 	}
 }
 
+// ewsAttachment конвертирует доменное вложение в метаданные для GetAttachment.
+func ewsAttachment(a mail.Attachment) ews.AttachmentMeta {
+	return ews.AttachmentMeta{
+		AttachmentID:  a.AttachmentID,
+		Name:          a.Name,
+		ContentType:   a.ContentType,
+		ContentLength: a.ContentLength,
+	}
+}
+
 // showPreview показывает черновик письма в панели просмотра (без загрузки).
 func (s *mailScreen) showPreview(row int) {
 	if row < 0 || row >= len(s.items) {

@@ -17,10 +17,13 @@ import (
 )
 
 const (
-	pageMail      = "mail"
-	pageCalendar  = "calendar"
-	pageDetails   = "details"
-	statusHelpFmt = "u обновить · Enter письмо · Tab панель · 1 почта · 2 календарь · q выход"
+	pageMail        = "mail"
+	pageCalendar    = "calendar"
+	pageDetails     = "details"
+	pageLinks       = "links"
+	pageAttachments = "attachments"
+	pageConfirm     = "confirm"
+	statusHelpFmt   = "u обновить · Enter письмо · Tab панель · 1 почта · 2 календарь · q выход"
 )
 
 // App — корневое TUI-приложение mailcat.
@@ -32,6 +35,11 @@ type App struct {
 
 	cfg    *config.Config
 	client *ews.Client
+
+	// Текущее открытое письмо (экран деталей): для модалов g (ссылки)
+	// и v (вложения).
+	currentLinks       []mail.LinkInfo
+	currentAttachments []mail.Attachment
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -67,9 +75,19 @@ func New(cfg *config.Config, client *ews.Client) *App {
 		SetDynamicColors(false)
 	details.SetBorder(true).SetTitle(" Письмо ")
 	details.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEsc {
+		switch event.Key() {
+		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageMail)
 			return nil
+		case tcell.KeyRune:
+			switch event.Rune() {
+			case 'g', 'G':
+				a.showLinks(a.currentLinks)
+				return nil
+			case 'v', 'V':
+				a.showAttachments(a.currentAttachments)
+				return nil
+			}
 		}
 		return event
 	})
@@ -117,18 +135,33 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 }
 
 // showDetails выводит полное письмо на экран деталей (страница поверх почты).
+// Тело проходит через реестр ссылок ([N] host, ⚠, [IDN]) и санитайзер;
+// клавиши g/v открывают модалы ссылок и вложений.
 func (a *App) showDetails(m mail.Message) {
-	body := FormatMessageHeader(m) + "\n" + security.Sanitize(m.BodyText)
+	reg := mail.NewLinkRegistry()
+	var body string
+	if m.BodyHTML != "" {
+		body = reg.RenderBodyHTML(m.BodyHTML)
+	} else {
+		body = reg.RenderBody(m.BodyText)
+	}
+	a.currentLinks = reg.List()
+	a.currentAttachments = m.Attachments
+
+	text := FormatMessageHeader(m) + "\n" + security.Sanitize(body)
 	if m.InternetMessageID != "" {
-		body += "\nMessage-ID: " + security.Sanitize(m.InternetMessageID) + "\n"
+		text += "\nMessage-ID: " + security.Sanitize(m.InternetMessageID) + "\n"
 	}
 	if atts := FormatAttachments(m.Attachments); atts != "" {
-		body += "\n" + atts
+		text += "\n" + atts + "\n\n(g — ссылки, v — вложения)"
+	} else if len(a.currentLinks) > 0 {
+		text += "\n\n(g — ссылки)"
 	}
-	a.detail.SetText(body)
+	a.detail.SetText(text)
 	a.detail.ScrollToBeginning()
 	a.pages.SwitchToPage(pageDetails)
 	a.tapp.SetFocus(a.detail)
+	a.setStatus("Esc — к списку · g ссылки · v вложения · q выход")
 }
 
 // setStatus выводит подсказку/статус в строку состояния (текст наш, не из EWS).
