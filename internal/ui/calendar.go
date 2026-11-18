@@ -98,8 +98,15 @@ func (s *calendarScreen) shiftMonth(delta int) {
 	s.loadMonth()
 }
 
+// monthStale сообщает, устарел ли ответ запроса месяца keyAtRequest
+// относительно текущего месяца keyNow (ревью этапа 4: приземление ответа
+// после смены месяца не должно портить кэш и события).
+func monthStale(keyAtRequest, keyNow string) bool { return keyAtRequest != keyNow }
+
 // loadMonth запрашивает встречи за месяц (CalendarView) и перерисовывает экран.
+// Ответ месяца, сменившегося за время запроса, отбрасывается (monthStale).
 func (s *calendarScreen) loadMonth() {
+	key := s.monthKey()
 	start, end := MonthBounds(s.year, s.month)
 	s.app.setStatus(fmt.Sprintf("Загрузка календаря: %s…", s.month.String()))
 	go func() {
@@ -110,8 +117,11 @@ func (s *calendarScreen) loadMonth() {
 		}
 		events := mail.Events(raw)
 		s.app.tapp.QueueUpdateDraw(func() {
+			if monthStale(key, s.monthKey()) {
+				return // месяц уже сменился — ответ неактуален
+			}
 			s.events = events
-			s.loadedKey = s.monthKey()
+			s.loadedKey = key
 			s.render()
 			s.app.setStatus("←/→/↑/↓ день · n/p месяц · Enter детали · 1 почта · q выход")
 		})
