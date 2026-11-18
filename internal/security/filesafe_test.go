@@ -13,8 +13,8 @@ import (
 func TestSafeFileName(t *testing.T) {
 	cases := []struct{ in, want string }{
 		{"report.pdf", "report.pdf"},
-		{"данные.csv", "______.csv"}, // кириллица вне фильтра [A-Za-z0-9._ -]
-		{"../../etc/passwd", "etc_passwd"},
+		{"данные.csv", "______.csv"},   // кириллица вне фильтра [A-Za-z0-9._ -]
+		{"../../etc/passwd", "passwd"}, // Base срезает весь путь
 		{"/abs/path/x.exe", "x.exe"},
 		{"a b c.txt", "a b c.txt"},
 		{"weird|name*.txt?", "weird_name_.txt_"},
