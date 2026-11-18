@@ -1,96 +1,109 @@
-# AGENTS.md — инструкции для AI-агента (mailcat)
+# AGENTS.md — instructions for the AI agent (mailcat)
 
-Ты разрабатываешь **mailcat** — read-only клиент корпоративной почты и календаря
-(on-premises Microsoft Exchange) для macOS: Go + TUI (tview). Разработка идёт по
-этапам из `docs/PLAN.md`. Язык общения, комментариев и UI — русский; код
-(идентификаторы) — английский.
+You are building **mailcat** — a read-only client for corporate mail and calendar
+(on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
+stages in `docs/PLAN.md`.
 
-## Карта документов (читай по необходимости, но до задачи, а не во время)
+**Language.** Everything the user sees is Russian: replies, UI strings, errors,
+status lines, code comments. This file and the other agent files are written in
+English only to spend fewer tokens — that is not permission to answer in English.
 
-| Файл                    | Содержимое                                                          |
-| ----------------------- | ------------------------------------------------------------------- |
-| `docs/PLAN.md`          | этапы разработки с задачами и Definition of Done                    |
-| `docs/ARCHITECTURE.md`  | пакеты, поток данных, принятые решения                              |
-| `docs/EWS-REFERENCE.md` | ТОЧНЫЕ SOAP-шаблоны EWS — единственный источник правды по протоколу |
-| `docs/SECURITY.md`      | обязательный чек-лист безопасности                                  |
-| `docs/TESTING.md`       | что и как тестировать, ручные smoke-сценарии                        |
-| `config.example.toml`   | формат конфигурации приложения                                      |
+## Where to look (one file at a time)
 
-## Золотые правила (нарушение = переделка)
+| File | What it gives you |
+| --- | --- |
+| `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
+| `docs/PLAN.md` | stages, tasks, DoD — read only the current stage's section |
+| `docs/ARCHITECTURE.md` | packages, data flow, decisions |
+| `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML |
+| `docs/SECURITY.md` | mandatory security checklist |
+| `docs/TESTING.md` | what and how to test; manual smoke in §5 |
+| `config.example.toml` | configuration format |
 
-1. **Read-only.** Разрешённые EWS-операции: `FindFolder`, `FindItem` (+`CalendarView`),
-   `GetItem`, `GetAttachment`. Любые `Create*`, `Update*`, `Delete*`, `Send*`,
-   `Move*`, `Copy*`, `MarkAsRead` — запрещены навсегда.
-2. **Никакого `InsecureSkipVerify`.** TLS строго по `docs/SECURITY.md §1`:
-   корп. CA — только в приватный `x509.CertPool` клиента. Системный Keychain
-   не трогаем.
-3. **Весь текст из EWS — заражён.** До любого вывода в терминал:
-   `security.Sanitize()` + `tview.Escape` для динамических виджетов
+## Golden rules (breaking one means rework)
+
+1. **Read-only.** Allowed EWS operations: `FindFolder`, `FindItem`
+   (+`CalendarView`), `GetItem`, `GetAttachment`. Any `Create*`, `Update*`,
+   `Delete*`, `Send*`, `Move*`, `Copy*`, `MarkAsRead` — never.
+2. **No `InsecureSkipVerify`.** TLS strictly per `docs/SECURITY.md §1`: a
+   corporate CA goes only into the client's private `x509.CertPool`. The system
+   Keychain is not touched.
+3. **All text from EWS is hostile.** Before it reaches the terminal:
+   `security.Sanitize()` plus `tview.Escape` for dynamic widgets
    (`docs/SECURITY.md §3`).
-4. **Пароль только из Keychain.** В конфиге, логах, ошибках, dump'ах его нет.
-5. **EWS-XML — только из `docs/EWS-REFERENCE.md`.** Не выдумывай элементы,
-   FieldURI, атрибуты. Чего нет в справочнике — спроси пользователя.
-6. **Зависимости — только из одобренного списка** (ниже). Новая зависимость —
-   сначала вопрос пользователю.
-7. **UI на русском:** подсказки клавиш, ошибки, статусы. Термины почты
-   («Входящие», «Отправленные») — по-русски.
-8. **Объём — MVP.** Не делай фич «на будущее», не описанные в PLAN.md.
+4. **Password only from Keychain.** Not in config, logs, errors or dumps.
+5. **EWS XML only from `docs/EWS-REFERENCE.md`.** Do not invent elements,
+   FieldURIs or attributes. If it is not there, ask the user.
+6. **Dependencies — approved list only**: `rivo/tview` (+`tcell`),
+   `Azure/go-ntlmssp`, `k3a/html2text`, `x/net/idna`, `BurntSushi/toml`,
+   `jhillyerd/enmime`. Anything else: ask first. Stdlib for the rest
+   (`encoding/xml`, `crypto/tls`, `net/http`, `log/slog`, `os/exec`).
+7. **Russian UI.** Key hints, errors, statuses, folder names («Входящие»,
+   «Отправленные»).
+8. **Scope is the MVP.** No "for later" features that PLAN.md does not describe.
 
-## Одобренные зависимости
+## Work
 
-| Модуль                              | Зачем                                                  |
-| ----------------------------------- | ------------------------------------------------------ |
-| `github.com/rivo/tview` (+ `tcell`) | TUI                                                    |
-| `github.com/Azure/go-ntlmssp`       | NTLM-транспорт                                         |
-| `github.com/k3a/html2text`          | HTML писем → текст (оффлайн)                           |
-| `golang.org/x/net/idna`             | punycode/IDN для анти-фишинга                          |
-| `github.com/BurntSushi/toml`        | конфиг                                                 |
-| `github.com/jhillyerd/enmime`       | MIME (только если понадобится путь IncludeMimeContent) |
+1. Open a session with `/stage N`: it loads the stage section and the first open
+   task.
+2. One task = one commit (`stage1: pagination cursor`).
+3. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
+   fix the cause.
+4. At the end of a stage rewrite `docs/HANDOFF.md` (see below).
+5. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
+   implementing. Security-relevant work: request `security-reviewer` after —
+   once per stage.
 
-Стандартная библиотека предпочтительнее для всего остального (`encoding/xml`, `crypto/tls`,
-`net/http`, `log/slog`, `os/exec`).
+## Token budget rules (not optional)
 
-## Рабочий процесс
+**One session = one task.** After the commit, write a report of at most five
+lines and say the task is closed: the next one starts in a new session. Do not
+start a second task, do not fix unrelated things you noticed on the way.
 
-1. Начинай сессию с `/stage N` (номер текущего этапа) — команды определены в
-   `.opencode/commands/`.
-2. Одна задача из PLAN.md = один фокус = один коммит (`stage1: pagination cursor`).
-3. После каждой задачи запускай `/check`: `gofmt -l .` (пусто) → `go vet ./...` →
-   `go build ./...` → `go test ./...`. Красное — чини до коммита.
-4. Этап завершён, когда выполнены ВСЕ пункты его Definition of Done. Затем —
-   предложение ревью security-reviewer (субагент) перед следующим этапом.
-5. Для задач с EWS/SOAP/XML — привлекай субагента ews-specialist.
-6. Живой сервер недоступен из среды разработки; проверки, требующие его,
-   помечай в TODO для пользователя (smoke-сценарии TESTING.md §5).
+**One call instead of five.** Batch independent commands into a single shell
+call; filter output (`2>&1 | tail -20`, `-q`, `--stat`). Run `git diff --stat`
+first, then read the specific hunks. Never print a whole file.
 
-## Экономия квоты (обязательные правила)
+**Read narrowly.** Locate a symbol with `grep` instead of reading a file. Files
+over ~150 lines: use `offset`/`limit`. Do not open `*_test.go` files you are not
+editing. Docs: only the referenced section (`SECURITY.md §3`). While iterating
+use `go test -run <Test>`; the full suite runs once, in `/check`.
+`.superpowers/sdd/PLAN/progress.md` is an archive — never read it at session
+start.
 
-Квота GLM-планов расходуется на каждый вызов модели, а агентная сессия — это
-десятки вызовов, в каждом из которых контекст отправляется заново. Поэтому:
+**Do not restate.** No file contents, no doc summaries, no play-by-play of
+commands. The report is: what changed, what was verified, what is next.
 
-1. **Одна сессия = одна задача** из PLAN.md. Завершил → коммит → конец сессии.
-   Не ведите одну беседу часами: длинный контекст перемножает расход.
-2. **Читай только указанное**: конкретный файл или его раздел из постановки
-   задачи. Полное чтение всех `docs/*` — только по явному запросу пользователя.
-3. **Задачи, полностью описанные в PLAN.md, реализуй сразу** — без
-   предварительного плана и уточняющих вопросов. Вопрос задавай только при
-   реальной неоднозначности.
-4. **Не выводи содержимое файлов** (целиком или большими фрагментами), не
-   пересказывай документацию. Ответ: что сделано, что проверено, что дальше.
-5. **`/check` — один раз в конце задачи**, а не после каждой правки.
-6. **Сабагенты по необходимости**: ews-specialist — только при реальной работе
-   с XML; security-reviewer — один раз в конце этапа.
-7. **Правки — точечные** (edit конкретных мест), не переписывай файлы целиком.
-8. **Коммит после каждой задачи** — оборванная сессия не должна терять работу.
+**Subagents.** Give them a pointer, not a dump («прочитай §5–6 EWS-REFERENCE»).
+Ask for a verdict of at most ten lines. A subagent that reads everything costs
+more than doing the work yourself.
 
-Модели: рутинные задачи — Flash (модель go-implementer по умолчанию); этапы 1
-и 4, сабагенты ews-specialist и security-reviewer — флагман. Переключение
-go-implementer на флагман для сложных этапов — `/models` в сессии.
+**Do not edit `AGENTS.md`, `SECURITY.md` or `PLAN.md` inside a session where you
+are also implementing** — it invalidates the cached prompt prefix for the rest
+of that session.
 
-## Контекст окружения (не менять кодом)
+**Models.** Flash by default; flagship (via `/models`) for stages 1 and 4 and
+for the `ews-specialist` / `security-reviewer` subagents.
 
-- Сервер Exchange доступен только когда пользователь вручную включил VPN —
-  ошибки сети обязаны подсказывать это («Похоже, VPN выключен»).
-- Пользователь не админ Exchange: обрабатывай `ErrorAccessDenied` и 403 как
-  «спросите ИТ-отдел», без попыток обхода.
-- macOS: открытие файлов/ссылок через `/usr/bin/open`; Keychain через `security`.
+## Handoff file
+
+`docs/HANDOFF.md` is the next session's entry point: at most 25 lines, rewritten
+(never appended), newest on top, finished lines deleted.
+
+Fields: `Сделано` (commit hashes only) / `Дальше` (task and exactly what to
+read) / `Открыто` (smoke checks and TODOs for the user) / `Не трогать` (and
+why).
+
+The code is the truth, the handoff is navigation. When they disagree, trust the
+code and delete the stale line — do not repair it.
+
+## Environment (not fixable in code)
+
+- Exchange is reachable only while the user has VPN on — network errors must
+  hint at it («Похоже, VPN выключен»).
+- The user is not an Exchange admin: treat `ErrorAccessDenied` and 403 as
+  "ask IT", never work around them.
+- macOS: open files and links with `/usr/bin/open`; Keychain through `security`.
+
+A stage is done when every DoD point of that stage in PLAN.md is met. Live-server
+checks are unavailable here: mark them as TODO for the user (`TESTING.md §5`).

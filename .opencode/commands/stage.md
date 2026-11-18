@@ -2,13 +2,16 @@
 description: Загрузить задачу этапа N и сразу приступить к реализации
 ---
 
-Прочитай ТОЛЬКО раздел этапа $ARGUMENTS в docs/PLAN.md (не весь файл, другие
-документы не открывай).
+Read `docs/HANDOFF.md` first (state, next task, open items), then ONLY the
+section of stage $ARGUMENTS in `docs/PLAN.md`. Do not open other documents.
 
-1. Найди первую задачу этапа с незакрытым чекбоксом; сверь с фактическим
-   состоянием кода (быстрый ls/grep по пакетам — без полного чтения репозитория).
-2. Если задача полностью описана в плане — сразу реализуй (правила AGENTS.md,
-   включая «Экономия квоты»).
-3. Уточняющий вопрос пользователю — только при реальной неоднозначности.
-4. Заверши задачу циклом: `/check` → коммит `stage<N>: <сделано>` → отметить
-   чекбокс в PLAN.md → краткий отчёт (что сделано, что проверено).
+1. Take the first unchecked task of the stage; check it against the actual code
+   with a quick `grep`/`ls` inside the package — never a repo-wide read.
+2. If the task is fully described in PLAN.md, implement it right away (rules in
+   AGENTS.md, including "Token budget rules").
+3. Ask the user only on real ambiguity.
+4. Close the task: `/check` → commit `stage<N>: <done>` → tick the checkbox in
+   PLAN.md → rewrite `docs/HANDOFF.md` (≤25 lines, newest on top).
+5. Report in at most five lines: what changed, what was verified, what is next.
+   Then say that the task is closed and the next one needs a new session — and
+   stop.
