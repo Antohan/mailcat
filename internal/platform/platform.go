@@ -41,26 +41,6 @@ func keychainCmd() *exec.Cmd {
 	return exec.Command("security", "find-generic-password", "-s", "mailcat", "-w")
 }
 
-// CleanupTempDir удаляет содержимое временного каталога вложений при выходе
-// (PLAN.md этап 5). Сам каталог остаётся с правами 0700; ошибки отдельных
-// файлов не прерывают очистку.
-func CleanupTempDir() error {
-	dir, err := TempDir()
-	if err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("чтение временного каталога %s: %w", dir, err)
-	}
-	for _, e := range entries {
-		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
-			return fmt.Errorf("очистка временного файла %s: %w", e.Name(), err)
-		}
-	}
-	return nil
-}
-
 // openCmd собирает команду /usr/bin/open path (отдельно — для теста).
 func openCmd(path string) *exec.Cmd {
 	return exec.Command("/usr/bin/open", path)
