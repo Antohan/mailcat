@@ -26,11 +26,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 
 	for _, att := range attachments {
 		a := att
-		main := security.Sanitize(a.Name) + " (" + a.SizeLabel() + ")"
-		secondary := "приложение по типу содержимого"
-		if security.IsDangerousExtension(a.Name) {
-			secondary = "⚠ ОПАСНОЕ РАСШИРЕНИЕ — перед открытием убедитесь, что отправителю можно доверять"
-		}
+		main, secondary := attachmentListEntry(a)
 		list.AddItem(main, secondary, 0, func() {})
 	}
 	if len(attachments) == 0 {
@@ -80,8 +76,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 func (a *App) confirmDangerous(name string, onYes func()) {
 	a.pages.RemovePage(pageConfirm)
 	modal := tview.NewModal().
-		SetText("«" + security.Sanitize(name) + "» — опасное расширение файла.\n" +
-			"Макросы и скрипты из почты могут скомпрометировать компьютер.\n\nОткрыть всё равно?").
+		SetText(dangerousConfirmText(name)).
 		AddButtons([]string{"Открыть (риск)", "Отмена"}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			a.pages.RemovePage(pageConfirm)

@@ -16,6 +16,43 @@ import (
 	"mailcat/internal/security"
 )
 
+// escapeForList — Sanitize + tview.Escape в одном шаге: обязательная
+// обработка строк из EWS для tview.List/tview.Modal (они интерпретируют
+// style-теги безусловно; SECURITY.md §3, ревью этапов 2–3).
+func escapeForList(s string) string {
+	return tview.Escape(security.Sanitize(s))
+}
+
+// linkListEntry — строки пункта модала ссылок (главная/вторичная).
+func linkListEntry(l mail.LinkInfo) (main, secondary string) {
+	main = fmt.Sprintf("[%d] %s", l.N, escapeForList(l.Host))
+	secondary = escapeForList(l.URL)
+	if l.IDN {
+		secondary += "  [IDN: punycode-домен — проверьте адрес]"
+	}
+	if l.Mismatch {
+		secondary += "  ⚠ текст ссылки ведёт на другой адрес"
+	}
+	return main, secondary
+}
+
+// attachmentListEntry — строки пункта модала вложений.
+func attachmentListEntry(a mail.Attachment) (main, secondary string) {
+	main = escapeForList(a.Name) + " (" + a.SizeLabel() + ")"
+	if security.IsDangerousExtension(a.Name) {
+		secondary = "⚠ ОПАСНОЕ РАСШИРЕНИЕ — перед открытием убедитесь, что отправителю можно доверять"
+	} else {
+		secondary = "приложение по типу содержимого"
+	}
+	return main, secondary
+}
+
+// dangerousConfirmText — текст модала подтверждения для опасного расширения.
+func dangerousConfirmText(name string) string {
+	return "«" + escapeForList(name) + "» — опасное расширение файла.\n" +
+		"Макросы и скрипты из почты могут скомпрометировать компьютер.\n\nОткрыть всё равно?"
+}
+
 // showLinks открывает модал ссылок текущего письма.
 func (a *App) showLinks(links []mail.LinkInfo) {
 	a.pages.RemovePage(pageLinks)
@@ -25,14 +62,7 @@ func (a *App) showLinks(links []mail.LinkInfo) {
 	list.SetBorder(true).SetTitle(" Ссылки (Enter — открыть, Esc — назад) ")
 
 	for _, l := range links {
-		main := fmt.Sprintf("[%d] %s", l.N, security.Sanitize(l.Host))
-		secondary := security.Sanitize(l.URL)
-		if l.IDN {
-			secondary += "  [IDN: punycode-домен — проверьте адрес]"
-		}
-		if l.Mismatch {
-			secondary += "  ⚠ текст ссылки ведёт на другой адрес"
-		}
+		main, secondary := linkListEntry(l)
 		link := l
 		list.AddItem(main, secondary, 0, func() {
 			a.openLink(link.URL)
