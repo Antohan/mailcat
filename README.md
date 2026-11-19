@@ -17,44 +17,85 @@ Exchange) для macOS. Go + TUI (tview). Ничего не отправляет
 - Уведомления macOS о новых письмах (по правилам из конфига)
 - Диагностика: `mailcat doctor` — TCP → TLS → аутентификация → папки
 
-## Установка
-
-Требуется Go ≥ 1.24 и macOS:
-
-```sh
-go build -o /usr/local/bin/mailcat ./cmd/mailcat
-```
-
-## Настройка
-
-1. Конфиг: `~/.config/mailcat/config.toml` (образец — `config.example.toml`
-   в репозитории), права `0600`, каталог `0700`:
-
-   ```sh
-   mkdir -p ~/.config/mailcat && chmod 700 ~/.config/mailcat
-   cp config.example.toml ~/.config/mailcat/config.toml
-   chmod 600 ~/.config/mailcat/config.toml
-   $EDITOR ~/.config/mailcat/config.toml
-   ```
-
-2. Пароль — только в Keychain, не в конфиге:
-
-   ```sh
-   security add-generic-password -a "COMPANY\\ivanov" -s mailcat -w
-   ```
-
-   (mailcat предложит создать запись сам при первом запуске, если её нет.)
-
-3. Корпоративный root-CA (если сертификат сервера внутренний): положите PEM
-   в `~/.config/mailcat/company-root-ca.pem` и укажите путь в `ca_path`.
-   CA используется ТОЛЬКО внутри mailcat — системное хранилище не трогается.
-
 ## Запуск
 
+Шесть шагов от чистого macOS до рабочего TUI. Шаги 1–5 делаются один раз,
+дальше для запуска достаточно `mailcat run`.
+
+### 1. Установите Go ≥ 1.24
+
 ```sh
-mailcat doctor   # проверить подключение (VPN, TLS, пароль, папки)
-mailcat folders  # список папок в stdout — быстрый smoke-тест
-mailcat run      # TUI: 1 — почта, 2 — календарь, q — выход
+go version   # проверка; если команды нет — brew install go (или go.dev/dl)
+```
+
+### 2. Соберите бинарник
+
+В корне репозитория (каталог с `go.mod`):
+
+```sh
+go build -o mailcat ./cmd/mailcat
+sudo mkdir -p /usr/local/bin && sudo mv mailcat /usr/local/bin/
+```
+
+Проверка: `mailcat help` печатает список команд (`run`, `doctor`, `folders`).
+Класть в `/usr/local/bin` не обязательно — можно запускать `./mailcat …` из
+каталога сборки.
+
+### 3. Создайте конфиг
+
+```sh
+mkdir -p ~/.config/mailcat && chmod 700 ~/.config/mailcat
+cp config.example.toml ~/.config/mailcat/config.toml
+chmod 600 ~/.config/mailcat/config.toml
+open -e ~/.config/mailcat/config.toml   # открыть в TextEdit
+```
+
+Минимум, который надо заполнить:
+
+- `server` — адрес Exchange, например `https://mail.company.example`;
+- `username` — ваш логин: `DOMAIN\user` или `user@company.example`
+  (формат — тот, который принимает ваш сервер);
+- `org_domain` — почтовый домен компании (для метки «[ВНЕШН]»).
+
+Пароль в конфиге не хранится (см. шаг 5). Если конфига нет при запуске,
+mailcat сам напечатает ожидаемый путь.
+
+### 4. Корпоративный root-CA (только если сертификат сервера внутренний)
+
+Попросите у ИТ-отдела корневой сертификат в формате PEM и сохраните его как
+`~/.config/mailcat/company-root-ca.pem` — путь уже прописан в образце
+конфига. CA используется только внутри mailcat: в системное хранилище macOS
+ничего не добавляется, отключить проверку сертификата нельзя. Если у сервера
+публичный сертификат — пропустите шаг.
+
+### 5. Пароль в Keychain и проверка связи
+
+Включите VPN — Exchange доступен только из корпоративной сети, — затем:
+
+```sh
+mailcat doctor
+```
+
+- Если записи `mailcat` в Keychain ещё нет, `doctor` спросит «Создать
+  запись?» — ответьте `y` и введите пароль (запрашивается скрыто).
+- Можно создать и вручную (логин — тот же, что `username` в конфиге):
+
+  ```sh
+  security add-generic-password -a 'COMPANY\ivanov' -s mailcat -w
+  ```
+
+- Смена пароля: `security delete-generic-password -s mailcat`, затем
+  команда создания заново.
+
+Всё готово, когда четыре шага `[1/4]`–`[4/4]` (соединение, TLS,
+аутентификация, папки) заканчиваются `OK` и печатается список папок.
+Ошибка на `[1/4]` — почти всегда выключенный VPN.
+
+### 6. Запустите TUI
+
+```sh
+mailcat run        # 1 — почта, 2 — календарь, q — выход
+mailcat folders    # без TUI: список папок в stdout — быстрый smoke-тест
 ```
 
 Клавиши в TUI: `↑/↓` навигация · `Enter` письмо/встреча · `Tab`/`←/→` панели ·
