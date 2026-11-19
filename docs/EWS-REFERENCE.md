@@ -103,14 +103,9 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 ```xml
 <m:FindItem Traversal="Shallow">
   <m:ItemShape>
-    <t:BaseShape>IdOnly</t:BaseShape>
+    <t:BaseShape>Default</t:BaseShape>
     <t:AdditionalProperties>
-      <t:FieldURI FieldURI="item:Subject"/>
       <t:FieldURI FieldURI="item:DateTimeReceived"/>
-      <t:FieldURI FieldURI="item:IsRead"/>
-      <t:FieldURI FieldURI="item:HasAttachments"/>
-      <t:FieldURI FieldURI="message:From"/>
-      <t:FieldURI FieldURI="message:Sender"/>
     </t:AdditionalProperties>
   </m:ItemShape>
   <m:IndexedPageItemView MaxEntriesReturned="50" Offset="0" BasePoint="Beginning"/>
@@ -125,6 +120,12 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   </m:ParentFolderIds>
 </m:FindItem>
 ```
+
+Форма `Default` (не `IdOnly` + список FieldURI): Default сам возвращает
+`Subject`, `IsRead`, `From`, `HasAttachments`; `DateTimeReceived` в Default
+нет — добирается единственным FieldURI. Проверено на живом Exchange 2019
+(15.2.2562): `item:IsRead` в AdditionalProperties → HTTP 500
+`ErrorInvalidRequest` — не использовать (остальные FieldURI проходят).
 
 Ответ (сокращённо):
 

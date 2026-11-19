@@ -43,14 +43,9 @@ func TestFindItemRequestFolderID(t *testing.T) {
     xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
     Traversal="Shallow">
   <m:ItemShape>
-    <t:BaseShape>IdOnly</t:BaseShape>
+    <t:BaseShape>Default</t:BaseShape>
     <t:AdditionalProperties>
-      <t:FieldURI FieldURI="item:Subject"/>
       <t:FieldURI FieldURI="item:DateTimeReceived"/>
-      <t:FieldURI FieldURI="item:IsRead"/>
-      <t:FieldURI FieldURI="item:HasAttachments"/>
-      <t:FieldURI FieldURI="message:From"/>
-      <t:FieldURI FieldURI="message:Sender"/>
     </t:AdditionalProperties>
   </m:ItemShape>
   <m:IndexedPageItemView MaxEntriesReturned="25" Offset="25" BasePoint="Beginning"/>

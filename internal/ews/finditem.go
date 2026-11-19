@@ -90,14 +90,15 @@ func newFindMessagesRequest(parent parentFolderIdsRequest, pageSize, offset int)
 	return &findItemRequest{
 		Traversal: "Shallow",
 		ItemShape: itemShapeRequest{
-			BaseShape: "IdOnly",
+			// WHY: BaseShape Default, а не IdOnly со списком FieldURI.
+			// Why: живой Exchange 2019 (15.2.2562) на item:IsRead в
+			//  AdditionalProperties отвечает 500 ErrorInvalidRequest; Default
+			//  возвращает Subject/IsRead/From/HasAttachments сам, но без
+			//  DateTimeReceived — его добираем единственным FieldURI (он прошёл).
+			// Not to do: вернуть item:IsRead в AdditionalProperties — проверено, 500.
+			BaseShape: "Default",
 			AdditionalProperties: &additionalPropertiesRequest{FieldURIs: []fieldURIRequest{
-				{FieldURI: "item:Subject"},
 				{FieldURI: "item:DateTimeReceived"},
-				{FieldURI: "item:IsRead"},
-				{FieldURI: "item:HasAttachments"},
-				{FieldURI: "message:From"},
-				{FieldURI: "message:Sender"},
 			}},
 		},
 		IndexedPageItemView: &indexedPageItemViewRequest{

@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	neturl "net/url"
+	"strings"
 	"time"
 )
 
@@ -91,7 +92,19 @@ func (c *Client) Do(ctx context.Context, request any, response any) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
+		// WHY: Exchange кладёт soap:Fault прямо в тело не-200 ответа
+		// Why: живой сервер отвечал HTTP 500 + ErrorInvalidRequest, а голый
+		//  статус скрывал причину; код из fault важнее.
+		// Not to do: выбрасывать тело без разбора (было — «неожиданный статус»).
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		var env responseEnvelope
+		if err := xml.Unmarshal(data, &env); err == nil && env.Body.Fault != nil {
+			code := env.Body.Fault.FaultCode
+			if i := strings.Index(code, ":"); i >= 0 {
+				code = code[i+1:] // «a:ErrorInvalidRequest» → «ErrorInvalidRequest»
+			}
+			return &SoapFaultError{Code: code, String: env.Body.Fault.FaultString}
+		}
 		return &HTTPError{Status: resp.StatusCode}
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))

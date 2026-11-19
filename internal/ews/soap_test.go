@@ -119,6 +119,29 @@ func TestDoHTTPStatusErrors(t *testing.T) {
 	}
 }
 
+// TestDoFaultOnHTTPError: Exchange кладёт soap:Fault прямо в тело не-200
+// ответа (наблюдалось на живом сервере: HTTP 500 + ErrorInvalidRequest) —
+// код ошибки из fault важнее голого статуса, вытаскиваем его.
+func TestDoFaultOnHTTPError(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><faultcode xmlns:a="http://schemas.microsoft.com/exchange/services/2006/types">a:ErrorInvalidRequest</faultcode><faultstring xml:lang="ru-RU">The request is invalid.</faultstring></s:Fault></s:Body></s:Envelope>`))
+	}))
+	defer srv.Close()
+	client := newTestEWSClient(t, srv)
+	err := client.Do(context.Background(), &testOperation{Query: "q"}, nil)
+	var fault *SoapFaultError
+	if !errors.As(err, &fault) {
+		t.Fatalf("ошибка %v (%T), хочу *SoapFaultError", err, err)
+	}
+	if fault.Code != "ErrorInvalidRequest" {
+		t.Errorf("Code = %q, хочу ErrorInvalidRequest (без префикса a:)", fault.Code)
+	}
+	if !bytes.Contains([]byte(fault.Error()), []byte("The request is invalid")) {
+		t.Errorf("Error() = %q, без текста fault", fault.Error())
+	}
+}
+
 // TestDoSuccess: 200 с корректным конвертом — ответ разбирается, Content-Type
 // запроса text/xml; charset=utf-8.
 func TestDoSuccess(t *testing.T) {
