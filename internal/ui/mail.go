@@ -5,6 +5,8 @@ package ui
 // QueueUpdateDraw), поэтому мьютекс не нужен (ARCHITECTURE.md §3).
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
@@ -277,6 +279,21 @@ func (s *mailScreen) showPreview(row int) {
 		"Enter — прочитать письмо…"
 	s.preview.SetText(text)
 	s.preview.ScrollToBeginning()
+}
+
+// updateInboxUnread обновляет счётчик непрочитанных «Входящих» из watcher'а
+// (этап 6: QueueUpdateDraw). n<0 — счётчик неизвестен, пункт не трогаем.
+func (s *mailScreen) updateInboxUnread(n int) {
+	if n < 0 {
+		return
+	}
+	for i := 0; i < s.folders.GetItemCount(); i++ {
+		main, _ := s.folders.GetItemText(i)
+		if strings.HasPrefix(main, "Входящие") {
+			s.folders.SetItemText(i, FormatFolder(mail.Folder{DisplayName: "Входящие", UnreadCount: n}), "")
+			return
+		}
+	}
 }
 
 // cycleFocus перебирает панели почты по кругу (Tab).

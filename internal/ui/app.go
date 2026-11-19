@@ -6,6 +6,7 @@ package ui
 
 import (
 	"context"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -13,6 +14,8 @@ import (
 	"mailcat/internal/config"
 	"mailcat/internal/ews"
 	"mailcat/internal/mail"
+	"mailcat/internal/notify"
+	"mailcat/internal/platform"
 	"mailcat/internal/security"
 )
 
@@ -130,9 +133,47 @@ func New(cfg *config.Config, client *ews.Client) *App {
 // Run запускает цикл событий; блокируется до выхода (q/Ctrl-C).
 func (a *App) Run() error {
 	a.mail.loadFolders()
+	if a.cfg.Notify.Enabled { // enabled=false — watcher не запускается вовсе (DoD этапа 6)
+		a.startWatcher()
+	}
 	err := a.tapp.Run()
 	a.cancel() // контекст сессии гасится вместе с TUI
 	return err
+}
+
+// startWatcher поднимает фоновый опрос «Входящих» (этап 6). Ошибки сети —
+// тихий backoff внутри watcher.Run; уведомления — только по правилам.
+func (a *App) startWatcher() {
+	w := &notify.Watcher{
+		Rule:      a.cfg.Notify,
+		OrgDomain: a.cfg.OrgDomain,
+		PageSize:  a.cfg.PageSize,
+		Notify: func(title, body string) {
+			// SECURITY.md §9: текст писем — через Sanitize до osascript.
+			_ = platform.Notify(security.Sanitize(title), security.Sanitize(body), a.cfg.Notify.Sound)
+		},
+		OnUnread: func(n int) {
+			a.tapp.QueueUpdateDraw(func() { a.mail.updateInboxUnread(n) })
+		},
+	}
+	ps := a.cfg.PageSize
+	go w.Run(a.ctx, time.Duration(a.cfg.Notify.IntervalSec)*time.Second,
+		func() (notify.Page, error) {
+			p, err := a.client.FindDistinguishedMessages(a.ctx, "inbox", ps, 0)
+			return notify.Page{Items: mail.MessageSummaries(p.Items)}, err
+		},
+		func() int {
+			folders, err := a.client.FindFolders(a.ctx)
+			if err != nil {
+				return -1
+			}
+			for _, f := range folders {
+				if f.DisplayName == "Входящие" {
+					return f.UnreadCount
+				}
+			}
+			return -1
+		})
 }
 
 // globalKeys обрабатывает клавиши, действующие на любом экране.
