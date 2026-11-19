@@ -14,20 +14,13 @@ import (
 )
 
 // ExternalMark возвращает "[ВНЕШН]", если домен отправителя не совпадает с
-// доменом организации (анти-фишинг, docs/SECURITY.md §4.1). Совпадение — по
-// суффиксу домена: sub.company.example считается внутренним,
-// company.example.evil.tld — нет.
+// доменом организации (анти-фишинг, docs/SECURITY.md §4.1). Логика —
+// security.IsExternalEmail, здесь только представление.
 func ExternalMark(fromEmail, orgDomain string) string {
-	if fromEmail == "" || orgDomain == "" {
-		return ""
+	if security.IsExternalEmail(fromEmail, orgDomain) {
+		return "[ВНЕШН]"
 	}
-	addr := strings.ToLower(fromEmail)
-	domain := addr[strings.LastIndex(addr, "@")+1:]
-	org := strings.ToLower(orgDomain)
-	if domain == org || strings.HasSuffix(domain, "."+org) {
-		return ""
-	}
-	return "[ВНЕШН]"
+	return ""
 }
 
 // FormatMessageRow — колонки строки списка писем: [ВНЕШН] | реальный адрес

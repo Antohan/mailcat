@@ -10,6 +10,18 @@ import (
 	"golang.org/x/net/idna"
 )
 
+// IsExternalEmail — домен адреса не входит в домен организации
+// (суффиксное сравнение: sub.corp.ru внутренний, corp.ru.evil.tld — внешний).
+func IsExternalEmail(email, orgDomain string) bool {
+	if email == "" || orgDomain == "" {
+		return false
+	}
+	addr := strings.ToLower(email)
+	domain := addr[strings.LastIndex(addr, "@")+1:]
+	org := strings.ToLower(orgDomain)
+	return domain != org && !strings.HasSuffix(domain, "."+org)
+}
+
 // HostFacts — сведения о хосте ссылки для реестра (PLAN.md этап 3):
 // IDN=true для punycode (xn--) и не-ASCII хостов; Ascii — punycode-форма
 // (для обычных хостов — сам хост в нижнем регистре).
