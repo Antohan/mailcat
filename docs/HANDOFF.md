@@ -12,6 +12,8 @@
 security-reviewer после 21:21 по `git diff 8fb6a9f..HEAD`.
 
 ## Открыто (для пользователя, нужен VPN — TESTING.md §5)
+- SECURITY.md §4: «домен ≠ org_domain» — устарело, теперь список org_domains
+  (3033a9b); поправить в сессии без правок кода.
 - S1 doctor (негативные: VPN off / кривой ca_path / кривой пароль)
 - S2 folders · S3 чтение+пагинация · S4 вложения (PDF, .exe, лимит)
 - S5 ссылки (⚠, IDN, модал g) · S6 календарь (повторы, MyResponseType)
