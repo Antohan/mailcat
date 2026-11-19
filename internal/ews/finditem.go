@@ -127,19 +127,16 @@ type findItemRequest struct {
 	ParentFolderIDs     parentFolderIdsRequest      `xml:"ParentFolderIds"`
 }
 
-// itemShapeRequest — m:ItemShape: BaseShape + опциональные BodyType и
+// itemShapeRequest — m:ItemShape: BaseShape + опциональные
 // AdditionalProperties (используется FindItem, GetItem, CalendarView).
 type itemShapeRequest struct {
 	BaseShape            string                       `xml:"http://schemas.microsoft.com/exchange/services/2006/types BaseShape"`
-	BodyType             *bodyTypeRequest             `xml:",omitempty"`
 	AdditionalProperties *additionalPropertiesRequest `xml:",omitempty"`
 }
 
-// bodyTypeRequest — t:BodyType@BodyType="Best" (GetItem, §6).
-type bodyTypeRequest struct {
-	XMLName  xml.Name `xml:"http://schemas.microsoft.com/exchange/services/2006/types BodyType"`
-	BodyType string   `xml:"BodyType,attr"`
-}
+// bodyTypeRequest удалён: живой Exchange 2019 (15.2.2562) отвергает
+// t:BodyType@BodyType в ItemShape ответом 500 ErrorInvalidRequest;
+// TextBody запрашивается AdditionalProperties и от BodyType не зависит.
 
 // additionalPropertiesRequest — t:AdditionalProperties со списком FieldURI
 // (только URI из EWS-REFERENCE.md §9).

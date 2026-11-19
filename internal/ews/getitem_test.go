@@ -10,7 +10,7 @@ import (
 )
 
 // TestGetItemRequestGolden: запрос m:GetItem структурно совпадает с шаблоном
-// §6 (Default + BodyType Best + пять AdditionalProperties + ItemId c ChangeKey).
+// §6 (Default + пять AdditionalProperties + ItemId c ChangeKey, без BodyType).
 func TestGetItemRequestGolden(t *testing.T) {
 	req := newGetItemRequest("AAMkAGI2MDE=", "CQAAABYA0AA=")
 	data, err := xml.MarshalIndent(req, "", "  ")
@@ -22,7 +22,6 @@ func TestGetItemRequestGolden(t *testing.T) {
     xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
   <m:ItemShape>
     <t:BaseShape>Default</t:BaseShape>
-    <t:BodyType BodyType="Best"/>
     <t:AdditionalProperties>
       <t:FieldURI FieldURI="item:TextBody"/>
       <t:FieldURI FieldURI="message:InternetMessageId"/>

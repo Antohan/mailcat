@@ -162,7 +162,6 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 <m:GetItem>
   <m:ItemShape>
     <t:BaseShape>Default</t:BaseShape>
-    <t:BodyType BodyType="Best"/>
     <t:AdditionalProperties>
       <t:FieldURI FieldURI="item:TextBody"/>
       <t:FieldURI FieldURI="message:InternetMessageId"/>
@@ -177,10 +176,14 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 </m:GetItem>
 ```
 
+Без `t:BodyType@BodyType="Best"`: живой Exchange 2019 (15.2.2562) отвечает
+500 `ErrorInvalidRequest` на BodyType в ItemShape (проверено изолированно,
+без него все FieldURI проходят). TextBody от BodyType не зависит.
+
 Ответ — `m:GetItemResponseMessage/m:Items/t:Message` с:
-- `<t:Body BodyType="Html">…</t:Body>` (или `Text`) — при `BodyType="Best"` сервер сам
-  выбирает лучший вариант; HTML конвертируем в текст на клиенте (html2text);
-- `<t:TextBody>` — готовый текстовый вариант (если сервер вернул);
+- `<t:TextBody>` — готовый текстовый вариант (основной путь);
+- `<t:Body BodyType="Html">…</t:Body>` — если сервер вернул только HTML,
+  конвертируем в текст на клиенте (html2text, оффлайн-fallback);
 - `<t:Attachments>` — список вложений:
   `<t:FileAttachment><t:AttachmentId Id="AAMk..."/><t:Name>report.pdf</t:Name>
   <t:ContentType>application/pdf</t:ContentType><t:ContentLength>2097152</t:ContentLength>
@@ -269,7 +272,7 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 |---|---|
 | `item:Subject`, `item:DateTimeReceived`, `item:DateTimeSent` | тема, даты |
 | `item:IsRead`, `item:HasAttachments` | флаги |
-| `item:TextBody`, `item:Body` (через BodyType) | тело |
+| `item:TextBody` | тело (текст) |
 | `message:From`, `message:Sender` | отправитель |
 | `message:ToRecipients`, `message:CcRecipients` | получатели |
 | `message:InternetMessageId` | Message-ID |

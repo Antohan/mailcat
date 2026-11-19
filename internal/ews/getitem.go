@@ -32,7 +32,7 @@ type MessageDetail struct {
 	ChangeKey         string
 	Subject           string
 	Sent              time.Time
-	BodyType          string // Html | Text — что сервер выбрал при BodyType="Best"
+	BodyType          string // Html | Text — формат t:Body из ответа (fallback-путь)
 	BodyHTML          string // содержимое t:Body при BodyType="Html"
 	BodyText          string // t:TextBody; если сервер вернул Text — t:Body
 	InternetMessageID string
@@ -59,8 +59,13 @@ func (c *Client) GetMessage(ctx context.Context, itemID, changeKey string) (Mess
 func newGetItemRequest(itemID, changeKey string) *getItemRequest {
 	return &getItemRequest{
 		ItemShape: itemShapeRequest{
+			// WHY: без t:BodyType@BodyType="Best".
+			// Why: живой Exchange 2019 (15.2.2562) на BodyType в ItemShape
+			//  отвечает 500 ErrorInvalidRequest (проверено изолированно);
+			//  BodyType управляет только форматом t:Body, который мы не
+			//  запрашиваем — TextBody от него не зависит (вердикт ews-спекта).
+			// Not to do: вернуть BodyType — живой сервер его отвергает.
 			BaseShape: "Default",
-			BodyType:  &bodyTypeRequest{BodyType: "Best"},
 			AdditionalProperties: &additionalPropertiesRequest{FieldURIs: []fieldURIRequest{
 				{FieldURI: "item:TextBody"},
 				{FieldURI: "message:InternetMessageId"},
