@@ -30,10 +30,13 @@ func TestNotifyCmd(t *testing.T) {
 		t.Errorf("Path = %q", cmd.Path)
 	}
 	script := cmd.Args[len(cmd.Args)-1]
-	for _, want := range []string{"display notification", `Тема  новая`, `\"x\"`, "with title", "sound name \"default\""} {
+	for _, want := range []string{"display notification", "новая", `\"x\"`, "with title", "sound name \"default\""} {
 		if !containsSub(script, want) {
 			t.Errorf("в скрипте нет %q: %s", want, script)
 		}
+	}
+	if containsSub(script, "\n") {
+		t.Errorf("перевод строки не экранирован: %q", script)
 	}
 	cmd2 := notifyCmd("t", "b", false)
 	script2 := cmd2.Args[len(cmd2.Args)-1]
