@@ -44,7 +44,7 @@ Exchange) для macOS. Go + TUI (tview). Ничего не отправляет
    `doctor` сам предложит её создать):
 
    ```sh
-   security add-generic-password -a 'COMPANY\ivanov' -s mailcat -w
+   security add-generic-password -a 'ваш_логин' -s mailcat -w
    ```
 
 5. Проверка (при включённом VPN):
