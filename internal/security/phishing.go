@@ -10,16 +10,26 @@ import (
 	"golang.org/x/net/idna"
 )
 
-// IsExternalEmail — домен адреса не входит в домен организации
+// IsExternalEmail — домен адреса не входит ни в один домен организации
 // (суффиксное сравнение: sub.corp.ru внутренний, corp.ru.evil.tld — внешний).
-func IsExternalEmail(email, orgDomain string) bool {
-	if email == "" || orgDomain == "" {
+// Несколько внутренних доменов — конфиг org_domains; пустой список —
+// ничего не помечается внешним.
+func IsExternalEmail(email string, orgDomains ...string) bool {
+	if email == "" || len(orgDomains) == 0 {
 		return false
 	}
 	addr := strings.ToLower(email)
 	domain := addr[strings.LastIndex(addr, "@")+1:]
-	org := strings.ToLower(orgDomain)
-	return domain != org && !strings.HasSuffix(domain, "."+org)
+	for _, org := range orgDomains {
+		org = strings.ToLower(strings.TrimSpace(org))
+		if org == "" {
+			continue
+		}
+		if domain == org || strings.HasSuffix(domain, "."+org) {
+			return false
+		}
+	}
+	return true
 }
 
 // HostFacts — сведения о хосте ссылки для реестра (PLAN.md этап 3):

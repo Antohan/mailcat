@@ -37,7 +37,7 @@ func TestShouldNotify(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ShouldNotify(tc.m, tc.rule, "corp.ru"); got != tc.want {
+			if got := ShouldNotify(tc.m, tc.rule, []string{"corp.ru"}); got != tc.want {
 				t.Errorf("ShouldNotify(%+v) = %v, хочу %v", tc.m, got, tc.want)
 			}
 		})

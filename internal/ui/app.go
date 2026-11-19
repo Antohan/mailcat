@@ -154,9 +154,9 @@ func (a *App) Run() error {
 // тихий backoff внутри watcher.Run; уведомления — только по правилам.
 func (a *App) startWatcher() {
 	w := &notify.Watcher{
-		Rule:      a.cfg.Notify,
-		OrgDomain: a.cfg.OrgDomain,
-		PageSize:  a.cfg.PageSize,
+		Rule:       a.cfg.Notify,
+		OrgDomains: a.cfg.InternalDomains(),
+		PageSize:   a.cfg.PageSize,
 		Notify: func(title, body string) {
 			// SECURITY.md §9: текст писем — через Sanitize до osascript;
 			// ошибки выполнения логируются, но не прерывают TUI.

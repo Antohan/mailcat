@@ -85,6 +85,33 @@ func TestLinkMismatch(t *testing.T) {
 	}
 }
 
+// TestIsExternalEmailMultiDomains: несколько внутренних доменов (org_domains)
+// — внутренним считается любой из списка и его поддомены; пустой список —
+// ничего не помечается (как и раньше с пустым org_domain).
+func TestIsExternalEmailMultiDomains(t *testing.T) {
+	org := []string{"Corp.Ru", "corp.com"} // регистр не важен
+	cases := []struct {
+		email string
+		want  bool
+	}{
+		{"a@corp.ru", false},
+		{"a@sub.CORP.ru", false},   // поддомен первого — внутренний
+		{"a@corp.com", false},      // второй домен — внутренний
+		{"a@deep.corp.com", false}, // поддомен второго
+		{"a@corp.ru.evil.tld", true},
+		{"a@partner.tld", true},
+		{"a@corpru", true},
+	}
+	for _, tc := range cases {
+		if got := IsExternalEmail(tc.email, org...); got != tc.want {
+			t.Errorf("IsExternalEmail(%q, %v) = %v, хочу %v", tc.email, org, got, tc.want)
+		}
+	}
+	if IsExternalEmail("a@partner.tld") { // без доменов — не помечаем
+		t.Error("IsExternalEmail без списка доменов должен давать false")
+	}
+}
+
 func containsStr(s, sub string) bool {
 	return len(s) >= len(sub) && indexStr(s, sub) >= 0
 }

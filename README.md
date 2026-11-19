@@ -32,7 +32,7 @@ Exchange) для macOS. Go + TUI (tview). Ничего не отправляет
    старый бинарник; без пересборки запускается прошлая версия).
 
 2. Конфиг — скопировать образец, выставить права, заполнить `server`,
-   `username`, `org_domain` (при внутреннем сертификате сервера — `ca_path`):
+   `username`, `org_domains` (при внутреннем сертификате сервера — `ca_path`):
 
    ```sh
    mkdir -p ~/.config/mailcat && chmod 700 ~/.config/mailcat

@@ -68,8 +68,8 @@ func TestLoadExample(t *testing.T) {
 	if cfg.CAPath != "~/.config/mailcat/company-root-ca.pem" {
 		t.Errorf("CAPath = %q", cfg.CAPath)
 	}
-	if cfg.OrgDomain != "company.example" {
-		t.Errorf("OrgDomain = %q", cfg.OrgDomain)
+	if len(cfg.OrgDomains) != 2 || cfg.OrgDomains[0] != "company.example" || cfg.OrgDomains[1] != "company.example.ru" {
+		t.Errorf("OrgDomains = %v, хочу [company.example company.example.ru]", cfg.OrgDomains)
 	}
 	if cfg.PageSize != 50 || cfg.MaxAttachmentMB != 100 {
 		t.Errorf("PageSize/MaxAttachmentMB = %d/%d", cfg.PageSize, cfg.MaxAttachmentMB)
@@ -79,6 +79,28 @@ func TestLoadExample(t *testing.T) {
 	}
 	if cfg.Log.File != "~/.local/state/mailcat/mailcat.log" {
 		t.Errorf("Log.File = %q", cfg.Log.File)
+	}
+}
+
+// TestInternalDomains: org_domains (список) приоритетнее org_domain;
+// без списка работает старое поле; пустые элементы отбрасываются,
+// регистр нормализуется.
+func TestInternalDomains(t *testing.T) {
+	cfg := Defaults()
+	cfg.OrgDomains = []string{" PTsecurity.COM ", "", "ptsecurity.ru"}
+	if got := cfg.InternalDomains(); len(got) != 2 || got[0] != "ptsecurity.com" || got[1] != "ptsecurity.ru" {
+		t.Errorf("InternalDomains() = %v, хочу [ptsecurity.com ptsecurity.ru]", got)
+	}
+
+	cfg = Defaults()
+	cfg.OrgDomain = "Company.Example"
+	if got := cfg.InternalDomains(); len(got) != 1 || got[0] != "company.example" {
+		t.Errorf("InternalDomains() fallback = %v, хочу [company.example]", got)
+	}
+
+	cfg = Defaults()
+	if got := cfg.InternalDomains(); len(got) != 0 {
+		t.Errorf("InternalDomains() без доменов = %v, хочу пусто", got)
 	}
 }
 

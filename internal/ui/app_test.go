@@ -61,7 +61,7 @@ func TestFormatMessageRowEscaped(t *testing.T) {
 		Subject: "[red]СРОЧНО[-] проверка",
 		From:    mail.Address{Email: `["evil"]@x.example`},
 	}
-	row := FormatMessageRow(m, "company.example")
+	row := FormatMessageRow(m, []string{"company.example"})
 	if !strings.Contains(row[2], "[red[]") {
 		t.Errorf("тег [red] в теме не экранирован: %q", row[2])
 	}

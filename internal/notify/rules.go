@@ -14,11 +14,11 @@ import (
 // Важность письма недоступна (item:Importance вне whitelist
 // docs/EWS-REFERENCE.md §9) — считается normal: min_importance low/normal
 // пропускают все письма, high — ни одного.
-func ShouldNotify(m mail.MessageSummary, rule config.Notify, orgDomain string) bool {
+func ShouldNotify(m mail.MessageSummary, rule config.Notify, orgDomains []string) bool {
 	if !passesImportance(rule.MinImportance) {
 		return false
 	}
-	if rule.OnlyExternal && !security.IsExternalEmail(m.From.Email, orgDomain) {
+	if rule.OnlyExternal && !security.IsExternalEmail(m.From.Email, orgDomains...) {
 		return false
 	}
 	if len(rule.Senders) > 0 && !matchesSenders(m.From.Email, rule.Senders) {

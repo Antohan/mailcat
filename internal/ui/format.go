@@ -13,11 +13,11 @@ import (
 	"mailcat/internal/security"
 )
 
-// ExternalMark возвращает "[ВНЕШН]", если домен отправителя не совпадает с
-// доменом организации (анти-фишинг, docs/SECURITY.md §4.1). Логика —
+// ExternalMark возвращает "[ВНЕШН]", если домен отправителя не входит ни в
+// один домен организации (анти-фишинг, docs/SECURITY.md §4.1). Логика —
 // security.IsExternalEmail, здесь только представление.
-func ExternalMark(fromEmail, orgDomain string) string {
-	if security.IsExternalEmail(fromEmail, orgDomain) {
+func ExternalMark(fromEmail string, orgDomains []string) string {
+	if security.IsExternalEmail(fromEmail, orgDomains...) {
 		return "[ВНЕШН]"
 	}
 	return ""
@@ -27,13 +27,13 @@ func ExternalMark(fromEmail, orgDomain string) string {
 // отправителя | тема | дата (локальная зона, короткий формат). Текст из EWS
 // проходит Sanitize (§3) и tview.Escape — Table интерпретирует теги цветов/
 // регионов безусловно (ревью этапа 2).
-func FormatMessageRow(m mail.MessageSummary, orgDomain string) []string {
+func FormatMessageRow(m mail.MessageSummary, orgDomains []string) []string {
 	date := ""
 	if !m.Received.IsZero() {
 		date = m.Received.Local().Format("02.01 15:04")
 	}
 	return []string{
-		ExternalMark(m.From.Email, orgDomain),
+		ExternalMark(m.From.Email, orgDomains),
 		tview.Escape(security.Sanitize(m.From.Email)),
 		tview.Escape(security.Sanitize(m.Subject)),
 		date,

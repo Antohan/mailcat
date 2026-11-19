@@ -46,11 +46,11 @@ type Watcher struct {
 	Client interface {
 		FindDistinguishedMessages(ctx context.Context, folderID string, pageSize, offset int) (page Page, err error)
 	}
-	Rule      config.Notify
-	OrgDomain string
-	PageSize  int
-	Notify    func(title, body string) // показ (platform.Notify + sound)
-	OnUnread  func(unread int)         // обновление счётчика UI
+	Rule       config.Notify
+	OrgDomains []string
+	PageSize   int
+	Notify     func(title, body string) // показ (platform.Notify + sound)
+	OnUnread   func(unread int)         // обновление счётчика UI
 
 	lastTop string
 	fails   int
@@ -70,7 +70,7 @@ func (w *Watcher) PollSingle(ctx context.Context, fetch func() (Page, error), un
 	}
 	w.fails = 0
 	for _, m := range NewSince(w.lastTop, page.Items) {
-		if !ShouldNotify(m, w.Rule, w.OrgDomain) {
+		if !ShouldNotify(m, w.Rule, w.OrgDomains) {
 			continue
 		}
 		title, body := NotificationTexts(m, w.Rule.ShowSubject)

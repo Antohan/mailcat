@@ -231,7 +231,7 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
 	for i, m := range added {
 		row := base + i
-		for col, text := range FormatMessageRow(m, s.app.cfg.OrgDomain) {
+		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains()) {
 			expansion := 0
 			if col == 2 {
 				expansion = 1 // тема забирает свободную ширину

@@ -15,12 +15,13 @@ import (
 
 // Config — корневая структура конфигурации; поля соответствуют config.example.toml.
 type Config struct {
-	Server          string `toml:"server"`
-	Username        string `toml:"username"`
-	CAPath          string `toml:"ca_path"`
-	OrgDomain       string `toml:"org_domain"`
-	PageSize        int    `toml:"page_size"`
-	MaxAttachmentMB int    `toml:"max_attachment_mb"`
+	Server          string   `toml:"server"`
+	Username        string   `toml:"username"`
+	CAPath          string   `toml:"ca_path"`
+	OrgDomain       string   `toml:"org_domain"`  // один домен (простой случай)
+	OrgDomains      []string `toml:"org_domains"` // несколько: приоритетнее org_domain
+	PageSize        int      `toml:"page_size"`
+	MaxAttachmentMB int      `toml:"max_attachment_mb"`
 
 	UI     UI     `toml:"ui"`
 	Notify Notify `toml:"notify"`
@@ -78,6 +79,26 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("ошибка разбора TOML в %s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// InternalDomains — эффективный список внутренних доменов: org_domains,
+// если задан и не пуст, иначе единственный org_domain. Оба необязательны:
+// без доменов метка [ВНЕШН] не ставится. Регистр нормализуется, пустые
+// элементы отбрасываются.
+func (c *Config) InternalDomains() []string {
+	domains := make([]string, 0, len(c.OrgDomains)+1)
+	for _, d := range c.OrgDomains {
+		if d = strings.ToLower(strings.TrimSpace(d)); d != "" {
+			domains = append(domains, d)
+		}
+	}
+	if len(domains) > 0 {
+		return domains
+	}
+	if d := strings.ToLower(strings.TrimSpace(c.OrgDomain)); d != "" {
+		return []string{d}
+	}
+	return nil
 }
 
 // Validate проверяет обязательные поля и диапазоны значений.

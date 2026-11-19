@@ -11,7 +11,7 @@ import (
 	"mailcat/internal/mail"
 )
 
-const orgDomain = "company.example"
+var orgDomains = []string{"company.example"}
 
 // TestExternalMark: метка [ВНЕШН] только для чужих доменов (без учёта регистра).
 func TestExternalMark(t *testing.T) {
@@ -27,7 +27,7 @@ func TestExternalMark(t *testing.T) {
 		{"", ""},
 	}
 	for _, tc := range cases {
-		if got := ExternalMark(tc.email, orgDomain); got != tc.want {
+		if got := ExternalMark(tc.email, orgDomains); got != tc.want {
 			t.Errorf("ExternalMark(%q) = %q, хочу %q", tc.email, got, tc.want)
 		}
 	}
@@ -41,7 +41,7 @@ func TestFormatMessageRow(t *testing.T) {
 		Received: recv,
 		From:     mail.Address{Name: "Иванов И.", Email: "ivanov@partner.tld"},
 	}
-	row := FormatMessageRow(m, orgDomain)
+	row := FormatMessageRow(m, orgDomains)
 	if len(row) != 4 {
 		t.Fatalf("колонок %d, хочу 4: %v", len(row), row)
 	}
@@ -65,7 +65,7 @@ func TestFormatMessageRowSanitized(t *testing.T) {
 		Subject: "плохая\x1b]8;;http://evil\x1b\\тема",
 		From:    mail.Address{Email: "a@b.c"},
 	}
-	row := FormatMessageRow(m, orgDomain)
+	row := FormatMessageRow(m, orgDomains)
 	if row[2] != "плохаятема" {
 		t.Errorf("тема не санитизирована: %q", row[2])
 	}
