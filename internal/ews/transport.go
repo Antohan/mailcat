@@ -8,8 +8,36 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"net"
 	"os"
+	"time"
 )
+
+// TLSProbeError — результат проверки TLS для doctor: CertProblem отличает
+// проблемы сертификата (нужно объяснение про ca_path) от прочих ошибок сети.
+type TLSProbeError struct {
+	CertProblem bool
+	Err         error
+}
+
+func (e *TLSProbeError) Error() string { return e.Err.Error() }
+func (e *TLSProbeError) Unwrap() error { return e.Err }
+
+// TLSProbe — TLS-рукопожатие с изолированной конфигурацией из caPath
+// (doctor, шаг 2; SECURITY.md §1). crypto/tls остаётся внутри пакета ews.
+func TLSProbe(hostPort, caPath string) error {
+	cfg, err := newTLSConfig(caPath)
+	if err != nil {
+		return err
+	}
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	conn, err := tls.DialWithDialer(dialer, "tcp", hostPort, cfg)
+	if err != nil {
+		var certErr *tls.CertificateVerificationError
+		return &TLSProbeError{CertProblem: errors.As(err, &certErr), Err: err}
+	}
+	return conn.Close()
+}
 
 // tlsVersion12 — минимально допустимая версия TLS (SECURITY.md §1).
 const tlsVersion12 = tls.VersionTLS12

@@ -7,7 +7,6 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -20,10 +19,11 @@ import (
 	"mailcat/internal/security"
 )
 
-// doctorDeps — шаги диагностики, инжектируются в тестах.
+// doctorDeps — шаги диагностики, инжектируются в тестах. crypto/tls остаётся
+// внутри internal/ews (policy_test): шаг 2 — ews.TLSProbe + TLSProbeError.
 type doctorDeps struct {
 	dialTCP      func(hostPort string) error
-	tlsHandshake func(hostPort string, tlsCfg *tls.Config) error
+	tlsHandshake func(hostPort, caPath string) error
 	findFolders  func(ctx context.Context, c *ews.Client) ([]ews.Folder, error)
 	client       func(cfg *config.Config) (*ews.Client, error)
 }
@@ -37,13 +37,8 @@ func realDoctorDeps() doctorDeps {
 			}
 			return conn.Close()
 		},
-		tlsHandshake: func(hostPort string, tlsCfg *tls.Config) error {
-			dialer := &net.Dialer{Timeout: 10 * time.Second}
-			conn, err := tls.DialWithDialer(dialer, "tcp", hostPort, tlsCfg)
-			if err != nil {
-				return err
-			}
-			return conn.Close()
+		tlsHandshake: func(hostPort, caPath string) error {
+			return ews.TLSProbe(hostPort, caPath)
 		},
 		client: func(cfg *config.Config) (*ews.Client, error) {
 			pass, err := keychainPasswordFor(cfg)
@@ -88,17 +83,12 @@ func runDoctor(w io.Writer, cfg *config.Config, deps doctorDeps) int {
 	}
 	fmt.Fprintln(w, "OK")
 
-	// Шаг 2: TLS с изолированным пулом.
+	// Шаг 2: TLS с изолированным пулом (crypto/tls — внутри ews.TLSProbe).
 	fmt.Fprintf(w, "[2/4] TLS-рукопожатие (ca_path: %s) … ", caPathLabel(cfg.CAPath))
-	tlsCfg, err := ews.NewTLSConfig(config.ExpandHome(cfg.CAPath))
-	if err != nil {
+	if err := deps.tlsHandshake(hp, config.ExpandHome(cfg.CAPath)); err != nil {
 		fmt.Fprintf(w, "ОШИБКА\n      %v\n", err)
-		return 1
-	}
-	if err := deps.tlsHandshake(hp, tlsCfg); err != nil {
-		fmt.Fprintf(w, "ОШИБКА\n      %v\n", err)
-		var certErr *tls.CertificateVerificationError
-		if errors.As(err, &certErr) {
+		var probe *ews.TLSProbeError
+		if errors.As(err, &probe) && probe.CertProblem {
 			fmt.Fprintf(w, "      Сервер представил сертификат, который не прошёл проверку.\n"+
 				"      Если сертификат корпоративный — укажите путь к root-CA (PEM) в ca_path;\n"+
 				"      если ca_path уже задан — проверьте, что это правильный файл.\n"+

@@ -7,8 +7,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"os"
 	"path/filepath"
@@ -22,7 +20,7 @@ import (
 func okDeps() doctorDeps {
 	return doctorDeps{
 		dialTCP:      func(string) error { return nil },
-		tlsHandshake: func(string, *tls.Config) error { return nil },
+		tlsHandshake: func(string, string) error { return nil },
 		client:       func(*config.Config) (*ews.Client, error) { return &ews.Client{}, nil },
 		findFolders: func(context.Context, *ews.Client) ([]ews.Folder, error) {
 			return []ews.Folder{{DisplayName: "Входящие"}, {DisplayName: "Отправленные"}}, nil
@@ -86,8 +84,8 @@ func TestDoctorTLS(t *testing.T) {
 	t.Setenv("HOME", home)
 	writeCfg(t, home)
 	deps := okDeps()
-	deps.tlsHandshake = func(string, *tls.Config) error {
-		return &tls.CertificateVerificationError{Err: x509.UnknownAuthorityError{}}
+	deps.tlsHandshake = func(string, string) error {
+		return &ews.TLSProbeError{CertProblem: true, Err: errors.New("x509: certificate signed by unknown authority")}
 	}
 	var out bytes.Buffer
 	code := runDoctor(&out, loadCfg(t, home), deps)
