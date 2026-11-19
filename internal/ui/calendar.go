@@ -134,7 +134,7 @@ func (s *calendarScreen) render() {
 	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 	for col, name := range weekdays {
 		s.grid.SetCell(0, col, tview.NewTableCell(name).
-			SetTextColor(tcell.ColorGray).SetSelectable(false))
+			SetTextColor(colorOtherMonth).SetSelectable(false))
 	}
 	grid := MonthGrid(s.year, s.month, s.events)
 	now := time.Now()
@@ -151,10 +151,10 @@ func (s *calendarScreen) render() {
 			}
 			tc := tview.NewTableCell(text)
 			if col >= 5 {
-				tc.SetTextColor(tcell.ColorYellow) // Сб/Вс
+				tc.SetTextColor(colorWeekend) // Сб/Вс
 			}
 			if !cell.InMonth {
-				tc.SetTextColor(tcell.ColorGray)
+				tc.SetTextColor(colorOtherMonth)
 			}
 			s.grid.SetCell(row+1, col, tc)
 		}

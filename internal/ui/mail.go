@@ -49,8 +49,9 @@ func newMailScreen(a *App) *mailScreen {
 
 	s.folders = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(tcell.ColorDefault).
-		SetSelectedBackgroundColor(tcell.ColorBlue)
+		SetMainTextColor(tcell.ColorBlack).
+		SetSelectedBackgroundColor(colorSelectedBg).
+		SetSelectedTextColor(colorSelectedFg)
 	s.folders.SetBorder(true).SetTitle(" Папки ")
 
 	s.messages = tview.NewTable().
@@ -237,10 +238,10 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 			}
 			cell := tview.NewTableCell(text).SetExpansion(expansion)
 			if col != 3 && !m.IsRead {
-				cell.SetTextColor(tcell.ColorWhite).SetAttributes(tcell.AttrBold)
+				cell.SetTextColor(colorUnread).SetAttributes(tcell.AttrBold)
 			}
 			if col == 3 {
-				cell.SetTextColor(tcell.ColorGray)
+				cell.SetTextColor(colorRead)
 			}
 			s.messages.SetCell(row, col, cell)
 		}
