@@ -26,9 +26,9 @@ security-reviewer после 21:21 по `git diff 8fb6a9f..HEAD`.
   FormatAgenda — мёртвый код (удалить/подключить).
 
 ## Не трогать
-- item:IsRead в AdditionalProperties FindItem — зачем: живой Exchange 2019
-  (15.2.2562) отвечает 500 ErrorInvalidRequest; форма Default+
-  item:DateTimeReceived (EWS-REFERENCE.md §5, a1fe7b1).
+- item:IsRead в AdditionalProperties FindItem и t:BodyType в ItemShape GetItem
+  — зачем: живой Exchange 2019 (15.2.2562) отвечает 500 ErrorInvalidRequest
+  (EWS-REFERENCE.md §5–6, a1fe7b1 + a1d68ee).
 - Read-only whitelist EWS-операций — зачем: золотое правило 1.
 - crypto/tls только в internal/ews — зачем: policy_test, единая точка TLS.
 - Sanitize + tview.Escape для Table/List/Modal (escapeForList) — зачем:
