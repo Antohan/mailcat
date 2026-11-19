@@ -4,6 +4,7 @@
 79881c3 (0+1) · 889a3cd f123125 f97477a 5b32e3e 10fb8a7 8fb6a9f (3) ·
 54d6df0 0012b0d (4) · 3bbff28 2507572 31b956e 309332b (5) · 8f1a1f0 1026960
 7a160c3 47b3c52 002a7e1 (6). Suite: 8 пакетов зелёные, policy_test включён.
+Пост-релиз на живом сервере: d7b1d0d светлая тема · a1fe7b1 фикс FindItem 500.
 
 ## Дальше
 План исчерпан. Ревью этапов 5–6 — self-review (субагент упёрся в usage limit;
@@ -23,6 +24,9 @@ security-reviewer после 21:21 по `git diff 8fb6a9f..HEAD`.
   FormatAgenda — мёртвый код (удалить/подключить).
 
 ## Не трогать
+- item:IsRead в AdditionalProperties FindItem — зачем: живой Exchange 2019
+  (15.2.2562) отвечает 500 ErrorInvalidRequest; форма Default+
+  item:DateTimeReceived (EWS-REFERENCE.md §5, a1fe7b1).
 - Read-only whitelist EWS-операций — зачем: золотое правило 1.
 - crypto/tls только в internal/ews — зачем: policy_test, единая точка TLS.
 - Sanitize + tview.Escape для Table/List/Modal (escapeForList) — зачем:
