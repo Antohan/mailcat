@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"os"
 	"os/exec"
@@ -22,15 +23,15 @@ import (
 // runtime — зависимости команды: подменяются в тестах.
 type runtime struct {
 	keychainPassword func() (string, error) // Keychain macOS
-	newUI            func(cfg *config.Config, c *ews.Client) error
+	newUI            func(cfg *config.Config, c *ews.Client, log *slog.Logger) error
 	findFolders      func(ctx context.Context, c *ews.Client) ([]ews.Folder, error)
 }
 
 func mainRuntime() runtime {
 	return runtime{
 		keychainPassword: platform.KeychainPassword,
-		newUI: func(cfg *config.Config, c *ews.Client) error {
-			return ui.New(cfg, c).Run()
+		newUI: func(cfg *config.Config, c *ews.Client, log *slog.Logger) error {
+			return ui.New(cfg, c, log).Run()
 		},
 		findFolders: func(ctx context.Context, c *ews.Client) ([]ews.Folder, error) {
 			return c.FindFolders(ctx)
@@ -106,33 +107,33 @@ func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 
 	switch argv[0] {
 	case "doctor":
-		return runDoctor(stderr, cfg, realDoctorDeps())
+		return runDoctor(stderr, cfg, realDoctorDeps(log))
 	case "folders":
-		return runFolders(stdout, stderr, cfg, rt)
+		return runFolders(stdout, stderr, cfg, rt, log)
 	default: // run
-		return runTUI(stderr, cfg, rt)
+		return runTUI(stderr, cfg, rt, log)
 	}
 }
 
 // buildClient собирает EWS-клиент: endpoint server + /EWS/Exchange.asmx
 // (EWS-REFERENCE.md §1), пароль из Keychain, CA из ca_path.
-func buildClient(cfg *config.Config, rt runtime) (*ews.Client, error) {
+func buildClient(cfg *config.Config, rt runtime, log *slog.Logger) (*ews.Client, error) {
 	pass, err := rt.keychainPassword()
 	if err != nil {
 		return nil, err
 	}
 	creds := ews.Credentials{Username: cfg.Username, Password: pass}
-	return ews.NewClient(cfg.Server+"/EWS/Exchange.asmx", creds, config.ExpandHome(cfg.CAPath), nil)
+	return ews.NewClient(cfg.Server+"/EWS/Exchange.asmx", creds, config.ExpandHome(cfg.CAPath), log)
 }
 
 // runTUI запускает интерфейс почты.
-func runTUI(stderr io.Writer, cfg *config.Config, rt runtime) int {
-	client, err := buildClient(cfg, rt)
+func runTUI(stderr io.Writer, cfg *config.Config, rt runtime, log *slog.Logger) int {
+	client, err := buildClient(cfg, rt, log)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
-	if err := rt.newUI(cfg, client); err != nil {
+	if err := rt.newUI(cfg, client, log); err != nil {
 		fmt.Fprintf(stderr, "ошибка интерфейса: %v\n", err)
 		return 1
 	}
@@ -141,8 +142,8 @@ func runTUI(stderr io.Writer, cfg *config.Config, rt runtime) int {
 
 // runFolders печатает список папок с непрочитанными — дымовый тест EWS
 // (PLAN.md этап 1, TESTING.md S2). Весь текст из EWS — через санитайзер.
-func runFolders(stdout, stderr io.Writer, cfg *config.Config, rt runtime) int {
-	client, err := buildClient(cfg, rt)
+func runFolders(stdout, stderr io.Writer, cfg *config.Config, rt runtime, log *slog.Logger) int {
+	client, err := buildClient(cfg, rt, log)
 	if err != nil {
 		fmt.Fprintf(stderr, "%v\n", err)
 		return 1

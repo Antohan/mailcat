@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -53,7 +54,7 @@ type testRuntime struct {
 func (tr *testRuntime) runtime() runtime {
 	return runtime{
 		keychainPassword: func() (string, error) { return tr.password, tr.passErr },
-		newUI: func(_ *config.Config, c *ews.Client) error {
+		newUI: func(_ *config.Config, c *ews.Client, _ *slog.Logger) error {
 			tr.uiRan = true
 			tr.uiURL = c.URL
 			return tr.uiErr

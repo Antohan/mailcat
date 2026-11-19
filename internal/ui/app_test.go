@@ -18,7 +18,7 @@ import (
 // newTestApp — App без запуска цикла событий (сеть не трогается).
 func newTestApp(t *testing.T) *App {
 	t.Helper()
-	return New(config.Defaults(), nil)
+	return New(config.Defaults(), nil, nil)
 }
 
 // TestShowErrorSanitized: OSC-инъекция в тексте ошибки не доходит до статус-бара.

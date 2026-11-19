@@ -6,6 +6,8 @@ package ui
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -40,6 +42,7 @@ type App struct {
 
 	cfg    *config.Config
 	client *ews.Client
+	log    *slog.Logger
 
 	// Текущее открытое письмо (экран деталей): для модалов g (ссылки)
 	// и v (вложения).
@@ -54,12 +57,17 @@ type App struct {
 }
 
 // New собирает приложение. Пароль уже получен вызывающим (Keychain), клиент
-// EWS готов (один на сессию — ARCHITECTURE.md §3).
-func New(cfg *config.Config, client *ews.Client) *App {
+// EWS готов (один на сессию — ARCHITECTURE.md §3). Логгер (nil — discard)
+// нужен для §9: ошибки osascript логируются, но не прерывают TUI.
+func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	a := &App{
 		cfg:    cfg,
 		client: client,
+		log:    log,
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -149,8 +157,11 @@ func (a *App) startWatcher() {
 		OrgDomain: a.cfg.OrgDomain,
 		PageSize:  a.cfg.PageSize,
 		Notify: func(title, body string) {
-			// SECURITY.md §9: текст писем — через Sanitize до osascript.
-			_ = platform.Notify(security.Sanitize(title), security.Sanitize(body), a.cfg.Notify.Sound)
+			// SECURITY.md §9: текст писем — через Sanitize до osascript;
+			// ошибки выполнения логируются, но не прерывают TUI.
+			if err := platform.Notify(security.Sanitize(title), security.Sanitize(body), a.cfg.Notify.Sound); err != nil {
+				a.log.Warn("уведомление macOS не показано", "err", err.Error())
+			}
 		},
 		OnUnread: func(n int) {
 			a.tapp.QueueUpdateDraw(func() { a.mail.updateInboxUnread(n) })

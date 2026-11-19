@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/url"
 	"time"
@@ -28,7 +29,7 @@ type doctorDeps struct {
 	client       func(cfg *config.Config) (*ews.Client, error)
 }
 
-func realDoctorDeps() doctorDeps {
+func realDoctorDeps(log *slog.Logger) doctorDeps {
 	return doctorDeps{
 		dialTCP: func(hostPort string) error {
 			conn, err := net.DialTimeout("tcp", hostPort, 10*time.Second)
@@ -46,7 +47,7 @@ func realDoctorDeps() doctorDeps {
 				return nil, err
 			}
 			creds := ews.Credentials{Username: cfg.Username, Password: pass}
-			return ews.NewClient(cfg.Server+"/EWS/Exchange.asmx", creds, config.ExpandHome(cfg.CAPath), nil)
+			return ews.NewClient(cfg.Server+"/EWS/Exchange.asmx", creds, config.ExpandHome(cfg.CAPath), log)
 		},
 		findFolders: func(ctx context.Context, c *ews.Client) ([]ews.Folder, error) {
 			return c.FindFolders(ctx)
