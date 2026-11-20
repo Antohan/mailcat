@@ -104,7 +104,7 @@ type App struct {
 // EWS готов (один на сессию — ARCHITECTURE.md §3). Логгер (nil — discard)
 // нужен для §9: ошибки osascript логируются, но не прерывают TUI.
 func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
-	applyLightTheme() // светлый фон — до создания виджетов (theme.go)
+	applyTheme(cfg.UI.Theme) // палитра — до создания виджетов (theme.go)
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}

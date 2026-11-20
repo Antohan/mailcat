@@ -167,6 +167,7 @@ func TestValidate(t *testing.T) {
 		{"interval_sec меньше 30", func(c *Config) { c.Notify.IntervalSec = 10 }, "interval_sec"},
 		{"min_importance мусор", func(c *Config) { c.Notify.MinImportance = "urgent" }, "min_importance"},
 		{"language не ru", func(c *Config) { c.UI.Language = "en" }, "language"},
+		{"theme мусор", func(c *Config) { c.UI.Theme = "sepia" }, "theme"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

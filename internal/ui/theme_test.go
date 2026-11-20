@@ -32,9 +32,32 @@ func TestLightThemeContrast(t *testing.T) {
 			t.Errorf("%s: текст %v совпадает с фоном %v — нечитаемо", name, p[0], p[1])
 		}
 	}
-	// UI-6: «активная панель» ≠ «выбранная строка» — рамка фокуса не должна
-	// притворяться выделением строки.
-	if colorFocusBorder == colorSelectedBg {
-		t.Errorf("рамка фокуса %v совпадает с фоном выделения %v", colorFocusBorder, colorSelectedBg)
+	// RD-1: рамка фокуса и выделение строки — один акцент; различие только
+	// в поверхности (WHY в theme.go).
+	if colorFocusBorder != colorAccent || colorSelectedBg != colorAccent {
+		t.Errorf("фокус %v / выделение %v должны совпадать с акцентом %v",
+			colorFocusBorder, colorSelectedBg, colorAccent)
 	}
+	if colorTextPrimary == tcell.ColorBlack {
+		t.Error("основной текст не должен быть чёрным")
+	}
+}
+
+// TestDarkThemeContrast: тёмная тема — те же роли, поверхности тёмные.
+func TestDarkThemeContrast(t *testing.T) {
+	applyTheme("dark")
+
+	if tview.Styles.PrimitiveBackgroundColor == tcell.ColorWhite {
+		t.Fatal("фон тёмной темы остался белым")
+	}
+	if colorTextPrimary == tcell.ColorBlack {
+		t.Error("основной текст не должен быть чёрным")
+	}
+	if colorTextPrimary == tview.Styles.PrimitiveBackgroundColor {
+		t.Error("основной текст совпадает с фоном — нечитаемо")
+	}
+	if colorTextSecondary == tview.Styles.PrimitiveBackgroundColor {
+		t.Error("второстепенный текст совпадает с фоном — нечитаемо")
+	}
+	applyLightTheme() // вернуть палитру по умолчанию для других тестов
 }

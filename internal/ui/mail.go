@@ -62,7 +62,7 @@ func newMailScreen(a *App) *mailScreen {
 
 	s.folders = tview.NewList().
 		ShowSecondaryText(false).
-		SetMainTextColor(tcell.ColorBlack).
+		SetMainTextColor(colorTextPrimary).
 		SetSelectedBackgroundColor(colorSelectedBg).
 		SetSelectedTextColor(colorSelectedFg)
 	s.folders.SetBorder(true).SetTitle(" Папки ")
