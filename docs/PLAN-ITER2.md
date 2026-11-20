@@ -64,7 +64,7 @@
 - [x] **UI-8. «Загрузка…»:** в статус-баре на время GetItem/FindItem —
       асинхронно, не блокируя отрисовку (in-flight защита уже есть — нужен
       видимый индикатор)
-- [ ] **T-1. Техдолг из HANDOFF «Открыто»:** reAnchor data-href/unquoted;
+- [x] **T-1. Техдолг из HANDOFF «Открыто»:** reAnchor data-href/unquoted;
       UniquePath O_EXCL; каталоги вложений при старте; Esc-источник модала
 - [ ] **D-1. Доки:** SECURITY.md §4 — формулировка «домен ≠ org_domain» →
       список `org_domains` (изменение 3033a9b)

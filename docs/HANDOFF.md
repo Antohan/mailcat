@@ -1,61 +1,50 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 2 — `docs/PLAN-ITER2.md`: **T-1** (техдолг: reAnchor data-href и
-некотируемые атрибуты — `internal/mail/links.go` reAnchor; UniquePath через
-O_EXCL вместо «проверил-записал» — `internal/security/filesafe.go` UniquePath;
-каталоги вложений при старте — `internal/ui/attachments.go` saveAttachment;
-Esc-источник модала — `internal/ui/links.go` showLinks/back).
+Итерация 2 — `docs/PLAN-ITER2.md`: **D-1** (доки: SECURITY.md §4 — формулировка
+«домен ≠ org_domain» → список `org_domains`, изменение 3033a9b). После D-1 —
+DoD итерации; merge в main — только по явной просьбе пользователя.
 
 ## Сделано (итерация 2)
-- ed80438 — iter2:UI-8: индикатор «Загрузка…» на время GetItem/FindItem
-  (beginLoad/endLoad, реестр in-flight), переживает смену страницы и
-  автоочистку ошибки.
-- 86cc38c — iter2:UI-7: подсказки статус-бара по странице (pageHint/showHint),
-  ошибка красным с автоочисткой 8 с (statusGen).
+- c28341f — iter2:T-1: техдолг — reAnchor data-href/некотируемые; CreateUnique
+  O_EXCL; каталоги вложений при старте; closeModals при 1/2 (Esc-источник).
+- ed80438 — iter2:UI-8: индикатор «Загрузка…» (loads, beginLoad/endLoad).
+- 86cc38c — iter2:UI-7: подсказки по странице, красная ошибка, автоочистка.
 - e015c2f — iter2:UI-6: рамка активной панели акцентом (paintFocusFrames).
 - c4b4140 — iter2:UI-5: сетка месяца — заголовок, «сегодня» ≠ выбранный, «17·2».
 - a5ca69d — iter2:UI-4: повестка — маркеры ✓/~/?/★/✗, URL в реестр, модал g.
-- b110fbe — iter2:UI-3: 📎 N вложений в FormatMessageHeader.
-- 184bf25 — iter2:UI-2: имя отправителя, компактная дата, капы ширины колонок.
-- f7cae6e/9b1d232 — iter2:UI-1: сортировка папок, секция «Ещё ▸», ui.hidden_folders.
+- b110fbe — iter2:UI-3: 📎 N вложений. 184bf25 — UI-2: имя/дата/капы колонок.
+  f7cae6e/9b1d232 — UI-1: сортировка папок, «Ещё ▸», ui.hidden_folders.
 
 ## Открыто (для пользователя; нужен VPN — TESTING.md §5)
-- Smoke S1–S8; UI-2/UI-4/UI-6/UI-7/UI-8 на живом сервере: имя/дата/жирные
-  непрочитанные; маркеры повестки и модал g; акцентная рамка; подсказки
-  статус-бара, красная ошибка и её автоочистка (выключить VPN); «Загрузка…»
-  держится при смене страницы 1/2 во время медленного запроса.
-- `item:Importance` в EWS-REFERENCE? (нужно для min_importance и ⚠ карточки).
-- Security-ревью этапов 5–6 — security-reviewer по `git diff 8fb6a9f..HEAD` (по желанию).
+- Smoke S1–S8 и UI-2..UI-8/T-1 на живом сервере; `item:Importance` в
+  EWS-REFERENCE? (нужно для min_importance и ⚠); security-ревью
+  `git diff 8fb6a9f..HEAD` — по желанию.
 
 ## Не трогать
-- Индикатор загрузки — реестр `loads` + гейтинг в showHint (UI-8): не гасить
-  «Загрузка…» в точках смены страниц; каждая ветка горутины (успех/ошибка/
-  устаревший ответ) зовёт endLoad(id) ровно один раз внутри QueueUpdateDraw;
-  доступ к loads — только главный поток TUI, без мьютекса. GetAttachment
-  (вложения) в реестре не участвует — его статусы терминальные, не подсказка.
-- Статус-бар без dynamic colors: красный — только SetTextColor(colorError),
-  обычный — SetTextColor(PrimaryTextColor) в setStatus. Тег [red] включил бы
-  интерпретацию серверного текста — запрещено (§3).
-- Автоочистка ошибки — по поколению statusGen (showError/setStatus меняют,
-  таймер зовёт clearError(gen)); не проверять время — статус мог смениться.
-- Подсказка — только pageHint() по GetFrontPage после смены страницы/загрузки;
-  не хардкодить строки в точках вызова.
-- Рамка активной панели — только paintFocusFrames (before-draw); GetFocus
-  внутри хука — deadlock. Акцент — бирюза ≠ синее выделение строки.
-- Текст ячейки сетки месяца — только FormatDayCell; маркер «сегодня» — скобки.
-- item:IsRead в FindItem AdditionalProperties и t:BodyType в GetItem ItemShape —
-  живой Exchange 2019 отвечает 500 (EWS-REFERENCE §5–6).
-- SortOrder/Restriction с CalendarView — запрет EWS (§8).
-- Read-only whitelist EWS-операций; crypto/tls только в internal/ews.
-- Sanitize + tview.Escape для Table/List/Modal (escapeForList) — «показанный
-  URL = открываемому»; строки повестки — только FormatAgenda.
-- showLinks(links, back): back — «страница + фокус», Esc идёт назад к источнику.
-- Отбрасывание ответов по поколению (mail.go gen, calendar monthStale).
-- Первый прогон watcher'а без уведомлений; тихий backoff до 5 мин.
-- Панель папок — только renderFolders; гвард SetChangedFunc на «Ещё ▸/▾».
-- Капы ширины колонок — только clampMessageColumns (SetDrawFunc).
-- Отправитель в списке — имя (t:Name) с fallback на локальную часть (§4.1).
+- Индикатор загрузки: реестр `loads` + гейтинг в showHint; каждая ветка
+  горутины зовёт endLoad(id) в QueueUpdateDraw ровно один раз; доступ —
+  только главный поток TUI; GetAttachment не участвует (статусы терминальные).
+- Статус-бар: красный — только SetTextColor(colorError), без dynamic colors;
+  автоочистка — по поколению statusGen; подсказка — только pageHint().
+- Рамка фокуса — только paintFocusFrames (before-draw; GetFocus в хуке —
+  deadlock); текст ячейки сетки — только FormatDayCell.
+- Модалы: showLinks(links, back) — Esc к источнику (страница+фокус); при 1/2
+  closeModals снимает links/attachments/confirm и переводит фокус — скрытый
+  SwitchToPage'ом модал держит фокус, его Esc уводил на покинутый источник.
+- Вложения: каталоги — только prepareAttachmentDirs при старте (attDirErr —
+  fail-fast до скачивания); файл — только CreateUnique (O_EXCL, 0600):
+  вернуть «путь» и писать WriteFile — гонка вернётся.
+- Ссылки: reAnchor — href только после пробела (data-href — трекер), значение
+  тремя альтернативами кавычек; «показанный URL = открываемому»;
+  Sanitize + tview.Escape (escapeForList); строки повестки — FormatAgenda.
+- EWS: item:IsRead в FindItem и t:BodyType в GetItem — живой Exchange даёт
+  500; SortOrder/Restriction с CalendarView — запрет; read-only whitelist;
+  crypto/tls только в internal/ews.
+- Отбрасывание ответов по поколению (mail.go gen, calendar monthStale);
+  первый прогон watcher без уведомлений, тихий backoff до 5 мин.
+- Папки — только renderFolders, гвард на «Ещё ▸/▾»; капы колонок —
+  clampMessageColumns; отправитель — t:Name с fallback на локальную часть.
 
 (История итерации 1 — в git: этапы 0–6 слиты в b53745f, пост-релиз d7b1d0d
 a1fe7b1 d25f2bd 3033a9b.)
