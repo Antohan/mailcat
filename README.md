@@ -92,7 +92,9 @@ read-only whitelist операций EWS.
 Архитектура — `docs/ARCHITECTURE.md`, точные SOAP-шаблоны —
 `docs/EWS-REFERENCE.md`, тесты — `docs/TESTING.md`. Практики работы с
 ИИ-агентами, собранные за итерации, — `docs/AI-AGENT-PRACTICES.md`
-(самодостаточный документ, можно делиться).
+(самодостаточный документ, можно делиться). Релиз итерации — команда
+`/release`: проверка DoD → security-ревью → merge `dev → main` после явного
+подтверждения.
 
 ```sh
 gofmt -l . && go vet ./... && go build ./... && go test ./...

@@ -63,6 +63,9 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 7. New tasks enter an iteration plan only as specs — touched files/symbols and
    expected behavior written BEFORE the coding session. A task without
    pointers to code costs exploration tokens on every session that opens it.
+8. Iteration finished and the user asks for a release → `/release`: it checks
+   the DoD, runs the security review over the iteration range and merges
+   `dev → main` only after the user explicitly confirms.
 
 ## Token budget rules (not optional)
 

@@ -1,0 +1,32 @@
+---
+description: Release procedure — verify iteration DoD, security review, merge dev→main after user confirmation
+---
+
+You are running the release procedure for the current iteration. The release
+is a human decision: your job is the checklist and the mechanics; the merge
+happens only after the user explicitly confirms. If any precondition fails —
+stop and report; do not fix things on your own inside a release session.
+
+1. Preconditions (all must hold, otherwise stop and report what is missing):
+   - branch is `dev`, working tree clean (`git status`);
+   - every task checkbox in the current iteration plan (`docs/PLAN-ITER2.md`)
+     is ticked and every DoD point of the plan is met;
+   - `/check` (`./scripts/check.sh`) is green;
+   - `CHANGELOG.md` has an entry for every iteration commit.
+2. The manual smoke scenarios (`docs/TESTING.md §5`) need VPN and the live
+   server — ask the user whether they have been run for this iteration and
+   wait for the answer. Do not proceed on an assumption.
+3. Spawn `security-reviewer` over the iteration range — from the last release
+   merge (currently `b53745f`) to `dev`. A verdict containing КРИТИЧНО
+   findings stops the release.
+4. Ask: «Релизим? Merge dev → main». On an explicit «да»:
+   `git checkout main` → `git merge --no-ff dev -m "Release: итерация 2 —
+   <тема>"` → `git switch dev`. Both steps are permission-guarded (ask) —
+   the prompts are the confirmation. Never push: pushing is the user's
+   action. Tagging (`git tag -a v0.X.0`) is optional and only on explicit
+   request.
+5. Rewrite `docs/HANDOFF.md`: «Сделано» = the release merge hash; «Дальше» =
+   the next iteration (ask the user if it is not planned yet); keep the
+   «Не трогать» invariants.
+6. Report in at most five lines: what was released, the merge hash, what is
+   next. The session ends here.
