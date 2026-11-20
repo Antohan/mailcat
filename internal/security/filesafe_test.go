@@ -41,23 +41,55 @@ func TestSafeFileNameLength(t *testing.T) {
 	}
 }
 
-// TestUniquePath: конфликт имён — суффиксы (1), (2); свободное имя — как есть.
-func TestUniquePath(t *testing.T) {
+// TestCreateUnique: атомарный захват имени (O_EXCL, T-1): конфликт — суффиксы
+// (1), (2); свободное имя — как есть; файл открыт на запись, права 0600.
+func TestCreateUnique(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "report.pdf"), nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := UniquePath(dir, "report.pdf"); got != filepath.Join(dir, "report (1).pdf") {
-		t.Errorf("первый конфликт = %q", got)
-	}
-	if err := os.WriteFile(filepath.Join(dir, "report (1).pdf"), nil, 0o600); err != nil {
+	f1, p1, err := CreateUnique(dir, "report.pdf")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if got := UniquePath(dir, "report.pdf"); got != filepath.Join(dir, "report (2).pdf") {
-		t.Errorf("второй конфликт = %q", got)
+	st1, err := f1.Stat()
+	if err != nil {
+		f1.Close()
+		t.Fatal(err)
 	}
-	if got := UniquePath(dir, "free.txt"); got != filepath.Join(dir, "free.txt") {
-		t.Errorf("свободное имя = %q", got)
+	if _, err := f1.Write([]byte("x")); err != nil {
+		t.Errorf("файл не открыт на запись: %v", err)
+	}
+	f1.Close()
+	if p1 != filepath.Join(dir, "report (1).pdf") {
+		t.Errorf("первый конфликт = %q", p1)
+	}
+	if st1.Mode().Perm() != 0o600 {
+		t.Errorf("права = %v, хочу 0600", st1.Mode().Perm())
+	}
+
+	f2, p2, err := CreateUnique(dir, "report.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f2.Close()
+	if p2 != filepath.Join(dir, "report (2).pdf") {
+		t.Errorf("второй конфликт = %q", p2)
+	}
+
+	f3, p3, err := CreateUnique(dir, "free.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f3.Close()
+	if p3 != filepath.Join(dir, "free.txt") {
+		t.Errorf("свободное имя = %q", p3)
+	}
+
+	// Несуществующий каталог — ошибка, а не паника/тишина.
+	if f, _, err := CreateUnique(filepath.Join(dir, "нет"), "a.txt"); err == nil {
+		f.Close()
+		t.Errorf("нет ошибки для отсутствующего каталога")
 	}
 }
 

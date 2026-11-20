@@ -46,18 +46,30 @@ func SafeFileName(name string) string {
 	return name
 }
 
-// UniquePath возвращает путь в dir, не занятый другим файлом: при конфликте
-// добавляет « (1)», « (2)»… перед расширением.
-func UniquePath(dir, name string) string {
+// CreateUnique атомарно создаёт в dir новый файл под имя name (SafeFileName),
+// правами 0600, и возвращает открытый на запись файл и итоговый путь; при
+// конфликте имени — « (1)», « (2)»… перед расширением. Файл закрывает
+// вызывающий.
+// WHY: O_CREATE|O_EXCL занимает имя атомарно; прежний UniquePath
+// «проверил os.Stat — записал потом» оставлял гонку между проверкой и записью.
+// Не делать: вернуть только путь, а писать затем os.WriteFile — гонка вернётся.
+func CreateUnique(dir, name string) (*os.File, string, error) {
 	base := SafeFileName(name)
 	ext := filepath.Ext(base)
 	stem := strings.TrimSuffix(base, ext)
-	candidate := filepath.Join(dir, base)
-	for i := 1; ; i++ {
-		if _, err := os.Stat(candidate); os.IsNotExist(err) {
-			return candidate
+	for i := 0; ; i++ {
+		candidate := base
+		if i > 0 {
+			candidate = fmt.Sprintf("%s (%d)%s", stem, i, ext)
 		}
-		candidate = filepath.Join(dir, fmt.Sprintf("%s (%d)%s", stem, i, ext))
+		path := filepath.Join(dir, candidate)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err == nil {
+			return f, path, nil
+		}
+		if !os.IsExist(err) {
+			return nil, "", fmt.Errorf("создание файла вложения %s: %w", path, err)
+		}
 	}
 }
 

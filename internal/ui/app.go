@@ -1,8 +1,9 @@
 package ui
 
-// Каркас TUI-приложения: страницы Почта/Календарь, статусная строка,
-// глобальные клавиши (1 — почта, 2 — календарь, q/Ctrl-C — выход).
-// Календарь на этапе 2 — заглушка (экран появится на этапе 4).
+// Каркас TUI-приложения: страницы Почта/Календарь, две строки статуса
+// (UI-9: сообщения — «Загрузка…»/ошибки/результаты, ниже — подсказки клавиш,
+// видны всегда), глобальные клавиши (1 — почта, 2 — календарь, q/Ctrl-C —
+// выход). Календарь на этапе 2 — заглушка (экран появится на этапе 4).
 
 import (
 	"context"
@@ -29,14 +30,36 @@ const (
 	pageLinks       = "links"
 	pageAttachments = "attachments"
 	pageConfirm     = "confirm"
-	statusHelpFmt   = "u обновить · Enter письмо · Tab панель · 1 почта · 2 календарь · q выход"
+
+	// Подсказки статус-бара по экрану (UI-7): у почты и календаря свои
+	// наборы клавиш, модалы — свои (дублируют заголовки панелей).
+	hintMail        = "↑↓ · Enter читать · u · v · g · 1/2 · q"
+	hintCalendar    = "←→↑↓ день · n/p месяц · Enter детали · 1/2 · q"
+	hintDetails     = "Esc — к списку · g ссылки · v вложения · 1/2 · q"
+	hintEvent       = "Esc — к календарю · g ссылки · 1/2 · q"
+	hintLinks       = "Enter открыть · Esc — назад"
+	hintAttachments = "s сохранить · o открыть · Esc — назад"
+	hintConfirm     = "←→ выбор · Enter подтвердить"
+
+	// errStatusTTL — сколько висит ошибка в статус-баре до автоочистки
+	// (UI-7): хватает прочитать текст, статус-бар не «залипает».
+	errStatusTTL = 8 * time.Second
 )
+
+// bordered — панель почты/календаря с рамкой (UI-6): у Box нет геттера цвета
+// рамки, поэтому цвет задаётся заново перед каждой отрисовкой.
+type bordered interface {
+	tview.Primitive
+	HasFocus() bool
+	SetBorderColor(tcell.Color) *tview.Box
+}
 
 // App — корневое TUI-приложение mailcat.
 type App struct {
 	tapp   *tview.Application
 	pages  *tview.Pages
-	status *tview.TextView
+	status *tview.TextView // строка сообщений (UI-9): «Загрузка…», ошибки, результаты
+	hint   *tview.TextView // строка подсказок (UI-9): видна всегда, ниже строки сообщений
 	detail *tview.TextView // экран деталей письма (страница pageDetails)
 	event  *tview.TextView // экран деталей встречи (страница pageEvent)
 
@@ -52,8 +75,29 @@ type App struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	// Поколение строки сообщений (UI-7): showError запускает таймер
+	// автоочистки; каждое новое сообщение меняет поколение, и устаревший
+	// таймер не затирает свежий статус.
+	statusGen int
+
+	// In-flight загрузки (UI-8): id → надпись индикатора. Пока карта не
+	// пуста, строка сообщений держит индикатор; строка подсказок от
+	// загрузок не зависит (UI-9). Доступ только из главного потока TUI
+	// (ввод и QueueUpdateDraw) — без мьютекса.
+	loads   map[int]string
+	loadSeq int
+
 	mail     *mailScreen
 	calendar *calendarScreen
+
+	// Каталоги вложений, созданные при старте (T-1): сбой доступа к диску
+	// виден при первом сохранении — до скачивания файла, а не после.
+	attDownloadDir string
+	attTempDir     string
+	attDirErr      error
+
+	// Панели, рамка активной из которых красится акцентом (UI-6).
+	focusPanels []bordered
 }
 
 // New собирает приложение. Пароль уже получен вызывающим (Keychain), клиент
@@ -74,13 +118,23 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	}
 	a.tapp = tview.NewApplication()
 	a.pages = tview.NewPages()
-	a.status = tview.NewTextView().SetText(statusHelpFmt)
+	a.status = tview.NewTextView()
+	a.hint = tview.NewTextView().SetText(hintMail)
 
 	a.mail = newMailScreen(a)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
 
 	a.calendar = newCalendarScreen(a)
 	a.pages.AddPage(pageCalendar, a.calendar.root, true, false)
+
+	// UI-6: рамка активной панели — акцентный цвет. Обе панели экрана
+	// (сетка и повестка) и все три панели почты; карточки и модалы —
+	// полноэкранные, остаются с обычной серой рамкой.
+	a.focusPanels = []bordered{
+		a.mail.folders, a.mail.messages, a.mail.preview,
+		a.calendar.grid, a.calendar.agenda,
+	}
+	a.tapp.SetBeforeDrawFunc(a.paintFocusFrames)
 
 	details := tview.NewTextView().
 		SetWrap(true).
@@ -91,11 +145,15 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageMail)
+			a.showHint()
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'g', 'G':
-				a.showLinks(a.currentLinks)
+				a.showLinks(a.currentLinks, func() {
+					a.pages.SwitchToPage(pageDetails)
+					a.tapp.SetFocus(a.detail)
+				})
 				return nil
 			case 'v', 'V':
 				a.showAttachments(a.currentAttachments)
@@ -116,11 +174,15 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageCalendar)
+			a.showHint()
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'g', 'G':
-				a.showLinks(a.currentLinks)
+				a.showLinks(a.currentLinks, func() {
+					a.pages.SwitchToPage(pageEvent)
+					a.tapp.SetFocus(a.event)
+				})
 				return nil
 			}
 		}
@@ -129,10 +191,15 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	a.event = event
 	a.pages.AddPage(pageEvent, event, true, false)
 
+	// WHY (UI-9): две строки статуса вместо одной — подсказки клавиш видны
+	// ВСЕГДА: раньше ошибки и «Загрузка…» вытесняли их из единственной строки.
+	// Не делать: вернуть совмещённую строку «сообщение поверх подсказки» —
+	// при ошибке пользователь снова теряет клавиши экрана.
 	root := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.pages, 0, 1, true).
-		AddItem(a.status, 1, 0, false)
+		AddItem(a.status, 1, 0, false). // строка сообщений — над подсказками
+		AddItem(a.hint, 1, 0, false)    // строка подсказок — самая нижняя
 
 	a.tapp.SetRoot(root, true).EnableMouse(true)
 	a.tapp.SetInputCapture(a.globalKeys)
@@ -141,6 +208,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 
 // Run запускает цикл событий; блокируется до выхода (q/Ctrl-C).
 func (a *App) Run() error {
+	a.prepareAttachmentDirs() // T-1: каталоги вложений — при старте, не при первом сохранении
 	a.mail.loadFolders()
 	if a.cfg.Notify.Enabled { // enabled=false — watcher не запускается вовсе (DoD этапа 6)
 		a.startWatcher()
@@ -148,6 +216,18 @@ func (a *App) Run() error {
 	err := a.tapp.Run()
 	a.cancel() // контекст сессии гасится вместе с TUI
 	return err
+}
+
+// prepareAttachmentDirs создаёт каталоги вложений при старте (T-1): ошибка
+// доступа к ~/Downloads всплывает при первом же сохранении с ясной
+// диагностикой, а не после скачивания вложения; сами пути запоминаются —
+// saveAttachment ничего не создаёт в горутине.
+func (a *App) prepareAttachmentDirs() {
+	a.attDownloadDir, a.attDirErr = security.DownloadDir()
+	if a.attDirErr != nil {
+		return
+	}
+	a.attTempDir, a.attDirErr = security.TempDir()
 }
 
 // startWatcher поднимает фоновый опрос «Входящих» (этап 6). Ошибки сети —
@@ -197,11 +277,18 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyRune:
 		switch event.Rune() {
 		case '1':
+			a.closeModals(a.mail.messages)
 			a.pages.SwitchToPage(pageMail)
+			a.showHint()
 			return nil
 		case '2':
-			a.calendar.ensureLoaded()
+			// Сначала страница и подсказка, потом ensureLoaded: без кэша
+			// он выведет «Загрузка…» в строку сообщений — подсказки
+			// останутся на месте (UI-9).
+			a.closeModals(a.calendar.grid)
 			a.pages.SwitchToPage(pageCalendar)
+			a.showHint()
+			a.calendar.ensureLoaded()
 			return nil
 		case 'q':
 			a.tapp.Stop()
@@ -209,6 +296,22 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+// closeModals убирает модальные страницы (links/attachments/confirm) при
+// переключении 1/2 (T-1, «Esc-источник модала»): SwitchToPage скрывает
+// модал, но фокус остаётся у его скрытого списка — Esc затем уводил на
+// страницу-источник модала, давно покинутую пользователем, а остальные
+// клавиши шли в невидимый список. Если сверху не модал — фокус не трогаем.
+func (a *App) closeModals(focus tview.Primitive) {
+	front, _ := a.pages.GetFrontPage()
+	if front != pageLinks && front != pageAttachments && front != pageConfirm {
+		return
+	}
+	a.pages.RemovePage(pageLinks)
+	a.pages.RemovePage(pageAttachments)
+	a.pages.RemovePage(pageConfirm)
+	a.tapp.SetFocus(focus)
 }
 
 // showDetails выводит полное письмо на экран деталей (страница поверх почты).
@@ -238,7 +341,7 @@ func (a *App) showDetails(m mail.Message) {
 	a.detail.ScrollToBeginning()
 	a.pages.SwitchToPage(pageDetails)
 	a.tapp.SetFocus(a.detail)
-	a.setStatus("Esc — к списку · g ссылки · v вложения · q выход")
+	a.showHint()
 }
 
 // showEventDetails выводит детали встречи; ссылки на созвон из «Места» —
@@ -258,22 +361,133 @@ func (a *App) showEventDetails(ev mail.Event) {
 	a.event.ScrollToBeginning()
 	a.pages.SwitchToPage(pageEvent)
 	a.tapp.SetFocus(a.event)
-	a.setStatus("Esc — к календарю · g ссылки · 1 почта · q выход")
+	a.showHint()
 }
 
-// setStatus выводит подсказку/статус в строку состояния (текст наш, не из EWS).
+// setStatus выводит сообщение в строку сообщений (UI-9) — «Загрузка…»,
+// «Скачивание …», «Открыто: …» (текст наш, не из EWS). Цвет возвращается
+// к обычному: красным бывает только ошибка (showError). Смена поколения
+// (statusGen) гасит висящий таймер автоочистки ошибки.
 func (a *App) setStatus(text string) {
+	a.statusGen++
+	a.status.SetTextColor(tview.Styles.PrimaryTextColor)
 	a.status.SetText(text)
 }
 
-// showError показывает ошибку в статусной строке; не падает и не модалит:
-// сетевые проблемы (в т.ч. VPN) пользователь видит и может повторить (u).
-// Текст ошибок EWS — серверный: Sanitize обязателен (§3, ревью этапа 2);
-// усечение — по рунам, чтобы не рвать кириллицу.
+// showHint ставит подсказку текущего экрана (UI-7) в нижнюю строку (UI-9):
+// у каждого экрана свой набор клавиш, и подсказки видны ВСЕГДА — сообщения,
+// ошибки и загрузки живут строкой выше и эту строку не трогают.
+func (a *App) showHint() {
+	a.hint.SetText(a.pageHint())
+}
+
+// beginLoad показывает индикатор загрузки на время GetItem/FindItem (UI-8)
+// и возвращает id для endLoad. Каждая ветка завершения горутины (успех,
+// ошибка, устаревший ответ) обязана ровно один раз вызвать endLoad(id)
+// внутри QueueUpdateDraw — иначе индикатор не погаснет.
+func (a *App) beginLoad(label string) int {
+	a.loadSeq++
+	if a.loads == nil {
+		a.loads = make(map[int]string)
+	}
+	a.loads[a.loadSeq] = label
+	a.setStatus(label)
+	return a.loadSeq
+}
+
+// endLoad снимает завершившуюся загрузку: полётов не осталось — строка
+// сообщений гаснет (подсказки и так видны всегда), остался — надпись ещё
+// идущей (загрузки могут перекрываться).
+func (a *App) endLoad(id int) {
+	delete(a.loads, id)
+	if label, ok := a.loadLabel(); ok {
+		a.setStatus(label)
+		return
+	}
+	a.setStatus("")
+}
+
+// loadLabel — надпись любой незавершённой загрузки; одновременно их
+// практически не бывает, поэтому «первый из карты» достаточен.
+func (a *App) loadLabel() (string, bool) {
+	for _, label := range a.loads {
+		return label, true
+	}
+	return "", false
+}
+
+// pageHint — подсказка для верхней видимой страницы (модалы закрывают экран).
+func (a *App) pageHint() string {
+	switch name, _ := a.pages.GetFrontPage(); name {
+	case pageCalendar:
+		return hintCalendar
+	case pageDetails:
+		return hintDetails
+	case pageEvent:
+		return hintEvent
+	case pageLinks:
+		return hintLinks
+	case pageAttachments:
+		return hintAttachments
+	case pageConfirm:
+		return hintConfirm
+	default:
+		return hintMail
+	}
+}
+
+// showError показывает ошибку в строке сообщений красным (UI-7); не падает и
+// не модалит: сетевые проблемы (в т.ч. VPN) пользователь видит и может
+// повторить (u). Через errStatusTTL строка сама гаснет (подсказки — в своей
+// строке ниже, их ошибка не трогает, UI-9); таймер живёт по поколению
+// statusGen и не трогает более новый статус. Текст ошибок EWS — серверный:
+// Sanitize обязателен (§3, ревью этапа 2); усечение — по рунам, чтобы не
+// рвать кириллицу.
 func (a *App) showError(err error) {
 	msg := security.Sanitize(err.Error())
 	if runes := []rune(msg); len(runes) > 200 {
 		msg = string(runes[:200]) + "…"
 	}
+	a.statusGen++
+	gen := a.statusGen
+	a.status.SetTextColor(colorError)
 	a.status.SetText("Ошибка: " + msg + "  ·  u — повторить")
+	time.AfterFunc(errStatusTTL, func() {
+		a.tapp.QueueUpdateDraw(func() { a.clearError(gen) })
+	})
+}
+
+// clearError гасит сообщение после таймаута ошибки (UI-7): идёт загрузка —
+// в строке сообщений возвращается её индикатор, иначе строка пуста.
+// Поколение не совпало — статус уже сменился, ничего не трогаем.
+func (a *App) clearError(gen int) {
+	if a.statusGen != gen {
+		return
+	}
+	if label, ok := a.loadLabel(); ok {
+		a.setStatus(label)
+		return
+	}
+	a.setStatus("")
+}
+
+// paintFocusFrames красит рамку панели с фокусом акцентным цветом, остальные —
+// обычным серым (UI-6). Хук before-draw — единственная точка, которая видит
+// все смены фокуса: Tab/←/→ (mail.go), клик мыши, возврат из модалов (app.go,
+// links.go), старт экрана.
+// WHY: не по событию SetFocus — вызовов много, один забытый и рамка врёт;
+// и не GetFocus() внутри хука — draw() уже держит мьютекс Application, а
+// GetFocus берёт его же (deadlock). HasFocus() у Box обновляется при
+// SetFocus/Blur и блокировок не берёт.
+// Неактивные — tview.Styles.BorderColor, а не константа: цвет «прочих» рамок
+// живёт в теме. Возврат false — отрисовка продолжается.
+func (a *App) paintFocusFrames(_ tcell.Screen) bool {
+	for _, p := range a.focusPanels {
+		if p.HasFocus() {
+			p.SetBorderColor(colorFocusBorder)
+		} else {
+			p.SetBorderColor(tview.Styles.BorderColor)
+		}
+	}
+	return false
 }

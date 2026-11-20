@@ -30,4 +30,11 @@ var (
 	colorOtherMonth = tcell.ColorGray  // дни соседних месяцев
 	colorSelectedBg = tcell.ColorBlue  // выделенная строка/пункт
 	colorSelectedFg = tcell.ColorWhite
+	// Рамка активной панели (UI-6). WHY: бирюзовый, а не синий — синий уже
+	// занят выделением строки (colorSelectedBg): «активная панель» — это не
+	// «выбранная строка», рамка не должна притворяться выделением.
+	colorFocusBorder = tcell.ColorDarkCyan
+	// Ошибка в статус-баре (UI-7). Красный на белом фоне читаем; смысловые
+	// цвета не пересекаются: синий — выделение, бирюза — рамка фокуса.
+	colorError = tcell.ColorRed
 )

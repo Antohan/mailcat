@@ -25,10 +25,16 @@ func TestLightThemeContrast(t *testing.T) {
 		"выходные в календаре":       {colorWeekend, tcell.ColorWhite},
 		"дни соседних месяцев":       {colorOtherMonth, tcell.ColorWhite},
 		"текст в выделенной строчке": {colorSelectedFg, colorSelectedBg},
+		"рамка активной панели":      {colorFocusBorder, tcell.ColorWhite},
 	}
 	for name, p := range pairs {
 		if p[0] == p[1] {
 			t.Errorf("%s: текст %v совпадает с фоном %v — нечитаемо", name, p[0], p[1])
 		}
+	}
+	// UI-6: «активная панель» ≠ «выбранная строка» — рамка фокуса не должна
+	// притворяться выделением строки.
+	if colorFocusBorder == colorSelectedBg {
+		t.Errorf("рамка фокуса %v совпадает с фоном выделения %v", colorFocusBorder, colorSelectedBg)
 	}
 }

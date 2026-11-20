@@ -1,35 +1,25 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 2 — `docs/PLAN-ITER2.md`: задачи UI-1…UI-8 + T-1 (техдолг) + D-1
-(доки). Обязательно после каждой задачи — запись в CHANGELOG.md (формат —
-в плане, «Журнал решений»; по нему пользователь проверяет ход работ).
-Старт: `/stage UI-1`.
+Итерация 2 закрыта (UI-1…UI-9, T-1, D-1). Осталось пройти DoD PLAN-ITER2.md
+с пользователем: smoke S1–S8 и UI-2..UI-9/T-1 живьём (TESTING.md §5, VPN).
+Merge dev→main — одним merge-коммитом по явной просьбе, вне задачной сессии.
 
-## Сделано (итерация 1, этапы 0–6; слито в main: b53745f)
-0–6: 79881c3 · 889a3cd f123125 f97477a 5b32e3e 10fb8a7 8fb6a9f · 54d6df0
-0012b0d · 3bbff28 2507572 31b956e 309332b · 8f1a1f0 1026960 7a160c3 47b3c52
-002a7e1 · 8c9d501 (само-ревью: проброс логгера). Suite зелёная, policy_test.
-Пост-релиз на живом сервере: d7b1d0d светлая тема · a1fe7b1 FindItem 500 ·
-d25f2bd CalendarView · 3033a9b org_domains.
+## Сделано (итерация 2)
+- 1a8e2fc — iter2:UI-9: две строки статуса — подсказки всегда видны.
+- f7659c8 D-1 · c28341f T-1 · ed80438 UI-8 · 86cc38c UI-7 · e015c2f UI-6 ·
+  c4b4140 UI-5 · a5ca69d UI-4 · b110fbe UI-3 · 184bf25 UI-2 · f7cae6e/9b1d232 UI-1.
 
-## Открыто (для пользователя; нужен VPN — TESTING.md §5)
-- Smoke S1–S8; формальное security-ревью этапов 5–6 — security-reviewer по
-  `git diff 8fb6a9f..HEAD` (по желанию; было само-ревью, 8c9d501).
-- Вопрос: добавлять ли `item:Importance` в EWS-REFERENCE (нужно для
-  min_importance уведомлений и UI-3 ⚠; сейчас важность = normal —
-  notify/rules.go). Техдолг из старого «Открыто» перенесён в T-1 (ITER2).
+## Открыто (нужен VPN — TESTING.md §5)
+- Smoke S1–S8 и UI-2..UI-9/T-1; item:Importance в EWS-REFERENCE? (нужно
+  для min_importance и ⚠); security-ревью git diff 8fb6a9f..HEAD — по желанию.
 
 ## Не трогать
-- item:IsRead в AdditionalProperties FindItem и t:BodyType в ItemShape GetItem
-  — живой Exchange 2019 (15.2.2562) отвечает 500 ErrorInvalidRequest
-  (EWS-REFERENCE §5–6, a1fe7b1 + a1d68ee).
-- SortOrder/Restriction с CalendarView — запрет EWS, ответ сам упорядочен по
-  Start (§8, d25f2bd).
-- Read-only whitelist EWS-операций — золотое правило 1.
-- crypto/tls только в internal/ews — policy_test, единая точка TLS.
-- Sanitize + tview.Escape для Table/List/Modal (escapeForList) — «показанный
-  URL = открываемому».
-- Отбрасывание ответов по поколению (mail.go gen, calendar monthStale) —
-  поздний ответ старой папки/месяца перезапишет список.
-- Первый прогон watcher'а без уведомлений; тихий backoff до 5 мин.
+- Статус-бар (UI-9): подсказки — только showHint→a.hint (нижняя строка,
+  видна всегда); сообщения/ошибки/индикатор — setStatus→a.status; endLoad/
+  clearError гасят a.status или возвращают идущую загрузку — a.hint не
+  трогают. Загрузки: endLoad(id) ровно один раз на ветку горутины
+  (QueueUpdateDraw); loads — только главный поток TUI; красный — только
+  colorError; автоочистка по statusGen; ошибки EWS — Sanitize, по рунам.
+- EWS: item:IsRead в FindItem / t:BodyType в GetItem → 500 на живом;
+  CalendarView без SortOrder/Restriction; read-only; tls только internal/ews.

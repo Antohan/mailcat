@@ -33,27 +33,78 @@ func TestMonthGridStructure(t *testing.T) {
 	}
 	for _, row := range grid[:5] {
 		for _, cell := range row {
-			if cell.Day == 0 && (cell.HasEvents || cell.Selected) {
+			if cell.Day == 0 && (cell.Events > 0 || cell.Selected) {
 				t.Errorf("пустая ячейка с флагами: %+v", cell)
 			}
 		}
 	}
 	// День с событиями помечен, соседний без — нет.
 	nov17 := findCell(grid, 17)
-	if nov17 == nil || !nov17.HasEvents {
-		t.Errorf("17 ноября не помечен: %+v", nov17)
+	if nov17 == nil || nov17.Events != 1 {
+		t.Errorf("17 ноября: %+v, хочу 1 событие", nov17)
 	}
 	nov16 := findCell(grid, 16)
-	if nov16 == nil || nov16.HasEvents {
-		t.Errorf("16 ноября ошибочно помечен: %+v", nov16)
+	if nov16 == nil || nov16.Events != 0 {
+		t.Errorf("16 ноября: %+v, хочу 0 событий", nov16)
 	}
 	// Многодневное событие помечает все свои дни.
 	grid = MonthGrid(2026, time.November, []mail.Event{
 		{Start: nov(t, 10, 9, 0), End: nov(t, 12, 18, 0)},
 	})
 	for _, d := range []int{10, 11, 12} {
-		if c := findCell(grid, d); c == nil || !c.HasEvents {
-			t.Errorf("день %d многодневной встречи не помечен", d)
+		if c := findCell(grid, d); c == nil || c.Events != 1 {
+			t.Errorf("день %d многодневной встречи: %+v, хочу 1 событие", d, c)
+		}
+	}
+	// Несколько встреч в день складываются (интенсивность 1–2 vs 3+).
+	grid = MonthGrid(2026, time.November, []mail.Event{
+		{Start: nov(t, 18, 9, 0), End: nov(t, 18, 9, 30)},
+		{Start: nov(t, 18, 11, 0), End: nov(t, 18, 11, 30)},
+		{Start: nov(t, 18, 14, 0), End: nov(t, 18, 14, 30)},
+	})
+	if c := findCell(grid, 18); c == nil || c.Events != 3 {
+		t.Errorf("18 ноября: %+v, хочу 3 события", c)
+	}
+}
+
+// TestMonthTitle: заголовок панели месяца — русское имя и год (UI-5).
+func TestMonthTitle(t *testing.T) {
+	cases := []struct {
+		year  int
+		month time.Month
+		want  string
+	}{
+		{2026, time.November, "Ноябрь 2026"},
+		{2026, time.December, "Декабрь 2026"},
+		{2027, time.January, "Январь 2027"},
+	}
+	for _, c := range cases {
+		if got := MonthTitle(c.year, c.month); got != c.want {
+			t.Errorf("MonthTitle(%d, %v) = %q, хочу %q", c.year, c.month, got, c.want)
+		}
+	}
+}
+
+// TestFormatDayCell: маркеры ячейки (UI-5) — количество событий «17·2»,
+// сегодня — в скобках; выбранный день маркера в тексте не имеет (инверсия).
+func TestFormatDayCell(t *testing.T) {
+	cases := []struct {
+		name  string
+		cell  DayCell
+		today bool
+		want  string
+	}{
+		{"без событий", DayCell{Day: 5}, false, " 5"},
+		{"двузначный день", DayCell{Day: 17}, false, "17"},
+		{"одно событие", DayCell{Day: 17, Events: 1}, false, "17·1"},
+		{"три события", DayCell{Day: 5, Events: 3}, false, " 5·3"},
+		{"сегодня", DayCell{Day: 20}, true, "[20]"},
+		{"сегодня с событиями", DayCell{Day: 17, Events: 2}, true, "[17·2]"},
+		{"пустая ячейка", DayCell{}, false, ""},
+	}
+	for _, c := range cases {
+		if got := FormatDayCell(c.cell, c.today); got != c.want {
+			t.Errorf("%s: FormatDayCell = %q, хочу %q", c.name, got, c.want)
 		}
 	}
 }
@@ -84,16 +135,118 @@ func TestDayEvents(t *testing.T) {
 	}
 }
 
+// TestResponseMark: маркеры статуса ответа для строки повестки (UI-4);
+// Decline (✗) в плане не назван — добавлен по симметрии с ярлыками
+// ResponseTypeLabel; Unknown — пробел, чтобы тема стояла в ту же колонку.
+func TestResponseMark(t *testing.T) {
+	cases := map[string]string{
+		"Accept":             "✓",
+		"Tentative":          "~",
+		"NoResponseReceived": "?",
+		"Organizer":          "★",
+		"Decline":            "✗",
+		"Unknown":            " ",
+		"":                   " ",
+	}
+	for in, want := range cases {
+		if got := responseMark(in); got != want {
+			t.Errorf("responseMark(%q) = %q, хочу %q", in, got, want)
+		}
+	}
+}
+
 func TestFormatAgenda(t *testing.T) {
 	events := []mail.Event{
-		{Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк команды", Location: "Zoom"},
-		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 45), Subject: "1:1 с руководителем", Location: ""},
+		{Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк команды",
+			Location: "https://zoom.example/j/987654321?pwd=abcdef", MyResponseType: "Accept"},
+		{Start: nov(t, 17, 14, 30), End: nov(t, 17, 15, 0), Subject: "Планирование",
+			Location: "Переговорная 3", MyResponseType: "Tentative"},
+		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 45), Subject: "1:1", MyResponseType: "NoResponseReceived"},
+		{Start: nov(t, 17, 18, 0), End: nov(t, 17, 18, 30), Subject: "Демо заказчику", MyResponseType: "Organizer"},
 	}
-	got := FormatAgenda(events)
-	for _, want := range []string{"10:00–10:30", "Синк команды", "Zoom", "16:00–16:45", "1:1 с руководителем"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("в повестке нет %q:\n%s", want, got)
+	reg := mail.NewLinkRegistry()
+	lines := FormatAgenda(events, reg)
+	if len(lines) != 4 {
+		t.Fatalf("строк повестки = %d, хочу 4", len(lines))
+	}
+	// URL из «Места» уходит в реестр: в строке — маркер [N] и хост, не полный URL.
+	// Маркер проверяем в экранированной для tview.List форме («[1[]» → на экране
+	// «[1]»), как в TestFormatMessageRowEscaped: экранирование обязательно.
+	for _, want := range []string{"10:00–10:30", "✓", "Синк команды", "[1[] zoom.example"} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("в строке повестки нет %q: %s", want, lines[0])
 		}
+	}
+	if strings.Contains(lines[0], "987654321") {
+		t.Errorf("полный URL не убран из строки: %s", lines[0])
+	}
+	if len(reg.List()) != 1 {
+		t.Fatalf("в реестре %d ссылок, хочу 1", len(reg.List()))
+	}
+	// Обычное место остаётся текстом; статусы — ~, ?, ★.
+	for _, c := range []struct{ line, want string }{
+		{lines[1], "14:30–15:00"},
+		{lines[1], "~"},
+		{lines[1], "Планирование"},
+		{lines[1], "Переговорная 3"},
+		{lines[2], "?"},
+		{lines[3], "★"},
+	} {
+		if !strings.Contains(c.line, c.want) {
+			t.Errorf("в строке повестки нет %q: %s", c.want, c.line)
+		}
+	}
+}
+
+// TestAgendaTitle: заголовок панели «Повестка: 18.11 — N встреч» с русскими
+// формами множественного числа (1 встреча, 2–4 встречи, 5+ встреч, 11–14 встреч).
+func TestAgendaTitle(t *testing.T) {
+	day := time.Date(2026, 11, 18, 0, 0, 0, 0, time.Local)
+	cases := []struct {
+		n    int
+		want string
+	}{
+		{0, "Повестка: 18.11 — 0 встреч"},
+		{1, "Повестка: 18.11 — 1 встреча"},
+		{3, "Повестка: 18.11 — 3 встречи"},
+		{5, "Повестка: 18.11 — 5 встреч"},
+		{11, "Повестка: 18.11 — 11 встреч"},
+		{21, "Повестка: 18.11 — 21 встреча"},
+		{22, "Повестка: 18.11 — 22 встречи"},
+	}
+	for _, c := range cases {
+		if got := AgendaTitle(day, c.n); got != c.want {
+			t.Errorf("AgendaTitle(%d) = %q, хочу %q", c.n, got, c.want)
+		}
+	}
+}
+
+// TestOnDaySelectedAgenda: повестка дня собирается через FormatAgenda —
+// маркеры и реестр ссылок видны в элементах списка, dayLinks наполняется
+// для модала g.
+func TestOnDaySelectedAgenda(t *testing.T) {
+	a := newTestApp(t)
+	s := a.calendar
+	s.year, s.month = 2026, time.November
+	s.events = []mail.Event{
+		{Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк",
+			Location: "https://meet.example/x", MyResponseType: "Accept"},
+	}
+	grid := MonthGrid(2026, time.November, s.events)
+	row, col := cellOf(grid, 17)
+	s.onDaySelected(row+1, col)
+	if got := s.agenda.GetItemCount(); got != 1 {
+		t.Fatalf("элементов повестки = %d, хочу 1", got)
+	}
+	line, _ := s.agenda.GetItemText(0)
+	if !strings.Contains(line, "✓") || !strings.Contains(line, "[1[]") {
+		t.Errorf("строка повестки без маркеров: %q", line)
+	}
+	if len(s.dayLinks) != 1 {
+		t.Errorf("dayLinks = %d ссылок, хочу 1 (для модала g)", len(s.dayLinks))
+	}
+	if title := s.agenda.GetTitle(); !strings.Contains(title, "1 встреча") {
+		t.Errorf("заголовок панели: %q", title)
 	}
 }
 

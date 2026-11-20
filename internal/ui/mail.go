@@ -6,6 +6,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -16,6 +17,13 @@ import (
 )
 
 const pageSizeCap = 100 // защита от нулевого page_size в конфиге
+
+// Маркеры сворачиваемой секции техпапок (UI-1). Не проходят FormatFolder —
+// статический текст, не из EWS.
+const (
+	moreFoldersClosed = "Ещё ▸"
+	moreFoldersOpen   = "Ещё ▾"
+)
 
 type mailScreen struct {
 	app  *App
@@ -32,6 +40,11 @@ type mailScreen struct {
 	offset     int  // Offset следующей страницы FindItem
 	lastPage   bool // IncludesLastItemInRange последней страницы
 	loading    bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
+
+	// Папки панели (UI-1): основной список и техпапки секции «Ещё ▸».
+	mainFolders []mail.Folder
+	techFolders []mail.Folder
+	techOpen    bool
 	// WHY: поколение выбора папки — ответ, пришедший после переключения,
 	// относится к прежней папке и не должен стирать уже загруженный список.
 	// Не делать: сравнивать имя папки вместо поколения — при возврате A→B→A
@@ -58,6 +71,11 @@ func newMailScreen(a *App) *mailScreen {
 		SetSelectable(true, false).
 		SetSeparator('\u2502')
 	s.messages.SetBorder(true).SetTitle(" Письма ")
+	// WHY: tview считает ширину колонки максимумом по ячейкам и выбрасывает
+	// колонки, не влезающие целиком, — длинная тема выталкивала дату за край
+	// панели (обкатка 20.11). Капы пересчитываются на каждом Draw, до
+	// раскладки колонок, — переживают resize терминала.
+	s.messages.SetDrawFunc(s.clampMessageColumns)
 
 	s.preview = tview.NewTextView().
 		SetWrap(true).
@@ -71,6 +89,11 @@ func newMailScreen(a *App) *mailScreen {
 		AddItem(s.preview, 0, 2, true)
 
 	s.folders.SetChangedFunc(func(_ int, mainText, _ string, _ rune) {
+		// «Ещё ▸/▾» — не папка: смещение курсора через пункт секции
+		// не должно подменять имя текущей папки.
+		if mainText == moreFoldersClosed || mainText == moreFoldersOpen {
+			return
+		}
 		s.folderName = mainText
 	})
 	s.folders.SetSelectedFunc(func(_ int, _ string, _ string, _ rune) {
@@ -122,46 +145,85 @@ func (s *mailScreen) openDetails(row int) {
 		return
 	}
 	ref := s.items[row]
-	s.app.setStatus("Загрузка письма…")
+	id := s.app.beginLoad("Загрузка письма…")
 	go func() {
 		detail, err := s.app.client.GetMessage(s.app.ctx, ref.ItemID, ref.ChangeKey)
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.app.endLoad(id)
+				s.app.showError(err)
+			})
 			return
 		}
 		full := mail.FullMessage(detail)
 		full.From = ref.From // From не приходит в GetItem — берём из строки списка
 		s.app.tapp.QueueUpdateDraw(func() {
+			s.app.endLoad(id)
 			s.app.showDetails(full)
-			s.app.setStatus("Esc — к списку · 1 почта · 2 календарь · q выход")
 		})
 	}()
 }
 
-// loadFolders заполняет панель папок (FindFolder от msgfolderroot) и открывает
-// «Входящие» (distinguished inbox — первая страница писем).
+// loadFolders заполняет панель папок (FindFolder от msgfolderroot): основной
+// список + техпапки в секции «Ещё ▸» (UI-1) — и открывает «Входящие»
+// (distinguished inbox — первая страница писем).
 func (s *mailScreen) loadFolders() {
-	s.app.setStatus("Загрузка папок…")
+	id := s.app.beginLoad("Загрузка папок…")
 	go func() {
 		list, err := s.app.client.FindFolders(s.app.ctx)
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.app.endLoad(id)
+				s.app.showError(err)
+			})
 			return
 		}
 		folders := mail.Folders(list)
 		s.app.tapp.QueueUpdateDraw(func() {
-			s.folders.Clear()
-			for _, f := range folders {
-				display := FormatFolder(f)
-				s.folders.AddItem(display, "", 0, func() {
-					s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, display)
-				})
-			}
-			s.app.setStatus(statusHelpFmt)
+			s.mainFolders, s.techFolders = SplitFolders(folders, s.app.cfg.UI.HiddenFolders)
+			s.renderFolders()
+			s.app.endLoad(id) // погасит индикатор; selectFolder сменит на «Загрузка писем…»
 			// Стартуем с входящих (distinguished) — отдельным запросом.
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})
 	}()
+}
+
+// renderFolders перестраивает панель целиком: основной список, затем пункт
+// «Ещё ▸/▾» и, когда секция развернута, техпапки. Целиком — потому что
+// сворачивание/разворачивание меняет хвост списка одним махом.
+func (s *mailScreen) renderFolders() {
+	s.folders.Clear()
+	add := func(f mail.Folder) {
+		display := FormatFolder(f)
+		s.folders.AddItem(display, "", 0, func() {
+			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, display)
+		})
+	}
+	for _, f := range s.mainFolders {
+		add(f)
+	}
+	if len(s.techFolders) == 0 {
+		return
+	}
+	mark := moreFoldersClosed
+	if s.techOpen {
+		mark = moreFoldersOpen
+	}
+	s.folders.AddItem(mark, "", 0, s.toggleTech)
+	if s.techOpen {
+		for _, f := range s.techFolders {
+			add(f)
+		}
+	}
+}
+
+// toggleTech сворачивает/разворачивает секцию техпапок. Курсор возвращается
+// на пункт «Ещё», чтобы повторное Enter срабатывало как сворачивание.
+func (s *mailScreen) toggleTech() {
+	s.techOpen = !s.techOpen
+	s.renderFolders()
+	s.folders.SetCurrentItem(len(s.mainFolders))
 }
 
 // selectFolder переключает текущую папку и сбрасывает список.
@@ -190,7 +252,7 @@ func (s *mailScreen) loadMessages() {
 	s.loading = true
 	s.gen++
 	gen := s.gen
-	s.app.setStatus("Загрузка писем…")
+	id := s.app.beginLoad("Загрузка писем…")
 	offset := s.offset
 	folder := s.folder
 	go func() {
@@ -204,6 +266,7 @@ func (s *mailScreen) loadMessages() {
 		if err != nil {
 			s.app.tapp.QueueUpdateDraw(func() {
 				s.loading = false
+				s.app.endLoad(id)
 				s.app.showError(err)
 			})
 			return
@@ -211,6 +274,7 @@ func (s *mailScreen) loadMessages() {
 		added := mail.MessageSummaries(page.Items)
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.loading = false
+			s.app.endLoad(id)
 			if s.gen != gen {
 				return // папка уже сменилась — ответ устарел
 			}
@@ -221,9 +285,38 @@ func (s *mailScreen) loadMessages() {
 			if len(s.items) == 0 {
 				s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)"))
 			}
-			s.app.setStatus(statusHelpFmt)
 		})
 	}()
+}
+
+// clampMessageColumns ограничивает ширину колонок «отправитель» и «тема»
+// текущей шириной панели, чтобы колонка даты всегда оставалась видимой
+// (UI-2). Возврат — стандартный внутренний прямоугольник Box с рамкой.
+func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+	const markW, dateW = len("[ВНЕШН]"), 5 // «15:04» / «02.01»
+	inner := w - 2                         // рамка панели
+	if inner > 0 {
+		sender := inner / 4
+		if sender > 18 {
+			sender = 18
+		}
+		if sender < 8 {
+			sender = 8
+		}
+		subject := inner - (markW + 1) - (sender + 1) - (dateW + 1) - 1
+		if subject < 4 {
+			subject = 4 // уже панель без внешних писем — tview сам ужмёт тему
+		}
+		for row := 0; row < s.messages.GetRowCount(); row++ {
+			if c := s.messages.GetCell(row, 1); c != nil {
+				c.SetMaxWidth(sender)
+			}
+			if c := s.messages.GetCell(row, 2); c != nil {
+				c.SetMaxWidth(subject)
+			}
+		}
+	}
+	return x + 1, y + 1, w - 2, h - 2
 }
 
 // appendRows дописывает строки в таблицу; непрочитанные — ярким белым.
@@ -231,7 +324,7 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
 	for i, m := range added {
 		row := base + i
-		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains()) {
+		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains(), time.Now()) {
 			expansion := 0
 			if col == 2 {
 				expansion = 1 // тема забирает свободную ширину

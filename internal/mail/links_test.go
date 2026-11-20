@@ -73,6 +73,42 @@ func TestRenderBodyIDN(t *testing.T) {
 	}
 }
 
+// TestRenderBodyHTMLDataHref: атрибут трекера data-href перед настоящим
+// href — в реестр попадает настоящий адрес, трекер не показывается (T-1).
+func TestRenderBodyHTMLDataHref(t *testing.T) {
+	reg := NewLinkRegistry()
+	body := reg.RenderBodyHTML(`<a data-href="http://track.example/click" href="https://real.example/doc">документ</a>`)
+	if strings.Contains(body, "track.example") {
+		t.Errorf("в реестр попал data-href трекера: %q", body)
+	}
+	if !strings.Contains(body, "[1] real.example") {
+		t.Errorf("настоящий href не зарегистрирован: %q", body)
+	}
+}
+
+// TestRenderBodyHTMLUnquotedHref: незакавыченное значение атрибута — тоже
+// якорь: нумерация и текст ссылки работают как у закавыченных (T-1).
+func TestRenderBodyHTMLUnquotedHref(t *testing.T) {
+	reg := NewLinkRegistry()
+	body := reg.RenderBodyHTML(`<p>см. <a href=http://plain.example/x>инструкцию</a></p>`)
+	if !strings.Contains(body, "[1] plain.example") {
+		t.Errorf("некотируемый href не зарегистрирован: %q", body)
+	}
+	list := reg.List()
+	if len(list) != 1 || list[0].URL != "http://plain.example/x" || list[0].Text != "инструкцию" {
+		t.Fatalf("реестр: %+v", list)
+	}
+}
+
+// TestRenderBodyHTMLSingleQuotedHref: одинарные кавычки — как двойные.
+func TestRenderBodyHTMLSingleQuotedHref(t *testing.T) {
+	reg := NewLinkRegistry()
+	body := reg.RenderBodyHTML(`<a href='https://sq.example/a'>текст</a>`)
+	if !strings.Contains(body, "[1] sq.example") {
+		t.Errorf("href в одинарных кавычках не зарегистрирован: %q", body)
+	}
+}
+
 // TestRenderBodyNoLinks: текст без ссылок не меняется.
 func TestRenderBodyNoLinks(t *testing.T) {
 	reg := NewLinkRegistry()

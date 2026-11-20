@@ -49,17 +49,23 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 
 1. Open a session with `/stage <task>` (e.g. `/stage UI-1`): it loads the
    iteration plan and the task.
-2. One task = one commit (`iter2:UI-1: short description`) plus its
+2. All work happens on the `dev` branch. `main` is release-only: it receives
+   a finished iteration as a single merge commit — a release action performed
+   on explicit user request, never inside a task session.
+3. One task = one commit (`iter2:UI-1: short description`) plus its
    CHANGELOG.md entry.
-3. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
+4. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
    fix the cause.
-4. At the end of a task rewrite `docs/HANDOFF.md` (see below).
-5. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
+5. At the end of a task rewrite `docs/HANDOFF.md` (see below).
+6. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
    implementing. Security-relevant work: request `security-reviewer` after —
    once per stage.
-6. New tasks enter an iteration plan only as specs — touched files/symbols and
+7. New tasks enter an iteration plan only as specs — touched files/symbols and
    expected behavior written BEFORE the coding session. A task without
    pointers to code costs exploration tokens on every session that opens it.
+8. Iteration finished and the user asks for a release → `/release`: it checks
+   the DoD, runs the security review over the iteration range and merges
+   `dev → main` only after the user explicitly confirms.
 
 ## Token budget rules (not optional)
 

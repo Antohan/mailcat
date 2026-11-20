@@ -7,7 +7,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/gdamore/tcell/v2"
@@ -45,6 +44,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageDetails)
+			a.showHint()
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
@@ -69,6 +69,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 
 	a.pages.AddPage(pageAttachments, list, true, true)
 	a.tapp.SetFocus(list)
+	a.showHint()
 }
 
 // confirmDangerous просит явного подтверждения для опасного расширения
@@ -84,15 +85,28 @@ func (a *App) confirmDangerous(name string, onYes func()) {
 				onYes()
 			} else {
 				a.pages.SwitchToPage(pageAttachments)
+				a.showHint()
 			}
 		})
 	a.pages.AddPage(pageConfirm, modal, true, true)
+	a.showHint()
 }
 
 // saveAttachment скачивает вложение (с проверкой лимита) и кладёт в каталог
 // загрузок; при open=true — во временный каталог с открытием системным
 // приложением (SECURITY.md §4.4: вложение открывается только с диска).
+// Каталоги созданы при старте (prepareAttachmentDirs, T-1): сбой доступа
+// виден до скачивания, в горутине ничего не создаётся; имя файла занимается
+// атомарно (security.CreateUnique, O_EXCL).
 func (a *App) saveAttachment(att mail.Attachment, open bool) {
+	if a.attDirErr != nil {
+		a.showError(fmt.Errorf("каталоги вложений недоступны: %w", a.attDirErr))
+		return
+	}
+	dir := a.attDownloadDir
+	if open {
+		dir = a.attTempDir
+	}
 	a.setStatus("Скачивание " + security.Sanitize(att.Name) + "…")
 	go func() {
 		data, err := a.client.GetAttachment(a.ctx, ewsAttachment(att), int64(a.cfg.MaxAttachmentMB)*1024*1024)
@@ -100,18 +114,22 @@ func (a *App) saveAttachment(att mail.Attachment, open bool) {
 			a.tapp.QueueUpdateDraw(func() { a.showError(err) })
 			return
 		}
-		var dir string
-		if open {
-			dir, err = security.TempDir()
-		} else {
-			dir, err = security.DownloadDir()
-		}
+		f, path, err := security.CreateUnique(dir, att.Name)
 		if err != nil {
 			a.tapp.QueueUpdateDraw(func() { a.showError(err) })
 			return
 		}
-		path := security.UniquePath(dir, att.Name)
-		if err := os.WriteFile(path, data, 0o600); err != nil {
+		writeErr := func(e error) {
+			f.Close()
+			a.tapp.QueueUpdateDraw(func() {
+				a.showError(fmt.Errorf("запись вложения %s: %w", filepath.Base(path), e))
+			})
+		}
+		if _, err := f.Write(data); err != nil {
+			writeErr(err)
+			return
+		}
+		if err := f.Close(); err != nil {
 			a.tapp.QueueUpdateDraw(func() {
 				a.showError(fmt.Errorf("запись вложения %s: %w", filepath.Base(path), err))
 			})

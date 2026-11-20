@@ -36,8 +36,11 @@ func (r *LinkRegistry) List() []LinkInfo { return r.links }
 var reBareURL = regexp.MustCompile(`https?://[^\s<>"'\x60\x7f]+`)
 
 // reAnchor — грубый разбор <a href="...">...</a> (тела писем не являются
-// валидным XML — парсеры encoding/xml непригодны).
-var reAnchor = regexp.MustCompile(`(?is)<a\s[^>]*href=["']([^"']+)["'][^>]*>(.*?)</a>`)
+// валидным XML — парсеры encoding/xml непригодны). Значение — в двойных или
+// одинарных кавычках, либо без кавычек: почтовые клиенты шлют и такое (T-1).
+// WHY: href обязан следовать за пробелом — иначе в <a data-href="трекер"
+// href="настоящий"> совпал бы data-href и в реестр попал бы URL трекера.
+var reAnchor = regexp.MustCompile(`(?is)<a\s(?:[^>]*\s)?href=(?:"([^"]*)"|'([^']*)'|([^\s>]+))[^>]*>(.*?)</a>`)
 
 // register добавляет ссылку и возвращает маркер для вставки в текст.
 func (r *LinkRegistry) register(rawURL, text string) string {
@@ -80,10 +83,15 @@ func (r *LinkRegistry) RenderBodyHTML(html string) string {
 	}
 	text := reAnchor.ReplaceAllStringFunc(html, func(m string) string {
 		groups := reAnchor.FindStringSubmatch(m)
-		if len(groups) < 3 {
+		if len(groups) < 5 {
 			return m
 		}
-		rawURL, anchorText := groups[1], stripTags(groups[2])
+		// Ровно одна альтернатива кавычек участвует в матче — конкатенация
+		// даёт значение href без разбора, какая именно сработала.
+		rawURL, anchorText := groups[1]+groups[2]+groups[3], stripTags(groups[4])
+		if rawURL == "" {
+			return m // href="" — не ссылка: разметку вычистит html2text
+		}
 		label := r.register(rawURL, anchorText)
 		if anchorText != "" {
 			return anchorText + " " + label

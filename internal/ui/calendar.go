@@ -26,7 +26,8 @@ type calendarScreen struct {
 	events    []mail.Event // кэш текущего месяца
 	loadedKey string       // "2026-11" — загружен ли месяц
 
-	dayEvents []mail.Event // события выбранного дня (для повестки)
+	dayEvents []mail.Event    // события выбранного дня (для повестки)
+	dayLinks  []mail.LinkInfo // ссылки повестки дня (модал g)
 }
 
 func newCalendarScreen(a *App) *calendarScreen {
@@ -50,7 +51,8 @@ func newCalendarScreen(a *App) *calendarScreen {
 		s.openEventDetails(idx)
 	})
 
-	// Смена месяца: Ctrl-←/→ или n/p (PLAN этап 4); 1/2/q — глобально (app).
+	// Смена месяца: Ctrl-←/→ или n/p (PLAN этап 4); g — модал ссылок
+	// повестки дня (UI-4); 1/2/q — глобально (app).
 	monthHook := func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyLeft:
@@ -70,6 +72,15 @@ func newCalendarScreen(a *App) *calendarScreen {
 				return nil
 			case 'p', 'P':
 				s.shiftMonth(-1)
+				return nil
+			case 'g', 'G':
+				// WHY: фокус запоминаем до модала: Esc из модала ссылок
+				// должен вернуть фокус той панели, с которой нажали g.
+				prev := s.app.tapp.GetFocus()
+				s.app.showLinks(s.dayLinks, func() {
+					s.app.pages.SwitchToPage(pageCalendar)
+					s.app.tapp.SetFocus(prev)
+				})
 				return nil
 			}
 		}
@@ -108,29 +119,35 @@ func monthStale(keyAtRequest, keyNow string) bool { return keyAtRequest != keyNo
 func (s *calendarScreen) loadMonth() {
 	key := s.monthKey()
 	start, end := MonthBounds(s.year, s.month)
-	s.app.setStatus(fmt.Sprintf("Загрузка календаря: %s…", s.month.String()))
+	id := s.app.beginLoad(fmt.Sprintf("Загрузка календаря: %s…", MonthTitle(s.year, s.month)))
 	go func() {
 		raw, err := s.app.client.FindEvents(s.app.ctx, start, end)
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.app.endLoad(id)
+				s.app.showError(err)
+			})
 			return
 		}
 		events := mail.Events(raw)
 		s.app.tapp.QueueUpdateDraw(func() {
+			s.app.endLoad(id)
 			if monthStale(key, s.monthKey()) {
 				return // месяц уже сменился — ответ неактуален
 			}
 			s.events = events
 			s.loadedKey = key
 			s.render()
-			s.app.setStatus("←/→/↑/↓ день · n/p месяц · Enter детали · 1 почта · q выход")
 		})
 	}()
 }
 
 // render перерисовывает сетку и выбирает текущий день (или 1-е число).
+// UI-5: заголовок «Ноябрь 2026»; «сегодня» — скобки и жирный, выбранный
+// день — инверсия выделения таблицы (разные маркеры).
 func (s *calendarScreen) render() {
 	s.grid.Clear()
+	s.grid.SetTitle(" " + MonthTitle(s.year, s.month) + " ")
 	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 	for col, name := range weekdays {
 		s.grid.SetCell(0, col, tview.NewTableCell(name).
@@ -138,6 +155,7 @@ func (s *calendarScreen) render() {
 	}
 	grid := MonthGrid(s.year, s.month, s.events)
 	now := time.Now()
+	inMonth := now.Year() == s.year && now.Month() == s.month
 	for row := 0; row < 6; row++ {
 		for col := 0; col < 7; col++ {
 			cell := grid[row][col]
@@ -145,13 +163,13 @@ func (s *calendarScreen) render() {
 				s.grid.SetCell(row+1, col, tview.NewTableCell("").SetSelectable(false))
 				continue
 			}
-			text := fmt.Sprintf("%2d", cell.Day)
-			if cell.HasEvents {
-				text = "•" + text // день с событиями
-			}
-			tc := tview.NewTableCell(text)
+			today := inMonth && cell.Day == now.Day()
+			tc := tview.NewTableCell(FormatDayCell(cell, today))
 			if col >= 5 {
 				tc.SetTextColor(colorWeekend) // Сб/Вс
+			}
+			if today {
+				tc.SetAttributes(tcell.AttrBold) // «сегодня» — скобки + жирный
 			}
 			if !cell.InMonth {
 				tc.SetTextColor(colorOtherMonth)
@@ -161,7 +179,7 @@ func (s *calendarScreen) render() {
 	}
 	// Выбор: сегодняшний дню месяца, иначе 1-е.
 	pick := 1
-	if now.Year() == s.year && now.Month() == s.month {
+	if inMonth {
 		pick = now.Day()
 	}
 	if row, col := cellOf(grid, pick); row >= 0 {
@@ -169,7 +187,8 @@ func (s *calendarScreen) render() {
 	}
 }
 
-// onDaySelected обновляет повестку при движении по сетке.
+// onDaySelected обновляет повестку при движении по сетке (UI-4: строки
+// собирает FormatAgenda — маркеры статуса + реестр ссылок из «Места»).
 func (s *calendarScreen) onDaySelected(row, col int) {
 	if row < 1 {
 		return
@@ -180,21 +199,18 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 	}
 	day := time.Date(s.year, s.month, grid[row-1][col].Day, 0, 0, 0, 0, time.Local)
 	s.dayEvents = DayEvents(s.events, day)
+	reg := mail.NewLinkRegistry()
+	lines := FormatAgenda(s.dayEvents, reg)
+	s.dayLinks = reg.List()
 	s.agenda.Clear()
-	if len(s.dayEvents) == 0 {
+	if len(lines) == 0 {
 		s.agenda.AddItem("Встреч нет", "", 0, nil)
-		return
-	}
-	for _, ev := range s.dayEvents {
-		line := fmt.Sprintf("%s–%s  %s",
-			ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04"),
-			escapeForList(ev.Subject))
-		if ev.Location != "" {
-			line += " (" + escapeForList(ev.Location) + ")"
+	} else {
+		for _, line := range lines {
+			s.agenda.AddItem(line, "", 0, nil)
 		}
-		s.agenda.AddItem(line, "", 0, nil)
 	}
-	s.agenda.SetTitle(fmt.Sprintf(" Повестка: %s ", day.Format("02.01.2006")))
+	s.agenda.SetTitle(" " + AgendaTitle(day, len(s.dayEvents)) + " ")
 }
 
 // openEventDetails показывает детали выбранной встречи; ссылки на созвон

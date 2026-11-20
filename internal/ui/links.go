@@ -53,8 +53,10 @@ func dangerousConfirmText(name string) string {
 		"Макросы и скрипты из почты могут скомпрометировать компьютер.\n\nОткрыть всё равно?"
 }
 
-// showLinks открывает модал ссылок текущего письма.
-func (a *App) showLinks(links []mail.LinkInfo) {
+// showLinks открывает модал ссылок. back — возврат на исходный экран
+// (страница + фокус): модал открывается и из письма, и из встречи, и из
+// повестки, Esc должен возвращать туда, откуда пришли (UI-4).
+func (a *App) showLinks(links []mail.LinkInfo, back func()) {
 	a.pages.RemovePage(pageLinks)
 	list := tview.NewList().
 		ShowSecondaryText(true).
@@ -69,12 +71,13 @@ func (a *App) showLinks(links []mail.LinkInfo) {
 		})
 	}
 	if len(links) == 0 {
-		list.AddItem("(в письме нет ссылок)", "", 0, nil)
+		list.AddItem("(ссылок нет)", "", 0, nil)
 	}
 
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
-			a.pages.SwitchToPage(pageDetails)
+			back()
+			a.showHint() // back() уже сменил страницу — подсказка экрана-источника
 			return nil
 		}
 		return event
@@ -82,6 +85,7 @@ func (a *App) showLinks(links []mail.LinkInfo) {
 
 	a.pages.AddPage(pageLinks, list, true, true)
 	a.tapp.SetFocus(list)
+	a.showHint()
 }
 
 // openLink открывает ссылку системным браузером — только по явному действию
