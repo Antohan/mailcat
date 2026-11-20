@@ -29,7 +29,20 @@ const (
 	pageLinks       = "links"
 	pageAttachments = "attachments"
 	pageConfirm     = "confirm"
-	statusHelpFmt   = "u обновить · Enter письмо · Tab панель · 1 почта · 2 календарь · q выход"
+
+	// Подсказки статус-бара по экрану (UI-7): у почты и календаря свои
+	// наборы клавиш, модалы — свои (дублируют заголовки панелей).
+	hintMail        = "↑↓ · Enter читать · u · v · g · 1/2 · q"
+	hintCalendar    = "←→↑↓ день · n/p месяц · Enter детали · 1/2 · q"
+	hintDetails     = "Esc — к списку · g ссылки · v вложения · 1/2 · q"
+	hintEvent       = "Esc — к календарю · g ссылки · 1/2 · q"
+	hintLinks       = "Enter открыть · Esc — назад"
+	hintAttachments = "s сохранить · o открыть · Esc — назад"
+	hintConfirm     = "←→ выбор · Enter подтвердить"
+
+	// errStatusTTL — сколько висит ошибка в статус-баре до автоочистки
+	// (UI-7): хватает прочитать текст, статус-бар не «залипает».
+	errStatusTTL = 8 * time.Second
 )
 
 // bordered — панель почты/календаря с рамкой (UI-6): у Box нет геттера цвета
@@ -60,6 +73,11 @@ type App struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
+	// Поколение строки статуса (UI-7): showError запускает таймер
+	// автоочистки; каждое новое сообщение меняет поколение, и устаревший
+	// таймер не затирает свежий статус.
+	statusGen int
+
 	mail     *mailScreen
 	calendar *calendarScreen
 
@@ -85,7 +103,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	}
 	a.tapp = tview.NewApplication()
 	a.pages = tview.NewPages()
-	a.status = tview.NewTextView().SetText(statusHelpFmt)
+	a.status = tview.NewTextView().SetText(hintMail)
 
 	a.mail = newMailScreen(a)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
@@ -111,6 +129,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageMail)
+			a.showHint()
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
@@ -139,6 +158,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageCalendar)
+			a.showHint()
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
@@ -224,10 +244,14 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case '1':
 			a.pages.SwitchToPage(pageMail)
+			a.showHint()
 			return nil
 		case '2':
-			a.calendar.ensureLoaded()
+			// Сначала страница и подсказка, потом ensureLoaded: без кэша
+			// он выведет «Загрузка…» поверх подсказки — так и задумано.
 			a.pages.SwitchToPage(pageCalendar)
+			a.showHint()
+			a.calendar.ensureLoaded()
 			return nil
 		case 'q':
 			a.tapp.Stop()
@@ -264,7 +288,7 @@ func (a *App) showDetails(m mail.Message) {
 	a.detail.ScrollToBeginning()
 	a.pages.SwitchToPage(pageDetails)
 	a.tapp.SetFocus(a.detail)
-	a.setStatus("Esc — к списку · g ссылки · v вложения · q выход")
+	a.showHint()
 }
 
 // showEventDetails выводит детали встречи; ссылки на созвон из «Места» —
@@ -284,16 +308,49 @@ func (a *App) showEventDetails(ev mail.Event) {
 	a.event.ScrollToBeginning()
 	a.pages.SwitchToPage(pageEvent)
 	a.tapp.SetFocus(a.event)
-	a.setStatus("Esc — к календарю · g ссылки · 1 почта · q выход")
+	a.showHint()
 }
 
 // setStatus выводит подсказку/статус в строку состояния (текст наш, не из EWS).
+// Цвет возвращается к обычному: красным бывает только ошибка (showError).
+// Смена поколения (statusGen) гасит висящий таймер автоочистки ошибки.
 func (a *App) setStatus(text string) {
+	a.statusGen++
+	a.status.SetTextColor(tview.Styles.PrimaryTextColor)
 	a.status.SetText(text)
 }
 
-// showError показывает ошибку в статусной строке; не падает и не модалит:
-// сетевые проблемы (в т.ч. VPN) пользователь видит и может повторить (u).
+// showHint ставит подсказку текущего экрана (UI-7): у каждого экрана свой
+// набор клавиш. Вызывается после каждой смены страницы и по завершении
+// загрузок — статус-бар всегда соответствует видимому экрану.
+func (a *App) showHint() {
+	a.setStatus(a.pageHint())
+}
+
+// pageHint — подсказка для верхней видимой страницы (модалы закрывают экран).
+func (a *App) pageHint() string {
+	switch name, _ := a.pages.GetFrontPage(); name {
+	case pageCalendar:
+		return hintCalendar
+	case pageDetails:
+		return hintDetails
+	case pageEvent:
+		return hintEvent
+	case pageLinks:
+		return hintLinks
+	case pageAttachments:
+		return hintAttachments
+	case pageConfirm:
+		return hintConfirm
+	default:
+		return hintMail
+	}
+}
+
+// showError показывает ошибку в статусной строке красным (UI-7); не падает и
+// не модалит: сетевые проблемы (в т.ч. VPN) пользователь видит и может
+// повторить (u). Через errStatusTTL строка сама возвращается к подсказке
+// экрана; таймер живёт по поколению statusGen и не трогает более новый статус.
 // Текст ошибок EWS — серверный: Sanitize обязателен (§3, ревью этапа 2);
 // усечение — по рунам, чтобы не рвать кириллицу.
 func (a *App) showError(err error) {
@@ -301,7 +358,22 @@ func (a *App) showError(err error) {
 	if runes := []rune(msg); len(runes) > 200 {
 		msg = string(runes[:200]) + "…"
 	}
+	a.statusGen++
+	gen := a.statusGen
+	a.status.SetTextColor(colorError)
 	a.status.SetText("Ошибка: " + msg + "  ·  u — повторить")
+	time.AfterFunc(errStatusTTL, func() {
+		a.tapp.QueueUpdateDraw(func() { a.clearError(gen) })
+	})
+}
+
+// clearError возвращает подсказку экрана после таймаута ошибки (UI-7).
+// Поколение не совпало — статус уже сменился, ничего не трогаем.
+func (a *App) clearError(gen int) {
+	if a.statusGen != gen {
+		return
+	}
+	a.showHint()
 }
 
 // paintFocusFrames красит рамку панели с фокусом акцентным цветом, остальные —

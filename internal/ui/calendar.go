@@ -134,7 +134,7 @@ func (s *calendarScreen) loadMonth() {
 			s.events = events
 			s.loadedKey = key
 			s.render()
-			s.app.setStatus("←/→/↑/↓ день · n/p месяц · Enter детали · 1 почта · q выход")
+			s.app.showHint()
 		})
 	}()
 }

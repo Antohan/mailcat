@@ -156,7 +156,6 @@ func (s *mailScreen) openDetails(row int) {
 		full.From = ref.From // From не приходит в GetItem — берём из строки списка
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.app.showDetails(full)
-			s.app.setStatus("Esc — к списку · 1 почта · 2 календарь · q выход")
 		})
 	}()
 }
@@ -176,7 +175,7 @@ func (s *mailScreen) loadFolders() {
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.mainFolders, s.techFolders = SplitFolders(folders, s.app.cfg.UI.HiddenFolders)
 			s.renderFolders()
-			s.app.setStatus(statusHelpFmt)
+			s.app.showHint()
 			// Стартуем с входящих (distinguished) — отдельным запросом.
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})
@@ -277,7 +276,7 @@ func (s *mailScreen) loadMessages() {
 			if len(s.items) == 0 {
 				s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)"))
 			}
-			s.app.setStatus(statusHelpFmt)
+			s.app.showHint()
 		})
 	}()
 }

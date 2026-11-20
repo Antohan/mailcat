@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rivo/tview"
+
 	"mailcat/internal/config"
 	"mailcat/internal/mail"
 )
@@ -93,5 +95,50 @@ func TestPaintFocusFramesWired(t *testing.T) {
 	}
 	if a.paintFocusFrames(nil) {
 		t.Error("paintFocusFrames прервал отрисовку (вернул true)")
+	}
+}
+
+// TestPageHint (UI-7): подсказка статус-бара соответствует экрану —
+// у почты и календаря свои наборы клавиш, модалы — свои.
+func TestPageHint(t *testing.T) {
+	a := newTestApp(t)
+	hints := map[string]string{
+		pageMail:        hintMail,
+		pageCalendar:    hintCalendar,
+		pageDetails:     hintDetails,
+		pageEvent:       hintEvent,
+		pageLinks:       hintLinks,
+		pageAttachments: hintAttachments,
+	}
+	// Модальные страницы не существуют до первого открытия — добавляем
+	// заглушку, SwitchToPage непроверенной страницы ничего не меняет.
+	a.pages.AddPage(pageLinks, tview.NewBox(), true, false)
+	a.pages.AddPage(pageAttachments, tview.NewBox(), true, false)
+	for page, want := range hints {
+		a.pages.SwitchToPage(page)
+		if got := a.pageHint(); got != want {
+			t.Errorf("страница %s: подсказка %q, хочу %q", page, got, want)
+		}
+	}
+}
+
+// TestErrorAutoClear (UI-7): после таймаута ошибка сменяется подсказкой
+// экрана; таймер с устаревшим поколением свежий статус не затирает.
+func TestErrorAutoClear(t *testing.T) {
+	a := newTestApp(t)
+	a.showError(errors.New("сеть недоступна"))
+	if text := a.status.GetText(false); !strings.Contains(text, "Ошибка") {
+		t.Fatalf("ошибка не показана: %q", text)
+	}
+	a.clearError(a.statusGen) // то, что таймер прислал бы в QueueUpdateDraw
+	if text := a.status.GetText(false); text != hintMail {
+		t.Errorf("после таймаута нет подсказки экрана: %q", text)
+	}
+	// Статус сменился после ошибки — таймер должен устареть.
+	a.showError(errors.New("вторая ошибка"))
+	a.setStatus("Загрузка…")
+	a.clearError(a.statusGen - 1)
+	if text := a.status.GetText(false); text != "Загрузка…" {
+		t.Errorf("устаревший таймер затёр статус: %q", text)
 	}
 }

@@ -45,6 +45,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 		switch event.Key() {
 		case tcell.KeyEsc:
 			a.pages.SwitchToPage(pageDetails)
+			a.showHint()
 			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
@@ -69,6 +70,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 
 	a.pages.AddPage(pageAttachments, list, true, true)
 	a.tapp.SetFocus(list)
+	a.showHint()
 }
 
 // confirmDangerous просит явного подтверждения для опасного расширения
@@ -84,9 +86,11 @@ func (a *App) confirmDangerous(name string, onYes func()) {
 				onYes()
 			} else {
 				a.pages.SwitchToPage(pageAttachments)
+				a.showHint()
 			}
 		})
 	a.pages.AddPage(pageConfirm, modal, true, true)
+	a.showHint()
 }
 
 // saveAttachment скачивает вложение (с проверкой лимита) и кладёт в каталог

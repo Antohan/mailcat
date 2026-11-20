@@ -77,6 +77,7 @@ func (a *App) showLinks(links []mail.LinkInfo, back func()) {
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEsc {
 			back()
+			a.showHint() // back() уже сменил страницу — подсказка экрана-источника
 			return nil
 		}
 		return event
@@ -84,6 +85,7 @@ func (a *App) showLinks(links []mail.LinkInfo, back func()) {
 
 	a.pages.AddPage(pageLinks, list, true, true)
 	a.tapp.SetFocus(list)
+	a.showHint()
 }
 
 // openLink открывает ссылку системным браузером — только по явному действию
