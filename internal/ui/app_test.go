@@ -82,3 +82,16 @@ func TestFormatFolderEscaped(t *testing.T) {
 		t.Errorf("безопасные скобки искажены: %q", got2)
 	}
 }
+
+// TestPaintFocusFramesWired (UI-6): все пять панелей почты/календаря
+// зарегистрированы под акцентную рамку; хук возвращает false — отрисовка
+// продолжается.
+func TestPaintFocusFramesWired(t *testing.T) {
+	a := newTestApp(t)
+	if len(a.focusPanels) != 5 {
+		t.Fatalf("панелей с рамкой фокуса = %d, хочу 5", len(a.focusPanels))
+	}
+	if a.paintFocusFrames(nil) {
+		t.Error("paintFocusFrames прервал отрисовку (вернул true)")
+	}
+}

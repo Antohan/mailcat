@@ -32,6 +32,14 @@ const (
 	statusHelpFmt   = "u обновить · Enter письмо · Tab панель · 1 почта · 2 календарь · q выход"
 )
 
+// bordered — панель почты/календаря с рамкой (UI-6): у Box нет геттера цвета
+// рамки, поэтому цвет задаётся заново перед каждой отрисовкой.
+type bordered interface {
+	tview.Primitive
+	HasFocus() bool
+	SetBorderColor(tcell.Color) *tview.Box
+}
+
 // App — корневое TUI-приложение mailcat.
 type App struct {
 	tapp   *tview.Application
@@ -54,6 +62,9 @@ type App struct {
 
 	mail     *mailScreen
 	calendar *calendarScreen
+
+	// Панели, рамка активной из которых красится акцентом (UI-6).
+	focusPanels []bordered
 }
 
 // New собирает приложение. Пароль уже получен вызывающим (Keychain), клиент
@@ -81,6 +92,15 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 
 	a.calendar = newCalendarScreen(a)
 	a.pages.AddPage(pageCalendar, a.calendar.root, true, false)
+
+	// UI-6: рамка активной панели — акцентный цвет. Обе панели экрана
+	// (сетка и повестка) и все три панели почты; карточки и модалы —
+	// полноэкранные, остаются с обычной серой рамкой.
+	a.focusPanels = []bordered{
+		a.mail.folders, a.mail.messages, a.mail.preview,
+		a.calendar.grid, a.calendar.agenda,
+	}
+	a.tapp.SetBeforeDrawFunc(a.paintFocusFrames)
 
 	details := tview.NewTextView().
 		SetWrap(true).
@@ -282,4 +302,25 @@ func (a *App) showError(err error) {
 		msg = string(runes[:200]) + "…"
 	}
 	a.status.SetText("Ошибка: " + msg + "  ·  u — повторить")
+}
+
+// paintFocusFrames красит рамку панели с фокусом акцентным цветом, остальные —
+// обычным серым (UI-6). Хук before-draw — единственная точка, которая видит
+// все смены фокуса: Tab/←/→ (mail.go), клик мыши, возврат из модалов (app.go,
+// links.go), старт экрана.
+// WHY: не по событию SetFocus — вызовов много, один забытый и рамка врёт;
+// и не GetFocus() внутри хука — draw() уже держит мьютекс Application, а
+// GetFocus берёт его же (deadlock). HasFocus() у Box обновляется при
+// SetFocus/Blur и блокировок не берёт.
+// Неактивные — tview.Styles.BorderColor, а не константа: цвет «прочих» рамок
+// живёт в теме. Возврат false — отрисовка продолжается.
+func (a *App) paintFocusFrames(_ tcell.Screen) bool {
+	for _, p := range a.focusPanels {
+		if p.HasFocus() {
+			p.SetBorderColor(colorFocusBorder)
+		} else {
+			p.SetBorderColor(tview.Styles.BorderColor)
+		}
+	}
+	return false
 }
