@@ -78,7 +78,10 @@ func applyDarkTheme() {
 // отменён сознательно, чтобы акцент в интерфейсе был один.
 // Не делать: возвращать отдельный цвет рамки — интерфейс снова запестрит.
 func applyDerivedRoles() {
-	colorUnread = colorTextPrimary // RD-4 переведёт непрочитанные на accent
+	// WHY (RD-4): непрочитанные — жирным единственным акцентом: он выделяет
+	// их в обеих палитрах; отдельный «цвет непрочитанных» снова бы запестрил
+	// (см. RD-1). Не делать: свой цвет на каждую смысловую группу строк.
+	colorUnread = colorAccent
 	colorRead = colorTextSecondary
 	colorOtherMonth = colorTextSecondary
 	colorSelectedBg = colorAccent

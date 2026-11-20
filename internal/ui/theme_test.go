@@ -38,6 +38,10 @@ func TestLightThemeContrast(t *testing.T) {
 		t.Errorf("фокус %v / выделение %v должны совпадать с акцентом %v",
 			colorFocusBorder, colorSelectedBg, colorAccent)
 	}
+	// RD-4: непрочитанные письма — тем же единственным акцентом.
+	if colorUnread != colorAccent {
+		t.Errorf("непрочитанные %v должны совпадать с акцентом %v", colorUnread, colorAccent)
+	}
 	if colorTextPrimary == tcell.ColorBlack {
 		t.Error("основной текст не должен быть чёрным")
 	}

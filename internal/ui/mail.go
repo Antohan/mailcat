@@ -377,7 +377,10 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 	return x + 1, y + 1, w - 2, h - 2
 }
 
-// appendRows дописывает строки в таблицу; непрочитанные — ярким белым.
+// appendRows дописывает строки в таблицу (RD-4): непрочитанные — жирный
+// accent (колонки 0–2), прочитанные — обычный textPrimary; дата (колонка 3)
+// всегда textSecondary — приглушена в обеих группах. [ВНЕШН] отдельного
+// цвета не получает (SECURITY §4) — красится цветом своей группы.
 func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
 	for i, m := range added {
@@ -388,11 +391,12 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 				expansion = 1 // тема забирает свободную ширину
 			}
 			cell := tview.NewTableCell(text).SetExpansion(expansion)
-			if col != 3 && !m.IsRead {
-				cell.SetTextColor(colorUnread).SetAttributes(tcell.AttrBold)
-			}
 			if col == 3 {
 				cell.SetTextColor(colorRead)
+			} else if !m.IsRead {
+				cell.SetTextColor(colorUnread).SetAttributes(tcell.AttrBold)
+			} else {
+				cell.SetTextColor(colorTextPrimary)
 			}
 			s.messages.SetCell(row, col, cell)
 		}

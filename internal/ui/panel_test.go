@@ -78,6 +78,40 @@ func TestPanelLayoutSizes(t *testing.T) {
 	}
 }
 
+// TestMessageRowReadState (RD-4): непрочитанное — жирный accent на колонках
+// 0–2, прочитанное — textPrimary без жирного, дата (колонка 3) всегда
+// textSecondary; [ВНЕШН] отдельного цвета не имеет.
+func TestMessageRowReadState(t *testing.T) {
+	a := newTestApp(t)
+	rows := []mail.MessageSummary{
+		{Subject: "Непрочитанное", From: mail.Address{Name: "Иван Петров", Email: "ivan.petrov@example.com"}, Received: time.Now()},
+		{Subject: "Прочитанное", From: mail.Address{Name: "Иван Петров", Email: "ivan.petrov@example.com"}, Received: time.Now(), IsRead: true},
+	}
+	a.mail.items = append(a.mail.items, rows...)
+	a.mail.appendRows(rows)
+
+	// WHY: tview хранит цвет ячейки в Style (Color/Attributes — legacy-поля,
+	// в которые сеттеры не пишут, если Style задан NewTableCell).
+	rowStyle := func(row, col int) (tcell.Color, tcell.AttrMask) {
+		fg, _, attr := a.mail.messages.GetCell(row, col).Style.Decompose()
+		return fg, attr
+	}
+
+	fg, attr := rowStyle(0, 2)
+	if fg != colorUnread || attr&tcell.AttrBold == 0 {
+		t.Errorf("тема непрочитанного: цвет %v, атрибуты %v; хочу %v + жирный", fg, attr, colorUnread)
+	}
+	fg, attr = rowStyle(1, 2)
+	if fg != colorTextPrimary || attr&tcell.AttrBold != 0 {
+		t.Errorf("тема прочитанного: цвет %v, атрибуты %v; хочу %v без жирного", fg, attr, colorTextPrimary)
+	}
+	for row := range rows {
+		if fg, _ = rowStyle(row, 3); fg != colorRead {
+			t.Errorf("дата строки %d: цвет %v, хочу textSecondary %v", row, fg, colorRead)
+		}
+	}
+}
+
 // TestMessageListDensity (RD-2, DoD): на 140×40 в списке видно ≥30 писем —
 // раскладка с заголовками панелей плотность не съела.
 func TestMessageListDensity(t *testing.T) {
