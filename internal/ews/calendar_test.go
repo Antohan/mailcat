@@ -16,7 +16,8 @@ import (
 
 // TestCalendarRequestGolden: запрос CalendarView структурно совпадает с §8:
 // BaseShape Default + calendar:* поля, m:CalendarView@StartDate/@EndDate/
-// MaxEntriesReturned, сортировка Ascending calendar:Start, папка calendar.
+// MaxEntriesReturned, папка calendar. Без SortOrder: с CalendarView EWS его
+// запрещает (ErrorInvalidOperation), встречи приходят по Start по возрастанию.
 func TestCalendarRequestGolden(t *testing.T) {
 	start := time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2026, 11, 30, 23, 59, 59, 0, time.UTC)
@@ -39,11 +40,6 @@ func TestCalendarRequestGolden(t *testing.T) {
 	    </t:AdditionalProperties>
 	  </m:ItemShape>
 	  <m:CalendarView StartDate="2026-11-01T00:00:00Z" EndDate="2026-11-30T23:59:59Z" MaxEntriesReturned="500"/>
-	  <m:SortOrder>
-	    <t:FieldOrder Order="Ascending">
-	      <t:FieldURI FieldURI="calendar:Start"/>
-	    </t:FieldOrder>
-	  </m:SortOrder>
 	  <m:ParentFolderIds>
 	    <t:DistinguishedFolderId Id="calendar"/>
 	  </m:ParentFolderIds>

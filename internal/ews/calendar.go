@@ -64,10 +64,9 @@ func newFindEventsRequest(start, end time.Time) *findItemRequest {
 			EndDate:            end.UTC().Format(time.RFC3339),
 			MaxEntriesReturned: 500,
 		},
-		SortOrder: sortOrderRequest{FieldOrders: []fieldOrderRequest{{
-			Order:    "Ascending",
-			FieldURI: fieldURIRequest{FieldURI: "calendar:Start"},
-		}}},
+		// WHY: без SortOrder (и Restriction) — с CalendarView EWS их запрещает
+		// (ErrorInvalidOperation, живой сервер 15.2.2562); ответ всегда идёт
+		// по calendar:Start по возрастанию, порядок задаёт сам сервер.
 		ParentFolderIDs: parentFolderIdsRequest{
 			DistinguishedFolderID: &distinguishedFolderIDRequest{ID: "calendar"},
 		},

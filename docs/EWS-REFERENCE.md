@@ -222,11 +222,6 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   </m:ItemShape>
   <m:CalendarView StartDate="2026-11-01T00:00:00Z" EndDate="2026-11-30T23:59:59Z"
                   MaxEntriesReturned="500"/>
-  <m:SortOrder>
-    <t:FieldOrder Order="Ascending">
-      <t:FieldURI FieldURI="calendar:Start"/>
-    </t:FieldOrder>
-  </m:SortOrder>
   <m:ParentFolderIds>
     <t:DistinguishedFolderId Id="calendar"/>
   </m:ParentFolderIds>
@@ -257,6 +252,8 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   Это read-only свойство — показываем «вы приняли/под вопросом/не ответили».
 - С `CalendarView` НЕ используется `IndexedPageItemView` — пагинации нет, ставим
   разумный `MaxEntriesReturned`.
+- С `CalendarView` запрещены `SortOrder` и `Restriction` (ErrorInvalidOperation,
+  правило протокола): ответ всегда упорядочен сервером по `Start` по возрастанию.
 - Даты — xs:dateTime c смещением; в запросе используем UTC (`Z`), в UI показываем в
   локальной зоне.
 

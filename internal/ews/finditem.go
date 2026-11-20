@@ -106,7 +106,7 @@ func newFindMessagesRequest(parent parentFolderIdsRequest, pageSize, offset int)
 			Offset:             offset,
 			BasePoint:          "Beginning",
 		},
-		SortOrder: sortOrderRequest{FieldOrders: []fieldOrderRequest{{
+		SortOrder: &sortOrderRequest{FieldOrders: []fieldOrderRequest{{
 			Order:    "Descending",
 			FieldURI: fieldURIRequest{FieldURI: "item:DateTimeReceived"},
 		}}},
@@ -123,7 +123,7 @@ type findItemRequest struct {
 	ItemShape           itemShapeRequest            `xml:"ItemShape"`
 	IndexedPageItemView *indexedPageItemViewRequest `xml:",omitempty"`
 	CalendarView        *calendarViewRequest        `xml:",omitempty"`
-	SortOrder           sortOrderRequest            `xml:"SortOrder"`
+	SortOrder           *sortOrderRequest           `xml:"SortOrder,omitempty"`
 	ParentFolderIDs     parentFolderIdsRequest      `xml:"ParentFolderIds"`
 }
 
