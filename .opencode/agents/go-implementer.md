@@ -1,11 +1,12 @@
 ---
 description: Основной агент разработки mailcat — пишет код по задачам итераций (сейчас docs/PLAN-ITER3.md)
 mode: primary
-# Default model is Flash (cheap, fine for routine tasks); switch to the
-# flagship with /models for layout-heavy tasks (RD-2, RD-6 in PLAN-ITER3).
+# Default model is GLM Flash from the Z.AI subscription (cheap, fine for
+# routine tasks); switch to the flagship glm-5.3 with /models for
+# layout-heavy tasks (RD-2, RD-6 in PLAN-ITER3).
 # The provider prefix is mandatory: a bare id does not resolve and the agent
 # silently disappears from the picker (observed).
-model: opencode/deepseek-v4.1-flash-free
+model: zai/glm-5.3-flash
 # Hard cap: a stuck task must stop, not loop (AGENTS.md, "Circuit breaker").
 steps: 40
 ---
