@@ -113,11 +113,12 @@ separate conversation; a coding session receives a task and returns a report.
 A ten-message discussion inside a session re-bills its whole context ten
 times.
 
-**Models.** Flash by default; flagship (via `/models`) for the `ews-specialist`
-subagent and for iteration tasks where layout or link-registry design matters
-(UI-2, UI-4). `security-reviewer` inherits the session model — do not pin a
-`model:` in its file: a pinned id that fails to resolve silently removes the
-subagent from the session list (observed on the release session).
+**Models.** Flash by default — pinned as `opencode/deepseek-v4.1-flash-free`
+(the provider prefix is mandatory: a bare id does not resolve and the agent
+silently disappears from lists — observed). Flagship (via `/models`) for the
+`ews-specialist` subagent and for iteration tasks where layout or
+link-registry design matters. `security-reviewer` inherits the session model —
+do not pin a `model:` in its file (same silent-disappearance failure mode).
 
 ## Handoff file
 

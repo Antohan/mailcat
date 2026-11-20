@@ -3,7 +3,9 @@ description: Основной агент разработки mailcat — пиш
 mode: primary
 # Default model is Flash (cheap, fine for routine tasks); switch to the
 # flagship with /models for layout-heavy tasks (UI-2, UI-4 in PLAN-ITER2).
-model: deepseek-v4.1-flash-free
+# The provider prefix is mandatory: a bare id does not resolve and the agent
+# silently disappears from the picker (observed).
+model: opencode/deepseek-v4.1-flash-free
 # Hard cap: a stuck task must stop, not loop (AGENTS.md, "Circuit breaker").
 steps: 40
 ---
