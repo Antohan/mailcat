@@ -91,22 +91,67 @@ func DayEvents(events []mail.Event, day time.Time) []mail.Event {
 	return out
 }
 
-// FormatAgenda — повестка выбранного дня: время, тема, место.
-func FormatAgenda(events []mail.Event) string {
+// responseMark — маркер статуса ответа в строке повестки (UI-4):
+// ✓ принят · ~ под вопросом · ? нет ответа · ★ организатор.
+// ✗ (отклонено) в плане не назван — добавлен по симметрии с ярлыками
+// ResponseTypeLabel; Unknown → пробел, чтобы тема стояла в ту же колонку.
+func responseMark(responseType string) string {
+	switch strings.TrimSpace(responseType) {
+	case "Accept":
+		return "✓"
+	case "Tentative":
+		return "~"
+	case "Decline":
+		return "✗"
+	case "NoResponseReceived":
+		return "?"
+	case "Organizer":
+		return "★"
+	default:
+		return " "
+	}
+}
+
+// FormatAgenda — строки повестки выбранного дня: «14:30–15:00 ✓ Тема [1] host».
+// Длинные URL из «Места» уходят в реестр reg (модал g), вместо них — маркер
+// [N] host; обычное место остаётся текстом в скобках. Строки идут в
+// tview.List — Sanitize + tview.Escape (escapeForList) обязательны.
+func FormatAgenda(events []mail.Event, reg *mail.LinkRegistry) []string {
 	if len(events) == 0 {
-		return "На этот день встреч нет."
+		return nil
 	}
 	lines := make([]string, 0, len(events))
 	for _, ev := range events {
-		line := fmt.Sprintf("%s–%s  %s",
+		line := fmt.Sprintf("%s–%s %s %s",
 			ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04"),
-			security.Sanitize(ev.Subject))
-		if ev.Location != "" {
-			line += " (" + security.Sanitize(ev.Location) + ")"
+			responseMark(ev.MyResponseType), escapeForList(ev.Subject))
+		if loc := reg.RenderBody(ev.Location); loc != "" {
+			line += " (" + escapeForList(loc) + ")"
 		}
 		lines = append(lines, line)
 	}
-	return strings.Join(lines, "\n")
+	return lines
+}
+
+// AgendaTitle — заголовок панели повестки: «Повестка: 18.11 — 3 встречи».
+func AgendaTitle(day time.Time, count int) string {
+	return fmt.Sprintf("Повестка: %s — %d %s", day.Format("02.01"), count, meetingsWord(count))
+}
+
+// meetingsWord — русская форма множественного числа: 1 встреча, 2–4 встречи,
+// 5+ встреч (включая 11–14).
+func meetingsWord(n int) string {
+	if n%100 >= 11 && n%100 <= 14 {
+		return "встреч"
+	}
+	switch n % 10 {
+	case 1:
+		return "встреча"
+	case 2, 3, 4:
+		return "встречи"
+	default:
+		return "встреч"
+	}
 }
 
 // FormatEventDetails — детали встречи: организатор, участники, ваш статус.

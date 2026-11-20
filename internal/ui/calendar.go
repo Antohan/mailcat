@@ -26,7 +26,8 @@ type calendarScreen struct {
 	events    []mail.Event // кэш текущего месяца
 	loadedKey string       // "2026-11" — загружен ли месяц
 
-	dayEvents []mail.Event // события выбранного дня (для повестки)
+	dayEvents []mail.Event    // события выбранного дня (для повестки)
+	dayLinks  []mail.LinkInfo // ссылки повестки дня (модал g)
 }
 
 func newCalendarScreen(a *App) *calendarScreen {
@@ -50,7 +51,8 @@ func newCalendarScreen(a *App) *calendarScreen {
 		s.openEventDetails(idx)
 	})
 
-	// Смена месяца: Ctrl-←/→ или n/p (PLAN этап 4); 1/2/q — глобально (app).
+	// Смена месяца: Ctrl-←/→ или n/p (PLAN этап 4); g — модал ссылок
+	// повестки дня (UI-4); 1/2/q — глобально (app).
 	monthHook := func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyLeft:
@@ -70,6 +72,15 @@ func newCalendarScreen(a *App) *calendarScreen {
 				return nil
 			case 'p', 'P':
 				s.shiftMonth(-1)
+				return nil
+			case 'g', 'G':
+				// WHY: фокус запоминаем до модала: Esc из модала ссылок
+				// должен вернуть фокус той панели, с которой нажали g.
+				prev := s.app.tapp.GetFocus()
+				s.app.showLinks(s.dayLinks, func() {
+					s.app.pages.SwitchToPage(pageCalendar)
+					s.app.tapp.SetFocus(prev)
+				})
 				return nil
 			}
 		}
@@ -169,7 +180,8 @@ func (s *calendarScreen) render() {
 	}
 }
 
-// onDaySelected обновляет повестку при движении по сетке.
+// onDaySelected обновляет повестку при движении по сетке (UI-4: строки
+// собирает FormatAgenda — маркеры статуса + реестр ссылок из «Места»).
 func (s *calendarScreen) onDaySelected(row, col int) {
 	if row < 1 {
 		return
@@ -180,21 +192,18 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 	}
 	day := time.Date(s.year, s.month, grid[row-1][col].Day, 0, 0, 0, 0, time.Local)
 	s.dayEvents = DayEvents(s.events, day)
+	reg := mail.NewLinkRegistry()
+	lines := FormatAgenda(s.dayEvents, reg)
+	s.dayLinks = reg.List()
 	s.agenda.Clear()
-	if len(s.dayEvents) == 0 {
+	if len(lines) == 0 {
 		s.agenda.AddItem("Встреч нет", "", 0, nil)
-		return
-	}
-	for _, ev := range s.dayEvents {
-		line := fmt.Sprintf("%s–%s  %s",
-			ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04"),
-			escapeForList(ev.Subject))
-		if ev.Location != "" {
-			line += " (" + escapeForList(ev.Location) + ")"
+	} else {
+		for _, line := range lines {
+			s.agenda.AddItem(line, "", 0, nil)
 		}
-		s.agenda.AddItem(line, "", 0, nil)
 	}
-	s.agenda.SetTitle(fmt.Sprintf(" Повестка: %s ", day.Format("02.01.2006")))
+	s.agenda.SetTitle(" " + AgendaTitle(day, len(s.dayEvents)) + " ")
 }
 
 // openEventDetails показывает детали выбранной встречи; ссылки на созвон

@@ -84,16 +84,118 @@ func TestDayEvents(t *testing.T) {
 	}
 }
 
+// TestResponseMark: маркеры статуса ответа для строки повестки (UI-4);
+// Decline (✗) в плане не назван — добавлен по симметрии с ярлыками
+// ResponseTypeLabel; Unknown — пробел, чтобы тема стояла в ту же колонку.
+func TestResponseMark(t *testing.T) {
+	cases := map[string]string{
+		"Accept":             "✓",
+		"Tentative":          "~",
+		"NoResponseReceived": "?",
+		"Organizer":          "★",
+		"Decline":            "✗",
+		"Unknown":            " ",
+		"":                   " ",
+	}
+	for in, want := range cases {
+		if got := responseMark(in); got != want {
+			t.Errorf("responseMark(%q) = %q, хочу %q", in, got, want)
+		}
+	}
+}
+
 func TestFormatAgenda(t *testing.T) {
 	events := []mail.Event{
-		{Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк команды", Location: "Zoom"},
-		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 45), Subject: "1:1 с руководителем", Location: ""},
+		{Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк команды",
+			Location: "https://zoom.example/j/987654321?pwd=abcdef", MyResponseType: "Accept"},
+		{Start: nov(t, 17, 14, 30), End: nov(t, 17, 15, 0), Subject: "Планирование",
+			Location: "Переговорная 3", MyResponseType: "Tentative"},
+		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 45), Subject: "1:1", MyResponseType: "NoResponseReceived"},
+		{Start: nov(t, 17, 18, 0), End: nov(t, 17, 18, 30), Subject: "Демо заказчику", MyResponseType: "Organizer"},
 	}
-	got := FormatAgenda(events)
-	for _, want := range []string{"10:00–10:30", "Синк команды", "Zoom", "16:00–16:45", "1:1 с руководителем"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("в повестке нет %q:\n%s", want, got)
+	reg := mail.NewLinkRegistry()
+	lines := FormatAgenda(events, reg)
+	if len(lines) != 4 {
+		t.Fatalf("строк повестки = %d, хочу 4", len(lines))
+	}
+	// URL из «Места» уходит в реестр: в строке — маркер [N] и хост, не полный URL.
+	// Маркер проверяем в экранированной для tview.List форме («[1[]» → на экране
+	// «[1]»), как в TestFormatMessageRowEscaped: экранирование обязательно.
+	for _, want := range []string{"10:00–10:30", "✓", "Синк команды", "[1[] zoom.example"} {
+		if !strings.Contains(lines[0], want) {
+			t.Errorf("в строке повестки нет %q: %s", want, lines[0])
 		}
+	}
+	if strings.Contains(lines[0], "987654321") {
+		t.Errorf("полный URL не убран из строки: %s", lines[0])
+	}
+	if len(reg.List()) != 1 {
+		t.Fatalf("в реестре %d ссылок, хочу 1", len(reg.List()))
+	}
+	// Обычное место остаётся текстом; статусы — ~, ?, ★.
+	for _, c := range []struct{ line, want string }{
+		{lines[1], "14:30–15:00"},
+		{lines[1], "~"},
+		{lines[1], "Планирование"},
+		{lines[1], "Переговорная 3"},
+		{lines[2], "?"},
+		{lines[3], "★"},
+	} {
+		if !strings.Contains(c.line, c.want) {
+			t.Errorf("в строке повестки нет %q: %s", c.want, c.line)
+		}
+	}
+}
+
+// TestAgendaTitle: заголовок панели «Повестка: 18.11 — N встреч» с русскими
+// формами множественного числа (1 встреча, 2–4 встречи, 5+ встреч, 11–14 встреч).
+func TestAgendaTitle(t *testing.T) {
+	day := time.Date(2026, 11, 18, 0, 0, 0, 0, time.Local)
+	cases := []struct {
+		n    int
+		want string
+	}{
+		{0, "Повестка: 18.11 — 0 встреч"},
+		{1, "Повестка: 18.11 — 1 встреча"},
+		{3, "Повестка: 18.11 — 3 встречи"},
+		{5, "Повестка: 18.11 — 5 встреч"},
+		{11, "Повестка: 18.11 — 11 встреч"},
+		{21, "Повестка: 18.11 — 21 встреча"},
+		{22, "Повестка: 18.11 — 22 встречи"},
+	}
+	for _, c := range cases {
+		if got := AgendaTitle(day, c.n); got != c.want {
+			t.Errorf("AgendaTitle(%d) = %q, хочу %q", c.n, got, c.want)
+		}
+	}
+}
+
+// TestOnDaySelectedAgenda: повестка дня собирается через FormatAgenda —
+// маркеры и реестр ссылок видны в элементах списка, dayLinks наполняется
+// для модала g.
+func TestOnDaySelectedAgenda(t *testing.T) {
+	a := newTestApp(t)
+	s := a.calendar
+	s.year, s.month = 2026, time.November
+	s.events = []mail.Event{
+		{Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк",
+			Location: "https://meet.example/x", MyResponseType: "Accept"},
+	}
+	grid := MonthGrid(2026, time.November, s.events)
+	row, col := cellOf(grid, 17)
+	s.onDaySelected(row+1, col)
+	if got := s.agenda.GetItemCount(); got != 1 {
+		t.Fatalf("элементов повестки = %d, хочу 1", got)
+	}
+	line, _ := s.agenda.GetItemText(0)
+	if !strings.Contains(line, "✓") || !strings.Contains(line, "[1[]") {
+		t.Errorf("строка повестки без маркеров: %q", line)
+	}
+	if len(s.dayLinks) != 1 {
+		t.Errorf("dayLinks = %d ссылок, хочу 1 (для модала g)", len(s.dayLinks))
+	}
+	if title := s.agenda.GetTitle(); !strings.Contains(title, "1 встреча") {
+		t.Errorf("заголовок панели: %q", title)
 	}
 }
 

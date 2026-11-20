@@ -95,7 +95,10 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'g', 'G':
-				a.showLinks(a.currentLinks)
+				a.showLinks(a.currentLinks, func() {
+					a.pages.SwitchToPage(pageDetails)
+					a.tapp.SetFocus(a.detail)
+				})
 				return nil
 			case 'v', 'V':
 				a.showAttachments(a.currentAttachments)
@@ -120,7 +123,10 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		case tcell.KeyRune:
 			switch event.Rune() {
 			case 'g', 'G':
-				a.showLinks(a.currentLinks)
+				a.showLinks(a.currentLinks, func() {
+					a.pages.SwitchToPage(pageEvent)
+					a.tapp.SetFocus(a.event)
+				})
 				return nil
 			}
 		}
