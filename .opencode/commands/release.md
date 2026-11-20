@@ -9,7 +9,7 @@ stop and report; do not fix things on your own inside a release session.
 
 1. Preconditions (all must hold, otherwise stop and report what is missing):
    - branch is `dev`, working tree clean (`git status`);
-   - every task checkbox in the current iteration plan (`docs/PLAN-ITER2.md`)
+   - every task checkbox in the current iteration plan (`docs/PLAN-ITER3.md`)
      is ticked and every DoD point of the plan is met;
    - `/check` (`./scripts/check.sh`) is green;
    - `CHANGELOG.md` has an entry for every iteration commit.
@@ -17,7 +17,7 @@ stop and report; do not fix things on your own inside a release session.
    server — ask the user whether they have been run for this iteration and
    wait for the answer. Do not proceed on an assumption.
 3. Spawn `security-reviewer` over the iteration range — from the last release
-   merge (currently `b53745f`) to `dev`. A verdict containing КРИТИЧНО
+   merge (currently `e3e8daf`) to `dev`. A verdict containing КРИТИЧНО
    findings stops the release. If the subagent is not in this session's list,
    run the same review through a general subagent — give it pointers only
    (`docs/SECURITY.md`, invariants in `HANDOFF.md → Не трогать`), require

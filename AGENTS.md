@@ -2,8 +2,8 @@
 
 You are building **mailcat** — a read-only client for corporate mail and calendar
 (on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
-tasks of the current iteration plan, `docs/PLAN-ITER2.md` (`docs/PLAN.md` is
-finished history — do not open or modify it).
+tasks of the current iteration plan, `docs/PLAN-ITER3.md` (`docs/PLAN.md`,
+`docs/PLAN-ITER2.md` are finished history — do not open or modify them).
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
@@ -14,7 +14,8 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 | File | What it gives you |
 | --- | --- |
 | `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
-| `docs/PLAN-ITER2.md` | **current iteration**: tasks, DoD, the CHANGELOG rule |
+| `docs/PLAN-ITER3.md` | **current iteration**: tasks, DoD, the CHANGELOG rule |
+| `docs/PLAN-TEMPLATE.md` | mandatory format for composing a new iteration plan |
 | `docs/PLAN.md` | iteration 1 history — do not open in sessions |
 | `docs/ARCHITECTURE.md` | packages, data flow; §3 is the list of invariants |
 | `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML |
@@ -43,16 +44,16 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 7. **Russian UI.** Key hints, errors, statuses, folder names («Входящие»,
    «Отправленные»).
 8. **Scope is the current iteration plan.** No "for later" features that
-   `docs/PLAN-ITER2.md` does not describe.
+   `docs/PLAN-ITER3.md` does not describe.
 
 ## Work
 
-1. Open a session with `/stage <task>` (e.g. `/stage UI-1`): it loads the
+1. Open a session with `/stage <task>` (e.g. `/stage RD-1`): it loads the
    iteration plan and the task.
 2. All work happens on the `dev` branch. `main` is release-only: it receives
    a finished iteration as a single merge commit — a release action performed
    on explicit user request, never inside a task session.
-3. One task = one commit (`iter2:UI-1: short description`) plus its
+3. One task = one commit (`iter3:RD-1: short description`) plus its
    CHANGELOG.md entry.
 4. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
    fix the cause.
@@ -61,8 +62,9 @@ English only to spend fewer tokens — that is not permission to answer in Engli
    implementing. Security-relevant work: request `security-reviewer` after —
    once per stage.
 7. New tasks enter an iteration plan only as specs — touched files/symbols and
-   expected behavior written BEFORE the coding session. A task without
-   pointers to code costs exploration tokens on every session that opens it.
+   expected behavior written BEFORE the coding session, in the fixed format of
+   `docs/PLAN-TEMPLATE.md`. A task without pointers to code costs exploration
+   tokens on every session that opens it.
 8. Iteration finished and the user asks for a release → `/release`: it checks
    the DoD, runs the security review over the iteration range and merges
    `dev → main` only after the user explicitly confirms.
@@ -87,8 +89,6 @@ first, then read the specific hunks. Never print a whole file.
 over ~150 lines: use `offset`/`limit`. Do not open `*_test.go` files you are not
 editing. Docs: only the referenced section (`SECURITY.md §3`). While iterating
 use `go test -run <Test>`; the full suite runs once, in `/check`.
-`.superpowers/sdd/PLAN/progress.md` is an archive — never read it at session
-start.
 
 **Do not restate.** No file contents, no doc summaries, no play-by-play of
 commands. The report is: what changed, what was verified, what is next.
@@ -113,11 +113,12 @@ separate conversation; a coding session receives a task and returns a report.
 A ten-message discussion inside a session re-bills its whole context ten
 times.
 
-**Models.** Flash by default; flagship (via `/models`) for the `ews-specialist`
-subagent and for iteration tasks where layout or link-registry design matters
-(UI-2, UI-4). `security-reviewer` inherits the session model — do not pin a
-`model:` in its file: a pinned id that fails to resolve silently removes the
-subagent from the session list (observed on the release session).
+**Models.** Flash by default — pinned as `opencode/deepseek-v4.1-flash-free`
+(the provider prefix is mandatory: a bare id does not resolve and the agent
+silently disappears from lists — observed). Flagship (via `/models`) for the
+`ews-specialist` subagent and for iteration tasks where layout design matters
+(RD-2, RD-6). `security-reviewer` inherits the session model —
+do not pin a `model:` in its file (same silent-disappearance failure mode).
 
 ## Handoff file
 
