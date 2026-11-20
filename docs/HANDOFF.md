@@ -1,14 +1,18 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 2 — `docs/PLAN-ITER2.md`: **UI-8** («Загрузка…» в статус-баре на время
-GetItem/FindItem — асинхронно, не блокируя отрисовку; in-flight защита есть,
-нужен видимый индикатор; вход — app.go setStatus/showStatus, mail.go
-`loading`/`gen`, calendar.go loadMonth).
+Итерация 2 — `docs/PLAN-ITER2.md`: **T-1** (техдолг: reAnchor data-href и
+некотируемые атрибуты — `internal/mail/links.go` reAnchor; UniquePath через
+O_EXCL вместо «проверил-записал» — `internal/security/filesafe.go` UniquePath;
+каталоги вложений при старте — `internal/ui/attachments.go` saveAttachment;
+Esc-источник модала — `internal/ui/links.go` showLinks/back).
 
 ## Сделано (итерация 2)
+- ed80438 — iter2:UI-8: индикатор «Загрузка…» на время GetItem/FindItem
+  (beginLoad/endLoad, реестр in-flight), переживает смену страницы и
+  автоочистку ошибки.
 - 86cc38c — iter2:UI-7: подсказки статус-бара по странице (pageHint/showHint),
-  ошибка красным (colorError, SetTextColor) с автоочисткой 8 с (statusGen).
+  ошибка красным с автоочисткой 8 с (statusGen).
 - e015c2f — iter2:UI-6: рамка активной панели акцентом (paintFocusFrames).
 - c4b4140 — iter2:UI-5: сетка месяца — заголовок, «сегодня» ≠ выбранный, «17·2».
 - a5ca69d — iter2:UI-4: повестка — маркеры ✓/~/?/★/✗, URL в реестр, модал g.
@@ -17,13 +21,19 @@ GetItem/FindItem — асинхронно, не блокируя отрисов�
 - f7cae6e/9b1d232 — iter2:UI-1: сортировка папок, секция «Ещё ▸», ui.hidden_folders.
 
 ## Открыто (для пользователя; нужен VPN — TESTING.md §5)
-- Smoke S1–S8; UI-2/UI-4/UI-6/UI-7 на живом сервере: имя/дата/жирные
+- Smoke S1–S8; UI-2/UI-4/UI-6/UI-7/UI-8 на живом сервере: имя/дата/жирные
   непрочитанные; маркеры повестки и модал g; акцентная рамка; подсказки
-  статус-бара по экранам, красная ошибка и её автоочистка (выключить VPN).
+  статус-бара, красная ошибка и её автоочистка (выключить VPN); «Загрузка…»
+  держится при смене страницы 1/2 во время медленного запроса.
 - `item:Importance` в EWS-REFERENCE? (нужно для min_importance и ⚠ карточки).
 - Security-ревью этапов 5–6 — security-reviewer по `git diff 8fb6a9f..HEAD` (по желанию).
 
 ## Не трогать
+- Индикатор загрузки — реестр `loads` + гейтинг в showHint (UI-8): не гасить
+  «Загрузка…» в точках смены страниц; каждая ветка горутины (успех/ошибка/
+  устаревший ответ) зовёт endLoad(id) ровно один раз внутри QueueUpdateDraw;
+  доступ к loads — только главный поток TUI, без мьютекса. GetAttachment
+  (вложения) в реестре не участвует — его статусы терминальные, не подсказка.
 - Статус-бар без dynamic colors: красный — только SetTextColor(colorError),
   обычный — SetTextColor(PrimaryTextColor) в setStatus. Тег [red] включил бы
   интерпретацию серверного текста — запрещено (§3).
