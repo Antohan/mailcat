@@ -5,7 +5,7 @@ RD-2: каркас (разделители, пропорции, активная
 `docs/PLAN-ITER3.md` (RD-2), `internal/ui/mail.go`, `app.go` (bordered).
 
 ## Сделано
-- 66d789c — RD-1: палитра и роли theme.go, `[ui] theme`; e3e8daf — Release 2.
+- d26e076 — RD-1: палитра и роли theme.go, `[ui] theme`; e3e8daf — Release 2.
 
 ## Открыто
 - Smoke S3–S6, светлая/тёмная темы в Terminal.app и iTerm2/VSCode — TODO
