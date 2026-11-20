@@ -29,6 +29,8 @@ security-reviewer после 21:21 по `git diff 8fb6a9f..HEAD`.
 - item:IsRead в AdditionalProperties FindItem и t:BodyType в ItemShape GetItem
   — зачем: живой Exchange 2019 (15.2.2562) отвечает 500 ErrorInvalidRequest
   (EWS-REFERENCE.md §5–6, a1fe7b1 + a1d68ee).
+- SortOrder/Restriction с CalendarView — зачем: запрет протокола EWS
+  (ErrorInvalidOperation); ответ упорядочен по Start сам (§8, d25f2bd).
 - Read-only whitelist EWS-операций — зачем: золотое правило 1.
 - crypto/tls только в internal/ews — зачем: policy_test, единая точка TLS.
 - Sanitize + tview.Escape для Table/List/Modal (escapeForList) — зачем:
