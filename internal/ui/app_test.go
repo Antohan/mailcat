@@ -10,6 +10,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"mailcat/internal/config"
 	"mailcat/internal/mail"
@@ -53,15 +54,15 @@ func TestShowErrorRunesTruncation(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRowEscaped: теги tview в теме/адресе экранируются
-// (Table интерпретирует [red] даже без SetDynamicColors; tview.Escape
-// вставляет "[]" внутрь тега — семантика tview).
+// TestFormatMessageRowEscaped: теги tview в теме/имени отправителя
+// экранируются (Table интерпретирует [red] даже без SetDynamicColors;
+// tview.Escape вставляет "[]" внутрь тега — семантика tview).
 func TestFormatMessageRowEscaped(t *testing.T) {
 	m := mail.MessageSummary{
 		Subject: "[red]СРОЧНО[-] проверка",
 		From:    mail.Address{Email: `["evil"]@x.example`},
 	}
-	row := FormatMessageRow(m, []string{"company.example"})
+	row := FormatMessageRow(m, []string{"company.example"}, time.Now())
 	if !strings.Contains(row[2], "[red[]") {
 		t.Errorf("тег [red] в теме не экранирован: %q", row[2])
 	}

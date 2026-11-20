@@ -6,6 +6,7 @@ package ui
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -70,6 +71,11 @@ func newMailScreen(a *App) *mailScreen {
 		SetSelectable(true, false).
 		SetSeparator('\u2502')
 	s.messages.SetBorder(true).SetTitle(" Письма ")
+	// WHY: tview считает ширину колонки максимумом по ячейкам и выбрасывает
+	// колонки, не влезающие целиком, — длинная тема выталкивала дату за край
+	// панели (обкатка 20.11). Капы пересчитываются на каждом Draw, до
+	// раскладки колонок, — переживают resize терминала.
+	s.messages.SetDrawFunc(s.clampMessageColumns)
 
 	s.preview = tview.NewTextView().
 		SetWrap(true).
@@ -276,12 +282,42 @@ func (s *mailScreen) loadMessages() {
 	}()
 }
 
+// clampMessageColumns ограничивает ширину колонок «отправитель» и «тема»
+// текущей шириной панели, чтобы колонка даты всегда оставалась видимой
+// (UI-2). Возврат — стандартный внутренний прямоугольник Box с рамкой.
+func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+	const markW, dateW = len("[ВНЕШН]"), 5 // «15:04» / «02.01»
+	inner := w - 2                         // рамка панели
+	if inner > 0 {
+		sender := inner / 4
+		if sender > 18 {
+			sender = 18
+		}
+		if sender < 8 {
+			sender = 8
+		}
+		subject := inner - (markW + 1) - (sender + 1) - (dateW + 1) - 1
+		if subject < 4 {
+			subject = 4 // уже панель без внешних писем — tview сам ужмёт тему
+		}
+		for row := 0; row < s.messages.GetRowCount(); row++ {
+			if c := s.messages.GetCell(row, 1); c != nil {
+				c.SetMaxWidth(sender)
+			}
+			if c := s.messages.GetCell(row, 2); c != nil {
+				c.SetMaxWidth(subject)
+			}
+		}
+	}
+	return x + 1, y + 1, w - 2, h - 2
+}
+
 // appendRows дописывает строки в таблицу; непрочитанные — ярким белым.
 func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
 	for i, m := range added {
 		row := base + i
-		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains()) {
+		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains(), time.Now()) {
 			expansion := 0
 			if col == 2 {
 				expansion = 1 // тема забирает свободную ширину

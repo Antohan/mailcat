@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rivo/tview"
 
@@ -24,20 +25,52 @@ func ExternalMark(fromEmail string, orgDomains []string) string {
 	return ""
 }
 
-// FormatMessageRow — колонки строки списка писем: [ВНЕШН] | реальный адрес
-// отправителя | тема | дата (локальная зона, короткий формат). Текст из EWS
+// shortDays — сокращения дней недели для компактной даты списка (UI-2);
+// индексация по time.Weekday() (воскресенье = 0).
+var shortDays = []string{"Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"}
+
+// FormatShortDate — компактная дата строки списка (UI-2): сегодня → HH:MM,
+// давность ≤ 7 дней → сокращённый день недели («Чт»), старше → ДД.ММ.
+// now передаётся явно — детерминизм в тестах.
+func FormatShortDate(now, t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	tl, nl := t.Local(), now.Local()
+	if tl.Year() == nl.Year() && tl.YearDay() == nl.YearDay() {
+		return tl.Format("15:04")
+	}
+	if tl.After(nl.AddDate(0, 0, -7)) {
+		return shortDays[tl.Weekday()]
+	}
+	return tl.Format("02.01")
+}
+
+// senderLabel — колонка отправителя (UI-2): имя из t:Name, при отсутствии —
+// локальная часть адреса (youtrack@… ×20 — нечитаемо). Полный адрес остаётся
+// в заголовке выбранного письма (SECURITY.md §4.1 — адрес доступен всегда).
+func senderLabel(a mail.Address) string {
+	if name := strings.TrimSpace(a.Name); name != "" {
+		return tview.Escape(security.Sanitize(name))
+	}
+	email := a.Email
+	if i := strings.IndexByte(email, '@'); i > 0 {
+		email = email[:i]
+	}
+	return tview.Escape(security.Sanitize(email))
+}
+
+// FormatMessageRow — колонки строки списка писем (UI-2): [ВНЕШН] | имя
+// отправителя (t:Name, fallback — локальная часть адреса) | тема |
+// компактная дата (FormatShortDate). Текст из EWS
 // проходит Sanitize (§3) и tview.Escape — Table интерпретирует теги цветов/
 // регионов безусловно (ревью этапа 2).
-func FormatMessageRow(m mail.MessageSummary, orgDomains []string) []string {
-	date := ""
-	if !m.Received.IsZero() {
-		date = m.Received.Local().Format("02.01 15:04")
-	}
+func FormatMessageRow(m mail.MessageSummary, orgDomains []string, now time.Time) []string {
 	return []string{
 		ExternalMark(m.From.Email, orgDomains),
-		tview.Escape(security.Sanitize(m.From.Email)),
+		senderLabel(m.From),
 		tview.Escape(security.Sanitize(m.Subject)),
-		date,
+		FormatShortDate(now, m.Received),
 	}
 }
 
