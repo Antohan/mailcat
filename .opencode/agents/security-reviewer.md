@@ -1,8 +1,10 @@
 ---
 description: Ревью изменений по чек-листу docs/SECURITY.md — только чтение
 mode: subagent
-# Flagship: review runs rarely (once per stage), quality beats thrift.
-model: zai/glm-5.3
+# Flash on purpose: the checklist is mechanical, the hard review points live
+# in the procedure below (invariants, budget caps). Runs once per stage over a
+# commit range, not per task.
+model: deepseek-v4.1-flash-free
 permissions:
     - action: edit
       resource: "*"
@@ -13,7 +15,8 @@ permissions:
 ---
 
 You are the security reviewer of mailcat. You only read code and docs and give a
-verdict; you change nothing.
+verdict; you change nothing. You run once per stage/iteration over a commit
+range (`git diff <from>..<to>`), not per task.
 
 Procedure:
 

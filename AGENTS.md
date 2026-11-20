@@ -2,7 +2,8 @@
 
 You are building **mailcat** — a read-only client for corporate mail and calendar
 (on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
-stages in `docs/PLAN.md`.
+tasks of the current iteration plan, `docs/PLAN-ITER2.md` (`docs/PLAN.md` is
+finished history — do not open or modify it).
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
@@ -13,7 +14,8 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 | File | What it gives you |
 | --- | --- |
 | `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
-| `docs/PLAN.md` | stages, tasks, DoD — read only the current stage's section |
+| `docs/PLAN-ITER2.md` | **current iteration**: tasks, DoD, the CHANGELOG rule |
+| `docs/PLAN.md` | iteration 1 history — do not open in sessions |
 | `docs/ARCHITECTURE.md` | packages, data flow; §3 is the list of invariants |
 | `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML |
 | `docs/SECURITY.md` | mandatory security checklist |
@@ -40,25 +42,36 @@ English only to spend fewer tokens — that is not permission to answer in Engli
    (`encoding/xml`, `crypto/tls`, `net/http`, `log/slog`, `os/exec`).
 7. **Russian UI.** Key hints, errors, statuses, folder names («Входящие»,
    «Отправленные»).
-8. **Scope is the MVP.** No "for later" features that PLAN.md does not describe.
+8. **Scope is the current iteration plan.** No "for later" features that
+   `docs/PLAN-ITER2.md` does not describe.
 
 ## Work
 
-1. Open a session with `/stage N`: it loads the stage section and the first open
-   task.
-2. One task = one commit (`stage1: pagination cursor`).
+1. Open a session with `/stage <task>` (e.g. `/stage UI-1`): it loads the
+   iteration plan and the task.
+2. One task = one commit (`iter2:UI-1: short description`) plus its
+   CHANGELOG.md entry.
 3. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
    fix the cause.
-4. At the end of a stage rewrite `docs/HANDOFF.md` (see below).
+4. At the end of a task rewrite `docs/HANDOFF.md` (see below).
 5. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
    implementing. Security-relevant work: request `security-reviewer` after —
    once per stage.
+6. New tasks enter an iteration plan only as specs — touched files/symbols and
+   expected behavior written BEFORE the coding session. A task without
+   pointers to code costs exploration tokens on every session that opens it.
 
 ## Token budget rules (not optional)
 
 **One session = one task.** After the commit, write a report of at most five
 lines and say the task is closed: the next one starts in a new session. Do not
 start a second task, do not fix unrelated things you noticed on the way.
+
+**Circuit breaker.** If the same test, build error or command fails three
+times in a row, stop: write the ≤5-line report (what you tried, what you
+suspect), close the session, and leave the task in `HANDOFF.md → Дальше`
+marked «застряло: …». The fourth attempt almost never fixes it but always
+costs a window.
 
 **One call instead of five.** Batch independent commands into a single shell
 call; filter output (`2>&1 | tail -20`, `-q`, `--stat`). Run `git diff --stat`
@@ -76,14 +89,28 @@ commands. The report is: what changed, what was verified, what is next.
 
 **Subagents.** Give them a pointer, not a dump («прочитай §5–6 EWS-REFERENCE»).
 Ask for a verdict of at most ten lines. A subagent that reads everything costs
-more than doing the work yourself.
+more than doing the work yourself. Spawn one only if the task touches EWS/XML
+(`ews-specialist`) or security (`security-reviewer`) — never for routine edits.
+Security review runs on Flash (the checklist is mechanical), once per
+stage/iteration over a commit range, not per task; `ews-specialist` stays on
+the flagship.
 
-**Do not edit `AGENTS.md`, `SECURITY.md` or `PLAN.md` inside a session where you
-are also implementing** — it invalidates the cached prompt prefix for the rest
-of that session.
+**Stable prefix = cache hits.** Do not edit, inside a coding session, any file
+already read earlier in that session — `AGENTS.md`, `SECURITY.md`, plans,
+`HANDOFF.md` included. An edit invalidates the cached prompt prefix and the
+rest of the session bills at full price; doc edits go to a separate session.
+Open sessions identically (HANDOFF first) and never paste large texts into
+coding-session prompts.
 
-**Models.** Flash by default; flagship (via `/models`) for stages 1 and 4 and
-for the `ews-specialist` / `security-reviewer` subagents.
+**No discussions in coding sessions.** Questions, ideas and planning go to a
+separate conversation; a coding session receives a task and returns a report.
+A ten-message discussion inside a session re-bills its whole context ten
+times.
+
+**Models.** Flash by default; flagship (via `/models`) for the `ews-specialist`
+subagent and for iteration tasks where layout or link-registry design matters
+(UI-2, UI-4). `security-reviewer` runs on Flash on purpose: its checklist is
+mechanical.
 
 ## Handoff file
 
@@ -105,8 +132,9 @@ code and delete the stale line — do not repair it.
   "ask IT", never work around them.
 - macOS: open files and links with `/usr/bin/open`; Keychain through `security`.
 
-A stage is done when every DoD point of that stage in PLAN.md is met. Live-server
-checks are unavailable here: mark them as TODO for the user (`TESTING.md §5`).
+The iteration is done when every DoD point of `docs/PLAN-ITER2.md` is met.
+Live-server checks are unavailable here: mark them as TODO for the user
+(`TESTING.md §5`).
 
 ## Decisions and invariants
 
