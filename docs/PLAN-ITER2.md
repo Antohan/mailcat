@@ -66,7 +66,7 @@
       видимый индикатор)
 - [x] **T-1. Техдолг из HANDOFF «Открыто»:** reAnchor data-href/unquoted;
       UniquePath O_EXCL; каталоги вложений при старте; Esc-источник модала
-- [ ] **D-1. Доки:** SECURITY.md §4 — формулировка «домен ≠ org_domain» →
+- [x] **D-1. Доки:** SECURITY.md §4 — формулировка «домен ≠ org_domain» →
       список `org_domains` (изменение 3033a9b)
 
 ## Definition of Done (итерация целиком)
