@@ -78,6 +78,13 @@ type App struct {
 	// таймер не затирает свежий статус.
 	statusGen int
 
+	// In-flight загрузки (UI-8): id → надпись индикатора. Пока карта не
+	// пуста, showHint показывает индикатор, а не подсказку экрана.
+	// Доступ только из главного потока TUI (ввод и QueueUpdateDraw) —
+	// без мьютекса.
+	loads   map[int]string
+	loadSeq int
+
 	mail     *mailScreen
 	calendar *calendarScreen
 
@@ -323,8 +330,48 @@ func (a *App) setStatus(text string) {
 // showHint ставит подсказку текущего экрана (UI-7): у каждого экрана свой
 // набор клавиш. Вызывается после каждой смены страницы и по завершении
 // загрузок — статус-бар всегда соответствует видимому экрану.
+// WHY: при незавершённой загрузке показываем индикатор, а не подсказку —
+// смена страницы/автоочистка ошибки не должны гасить «Загрузка…» (UI-8).
 func (a *App) showHint() {
+	if label, ok := a.loadLabel(); ok {
+		a.setStatus(label)
+		return
+	}
 	a.setStatus(a.pageHint())
+}
+
+// beginLoad показывает индикатор загрузки на время GetItem/FindItem (UI-8)
+// и возвращает id для endLoad. Каждая ветка завершения горутины (успех,
+// ошибка, устаревший ответ) обязана ровно один раз вызвать endLoad(id)
+// внутри QueueUpdateDraw — иначе подсказка экрана не вернётся.
+func (a *App) beginLoad(label string) int {
+	a.loadSeq++
+	if a.loads == nil {
+		a.loads = make(map[int]string)
+	}
+	a.loads[a.loadSeq] = label
+	a.setStatus(label)
+	return a.loadSeq
+}
+
+// endLoad снимает завершившуюся загрузку: полётов не осталось — подсказка
+// экрана, остался — надпись ещё идущей (загрузки могут перекрываться).
+func (a *App) endLoad(id int) {
+	delete(a.loads, id)
+	if label, ok := a.loadLabel(); ok {
+		a.setStatus(label)
+		return
+	}
+	a.showHint()
+}
+
+// loadLabel — надпись любой незавершённой загрузки; одновременно их
+// практически не бывает, поэтому «первый из карты» достаточен.
+func (a *App) loadLabel() (string, bool) {
+	for _, label := range a.loads {
+		return label, true
+	}
+	return "", false
 }
 
 // pageHint — подсказка для верхней видимой страницы (модалы закрывают экран).

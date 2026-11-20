@@ -145,16 +145,20 @@ func (s *mailScreen) openDetails(row int) {
 		return
 	}
 	ref := s.items[row]
-	s.app.setStatus("Загрузка письма…")
+	id := s.app.beginLoad("Загрузка письма…")
 	go func() {
 		detail, err := s.app.client.GetMessage(s.app.ctx, ref.ItemID, ref.ChangeKey)
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.app.endLoad(id)
+				s.app.showError(err)
+			})
 			return
 		}
 		full := mail.FullMessage(detail)
 		full.From = ref.From // From не приходит в GetItem — берём из строки списка
 		s.app.tapp.QueueUpdateDraw(func() {
+			s.app.endLoad(id)
 			s.app.showDetails(full)
 		})
 	}()
@@ -164,18 +168,21 @@ func (s *mailScreen) openDetails(row int) {
 // список + техпапки в секции «Ещё ▸» (UI-1) — и открывает «Входящие»
 // (distinguished inbox — первая страница писем).
 func (s *mailScreen) loadFolders() {
-	s.app.setStatus("Загрузка папок…")
+	id := s.app.beginLoad("Загрузка папок…")
 	go func() {
 		list, err := s.app.client.FindFolders(s.app.ctx)
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.app.endLoad(id)
+				s.app.showError(err)
+			})
 			return
 		}
 		folders := mail.Folders(list)
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.mainFolders, s.techFolders = SplitFolders(folders, s.app.cfg.UI.HiddenFolders)
 			s.renderFolders()
-			s.app.showHint()
+			s.app.endLoad(id) // вернёт подсказку; selectFolder сменит на «Загрузка писем…»
 			// Стартуем с входящих (distinguished) — отдельным запросом.
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})
@@ -245,7 +252,7 @@ func (s *mailScreen) loadMessages() {
 	s.loading = true
 	s.gen++
 	gen := s.gen
-	s.app.setStatus("Загрузка писем…")
+	id := s.app.beginLoad("Загрузка писем…")
 	offset := s.offset
 	folder := s.folder
 	go func() {
@@ -259,6 +266,7 @@ func (s *mailScreen) loadMessages() {
 		if err != nil {
 			s.app.tapp.QueueUpdateDraw(func() {
 				s.loading = false
+				s.app.endLoad(id)
 				s.app.showError(err)
 			})
 			return
@@ -266,6 +274,7 @@ func (s *mailScreen) loadMessages() {
 		added := mail.MessageSummaries(page.Items)
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.loading = false
+			s.app.endLoad(id)
 			if s.gen != gen {
 				return // папка уже сменилась — ответ устарел
 			}
@@ -276,7 +285,6 @@ func (s *mailScreen) loadMessages() {
 			if len(s.items) == 0 {
 				s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)"))
 			}
-			s.app.showHint()
 		})
 	}()
 }

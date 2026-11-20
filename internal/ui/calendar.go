@@ -119,22 +119,25 @@ func monthStale(keyAtRequest, keyNow string) bool { return keyAtRequest != keyNo
 func (s *calendarScreen) loadMonth() {
 	key := s.monthKey()
 	start, end := MonthBounds(s.year, s.month)
-	s.app.setStatus(fmt.Sprintf("Загрузка календаря: %s…", MonthTitle(s.year, s.month)))
+	id := s.app.beginLoad(fmt.Sprintf("Загрузка календаря: %s…", MonthTitle(s.year, s.month)))
 	go func() {
 		raw, err := s.app.client.FindEvents(s.app.ctx, start, end)
 		if err != nil {
-			s.app.tapp.QueueUpdateDraw(func() { s.app.showError(err) })
+			s.app.tapp.QueueUpdateDraw(func() {
+				s.app.endLoad(id)
+				s.app.showError(err)
+			})
 			return
 		}
 		events := mail.Events(raw)
 		s.app.tapp.QueueUpdateDraw(func() {
+			s.app.endLoad(id)
 			if monthStale(key, s.monthKey()) {
 				return // месяц уже сменился — ответ неактуален
 			}
 			s.events = events
 			s.loadedKey = key
 			s.render()
-			s.app.showHint()
 		})
 	}()
 }

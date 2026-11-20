@@ -142,3 +142,34 @@ func TestErrorAutoClear(t *testing.T) {
 		t.Errorf("устаревший таймер затёр статус: %q", text)
 	}
 }
+
+// TestLoadIndicator (UI-8): пока GetItem/FindItem в полёте, статус-бар держит
+// индикатор загрузки — подсказка экрана (смена страницы, автоочистка ошибки)
+// его не затирает; последняя endLoad возвращает подсказку экрана.
+func TestLoadIndicator(t *testing.T) {
+	a := newTestApp(t)
+	id := a.beginLoad("Загрузка писем…")
+	if text := a.status.GetText(false); text != "Загрузка писем…" {
+		t.Fatalf("индикатор не показан: %q", text)
+	}
+	a.showHint() // смена страницы во время загрузки
+	if text := a.status.GetText(false); text != "Загрузка писем…" {
+		t.Errorf("подсказка затёрла индикатор загрузки: %q", text)
+	}
+	// Перекрытие загрузок: завершилась не последняя — остаётся надпись идущей.
+	id2 := a.beginLoad("Загрузка письма…")
+	a.endLoad(id2)
+	if text := a.status.GetText(false); text != "Загрузка писем…" {
+		t.Errorf("надпись ещё идущей загрузки потеряна: %q", text)
+	}
+	// Ошибка во время загрузки: автоочистка возвращает индикатор, не подсказку.
+	a.showError(errors.New("сбой"))
+	a.clearError(a.statusGen) // то, что таймер прислал бы в QueueUpdateDraw
+	if text := a.status.GetText(false); text != "Загрузка писем…" {
+		t.Errorf("после ошибки не вернулся индикатор загрузки: %q", text)
+	}
+	a.endLoad(id)
+	if text := a.status.GetText(false); text != hintMail {
+		t.Errorf("после последней загрузки нет подсказки экрана: %q", text)
+	}
+}
