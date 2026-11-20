@@ -33,27 +33,78 @@ func TestMonthGridStructure(t *testing.T) {
 	}
 	for _, row := range grid[:5] {
 		for _, cell := range row {
-			if cell.Day == 0 && (cell.HasEvents || cell.Selected) {
+			if cell.Day == 0 && (cell.Events > 0 || cell.Selected) {
 				t.Errorf("пустая ячейка с флагами: %+v", cell)
 			}
 		}
 	}
 	// День с событиями помечен, соседний без — нет.
 	nov17 := findCell(grid, 17)
-	if nov17 == nil || !nov17.HasEvents {
-		t.Errorf("17 ноября не помечен: %+v", nov17)
+	if nov17 == nil || nov17.Events != 1 {
+		t.Errorf("17 ноября: %+v, хочу 1 событие", nov17)
 	}
 	nov16 := findCell(grid, 16)
-	if nov16 == nil || nov16.HasEvents {
-		t.Errorf("16 ноября ошибочно помечен: %+v", nov16)
+	if nov16 == nil || nov16.Events != 0 {
+		t.Errorf("16 ноября: %+v, хочу 0 событий", nov16)
 	}
 	// Многодневное событие помечает все свои дни.
 	grid = MonthGrid(2026, time.November, []mail.Event{
 		{Start: nov(t, 10, 9, 0), End: nov(t, 12, 18, 0)},
 	})
 	for _, d := range []int{10, 11, 12} {
-		if c := findCell(grid, d); c == nil || !c.HasEvents {
-			t.Errorf("день %d многодневной встречи не помечен", d)
+		if c := findCell(grid, d); c == nil || c.Events != 1 {
+			t.Errorf("день %d многодневной встречи: %+v, хочу 1 событие", d, c)
+		}
+	}
+	// Несколько встреч в день складываются (интенсивность 1–2 vs 3+).
+	grid = MonthGrid(2026, time.November, []mail.Event{
+		{Start: nov(t, 18, 9, 0), End: nov(t, 18, 9, 30)},
+		{Start: nov(t, 18, 11, 0), End: nov(t, 18, 11, 30)},
+		{Start: nov(t, 18, 14, 0), End: nov(t, 18, 14, 30)},
+	})
+	if c := findCell(grid, 18); c == nil || c.Events != 3 {
+		t.Errorf("18 ноября: %+v, хочу 3 события", c)
+	}
+}
+
+// TestMonthTitle: заголовок панели месяца — русское имя и год (UI-5).
+func TestMonthTitle(t *testing.T) {
+	cases := []struct {
+		year  int
+		month time.Month
+		want  string
+	}{
+		{2026, time.November, "Ноябрь 2026"},
+		{2026, time.December, "Декабрь 2026"},
+		{2027, time.January, "Январь 2027"},
+	}
+	for _, c := range cases {
+		if got := MonthTitle(c.year, c.month); got != c.want {
+			t.Errorf("MonthTitle(%d, %v) = %q, хочу %q", c.year, c.month, got, c.want)
+		}
+	}
+}
+
+// TestFormatDayCell: маркеры ячейки (UI-5) — количество событий «17·2»,
+// сегодня — в скобках; выбранный день маркера в тексте не имеет (инверсия).
+func TestFormatDayCell(t *testing.T) {
+	cases := []struct {
+		name  string
+		cell  DayCell
+		today bool
+		want  string
+	}{
+		{"без событий", DayCell{Day: 5}, false, " 5"},
+		{"двузначный день", DayCell{Day: 17}, false, "17"},
+		{"одно событие", DayCell{Day: 17, Events: 1}, false, "17·1"},
+		{"три события", DayCell{Day: 5, Events: 3}, false, " 5·3"},
+		{"сегодня", DayCell{Day: 20}, true, "[20]"},
+		{"сегодня с событиями", DayCell{Day: 17, Events: 2}, true, "[17·2]"},
+		{"пустая ячейка", DayCell{}, false, ""},
+	}
+	for _, c := range cases {
+		if got := FormatDayCell(c.cell, c.today); got != c.want {
+			t.Errorf("%s: FormatDayCell = %q, хочу %q", c.name, got, c.want)
 		}
 	}
 }

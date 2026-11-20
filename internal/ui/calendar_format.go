@@ -15,10 +15,10 @@ import (
 
 // DayCell — ячейка месячной сетки.
 type DayCell struct {
-	Day       int // 0 = пустая ячейка (соседний месяц)
-	InMonth   bool
-	HasEvents bool
-	Selected  bool
+	Day      int // 0 = пустая ячейка (соседний месяц)
+	InMonth  bool
+	Events   int // число событий дня (многодневная встреча считает каждый свой день)
+	Selected bool
 }
 
 // MonthBounds возвращает [первое число месяца 00:00 локально, последнее
@@ -30,15 +30,15 @@ func MonthBounds(year int, month time.Month) (time.Time, time.Time) {
 	return start, end
 }
 
-// MonthGrid строит сетку 6×7 (строки-недели, Пн-первая колонка) с пометками
-// дней, занятых событиями (многодневные помечают каждый свой день).
+// MonthGrid строит сетку 6×7 (строки-недели, Пн-первая колонка) с числом
+// событий по дням (многодневные считают каждый свой день).
 func MonthGrid(year int, month time.Month, events []mail.Event) [][]DayCell {
-	// Дни месяца с событиями.
-	busy := map[int]bool{}
+	// Дни месяца с числом событий.
+	count := map[int]int{}
 	for _, ev := range events {
 		for d := ev.Start.Local(); !d.After(ev.End.Local()); d = d.AddDate(0, 0, 1) {
 			if d.Month() == month && d.Year() == year {
-				busy[d.Day()] = true
+				count[d.Day()]++
 			}
 			if ev.End.Sub(ev.Start) < 24*time.Hour && ev.Start.Local().Day() != ev.End.Local().Day() {
 				break // встреча в один календарный день
@@ -58,12 +58,42 @@ func MonthGrid(year int, month time.Month, events []mail.Event) [][]DayCell {
 		grid[row] = make([]DayCell, 7)
 		for col := 0; col < 7; col++ {
 			if day >= 1 && day <= daysInMonth {
-				grid[row][col] = DayCell{Day: day, InMonth: true, HasEvents: busy[day]}
+				grid[row][col] = DayCell{Day: day, InMonth: true, Events: count[day]}
 			}
 			day++
 		}
 	}
 	return grid
+}
+
+// russianMonths — именительный падеж для заголовка панели («Ноябрь 2026»);
+// time.Month из time.Date всегда 1–12, выход за границы исключён.
+var russianMonths = [...]string{
+	"Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+	"Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+}
+
+// MonthTitle — заголовок панели месяца: «Ноябрь 2026».
+func MonthTitle(year int, month time.Month) string {
+	return fmt.Sprintf("%s %d", russianMonths[month-1], year)
+}
+
+// FormatDayCell — текст ячейки сетки месяца (UI-5): число дня, при событиях —
+// их количество («17·2»), сегодня — в скобках («[17]»/«[17·2]»).
+// WHY: выбранный день отдельного маркера не имеет — его показывает инверсия
+// выделения таблицы, поэтому маркер «сегодня» (скобки) с ним не путается.
+func FormatDayCell(cell DayCell, today bool) string {
+	if cell.Day == 0 {
+		return ""
+	}
+	text := fmt.Sprintf("%2d", cell.Day)
+	if cell.Events > 0 {
+		text += fmt.Sprintf("·%d", cell.Events)
+	}
+	if today {
+		text = "[" + text + "]"
+	}
+	return text
 }
 
 // DayEvents выбирает события, попадающие в календарный день (многодневные

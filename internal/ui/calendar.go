@@ -119,7 +119,7 @@ func monthStale(keyAtRequest, keyNow string) bool { return keyAtRequest != keyNo
 func (s *calendarScreen) loadMonth() {
 	key := s.monthKey()
 	start, end := MonthBounds(s.year, s.month)
-	s.app.setStatus(fmt.Sprintf("Загрузка календаря: %s…", s.month.String()))
+	s.app.setStatus(fmt.Sprintf("Загрузка календаря: %s…", MonthTitle(s.year, s.month)))
 	go func() {
 		raw, err := s.app.client.FindEvents(s.app.ctx, start, end)
 		if err != nil {
@@ -140,8 +140,11 @@ func (s *calendarScreen) loadMonth() {
 }
 
 // render перерисовывает сетку и выбирает текущий день (или 1-е число).
+// UI-5: заголовок «Ноябрь 2026»; «сегодня» — скобки и жирный, выбранный
+// день — инверсия выделения таблицы (разные маркеры).
 func (s *calendarScreen) render() {
 	s.grid.Clear()
+	s.grid.SetTitle(" " + MonthTitle(s.year, s.month) + " ")
 	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 	for col, name := range weekdays {
 		s.grid.SetCell(0, col, tview.NewTableCell(name).
@@ -149,6 +152,7 @@ func (s *calendarScreen) render() {
 	}
 	grid := MonthGrid(s.year, s.month, s.events)
 	now := time.Now()
+	inMonth := now.Year() == s.year && now.Month() == s.month
 	for row := 0; row < 6; row++ {
 		for col := 0; col < 7; col++ {
 			cell := grid[row][col]
@@ -156,13 +160,13 @@ func (s *calendarScreen) render() {
 				s.grid.SetCell(row+1, col, tview.NewTableCell("").SetSelectable(false))
 				continue
 			}
-			text := fmt.Sprintf("%2d", cell.Day)
-			if cell.HasEvents {
-				text = "•" + text // день с событиями
-			}
-			tc := tview.NewTableCell(text)
+			today := inMonth && cell.Day == now.Day()
+			tc := tview.NewTableCell(FormatDayCell(cell, today))
 			if col >= 5 {
 				tc.SetTextColor(colorWeekend) // Сб/Вс
+			}
+			if today {
+				tc.SetAttributes(tcell.AttrBold) // «сегодня» — скобки + жирный
 			}
 			if !cell.InMonth {
 				tc.SetTextColor(colorOtherMonth)
@@ -172,7 +176,7 @@ func (s *calendarScreen) render() {
 	}
 	// Выбор: сегодняшний дню месяца, иначе 1-е.
 	pick := 1
-	if now.Year() == s.year && now.Month() == s.month {
+	if inMonth {
 		pick = now.Day()
 	}
 	if row, col := cellOf(grid, pick); row >= 0 {
