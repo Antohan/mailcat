@@ -18,6 +18,14 @@ import (
 
 const pageSizeCap = 100 // защита от нулевого page_size в конфиге
 
+// Пропорции панелей почты в процентах ширины (RD-2, PLAN-ITER3): папки 20 /
+// список 42 / просмотр 38. tview.Flex распределяет их по весам, сумма = 100.
+const (
+	pctFolders  = 20
+	pctMessages = 42
+	pctPreview  = 38
+)
+
 // Маркеры сворачиваемой секции техпапок (UI-1). Не проходят FormatFolder —
 // статический текст, не из EWS.
 const (
@@ -32,6 +40,11 @@ type mailScreen struct {
 	folders  *tview.List
 	messages *tview.Table
 	preview  *tview.TextView
+
+	// Строки-заголовки панелей (RD-2): цвет/капс переключает paintFocusFrames.
+	foldersHeader  *panelHeader
+	messagesHeader *panelHeader
+	previewHeader  *panelHeader
 
 	// Состояние экрана.
 	folder     ews.FolderID // выбранная папка (пустая = distinguished inbox)
@@ -65,12 +78,12 @@ func newMailScreen(a *App) *mailScreen {
 		SetMainTextColor(colorTextPrimary).
 		SetSelectedBackgroundColor(colorSelectedBg).
 		SetSelectedTextColor(colorSelectedFg)
-	s.folders.SetBorder(true).SetTitle(" Папки ")
+	s.folders.SetBorder(true)
 
 	s.messages = tview.NewTable().
 		SetSelectable(true, false).
 		SetSeparator('\u2502')
-	s.messages.SetBorder(true).SetTitle(" Письма ")
+	s.messages.SetBorder(true)
 	// WHY: tview считает ширину колонки максимумом по ячейкам и выбрасывает
 	// колонки, не влезающие целиком, — длинная тема выталкивала дату за край
 	// панели (обкатка 20.11). Капы пересчитываются на каждом Draw, до
@@ -81,12 +94,19 @@ func newMailScreen(a *App) *mailScreen {
 		SetWrap(true).
 		SetScrollable(true).
 		SetDynamicColors(false) // dynamic colors — этап 3 (с tview.Escape)
-	s.preview.SetBorder(true).SetTitle(" Просмотр ")
+	s.preview.SetBorder(true)
 
+	// WHY (RD-2): рамки у неактивных панелей нет — её роль играет строка
+	// заголовка с hairline-разделителем. Пропорции — константы pct*.
+	// Не делать: возвращать заголовки в рамку (Box.SetTitle) — у неактивной
+	// панели рамки нет, и заголовок был бы не виден.
+	s.foldersHeader = newPanelHeader("Папки")
+	s.messagesHeader = newPanelHeader("Письма")
+	s.previewHeader = newPanelHeader("Просмотр")
 	s.root = tview.NewFlex().
-		AddItem(s.folders, 0, 1, false).
-		AddItem(s.messages, 0, 2, false).
-		AddItem(s.preview, 0, 2, true)
+		AddItem(panelColumn(s.foldersHeader, s.folders), 0, pctFolders, false).
+		AddItem(panelColumn(s.messagesHeader, s.messages), 0, pctMessages, false).
+		AddItem(panelColumn(s.previewHeader, s.preview), 0, pctPreview, true)
 
 	s.folders.SetChangedFunc(func(_ int, mainText, _ string, _ rune) {
 		// «Ещё ▸/▾» — не папка: смещение курсора через пункт секции

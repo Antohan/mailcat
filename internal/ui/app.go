@@ -51,7 +51,16 @@ const (
 type bordered interface {
 	tview.Primitive
 	HasFocus() bool
+	SetBorder(bool) *tview.Box
 	SetBorderColor(tcell.Color) *tview.Box
+}
+
+// focusPanel — панель и её строка-заголовок (RD-2). Рамку и заголовок
+// переключает paintFocusFrames: у активной панели рамка акцентная, у
+// остальных рамка скрыта.
+type focusPanel struct {
+	body   bordered
+	header *panelHeader
 }
 
 // App — корневое TUI-приложение mailcat.
@@ -96,8 +105,8 @@ type App struct {
 	attTempDir     string
 	attDirErr      error
 
-	// Панели, рамка активной из которых красится акцентом (UI-6).
-	focusPanels []bordered
+	// Панели, рамка активной из которых красится акцентом (UI-6, RD-2).
+	focusPanels []focusPanel
 }
 
 // New собирает приложение. Пароль уже получен вызывающим (Keychain), клиент
@@ -130,9 +139,12 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	// UI-6: рамка активной панели — акцентный цвет. Обе панели экрана
 	// (сетка и повестка) и все три панели почты; карточки и модалы —
 	// полноэкранные, остаются с обычной серой рамкой.
-	a.focusPanels = []bordered{
-		a.mail.folders, a.mail.messages, a.mail.preview,
-		a.calendar.grid, a.calendar.agenda,
+	a.focusPanels = []focusPanel{
+		{a.mail.folders, a.mail.foldersHeader},
+		{a.mail.messages, a.mail.messagesHeader},
+		{a.mail.preview, a.mail.previewHeader},
+		{a.calendar.grid, a.calendar.gridHeader},
+		{a.calendar.agenda, a.calendar.agendaHeader},
 	}
 	a.tapp.SetBeforeDrawFunc(a.paintFocusFrames)
 
@@ -471,10 +483,10 @@ func (a *App) clearError(gen int) {
 	a.setStatus("")
 }
 
-// paintFocusFrames красит рамку панели с фокусом акцентным цветом, остальные —
-// обычным серым (UI-6). Хук before-draw — единственная точка, которая видит
-// все смены фокуса: Tab/←/→ (mail.go), клик мыши, возврат из модалов (app.go,
-// links.go), старт экрана.
+// paintFocusFrames красит рамку панели с фокусом акцентным цветом, у
+// остальных прячет её (UI-6, RD-2). Хук before-draw — единственная точка,
+// которая видит все смены фокуса: Tab/←/→ (mail.go), клик мыши, возврат из
+// модалов (app.go, links.go), старт экрана.
 // WHY: не по событию SetFocus — вызовов много, один забытый и рамка врёт;
 // и не GetFocus() внутри хука — draw() уже держит мьютекс Application, а
 // GetFocus берёт его же (deadlock). HasFocus() у Box обновляется при
@@ -483,10 +495,19 @@ func (a *App) clearError(gen int) {
 // живёт в теме. Возврат false — отрисовка продолжается.
 func (a *App) paintFocusFrames(_ tcell.Screen) bool {
 	for _, p := range a.focusPanels {
-		if p.HasFocus() {
-			p.SetBorderColor(colorFocusBorder)
+		active := p.body.HasFocus()
+		if active {
+			p.body.SetBorderColor(colorFocusBorder)
 		} else {
-			p.SetBorderColor(tview.Styles.BorderColor)
+			// WHY (RD-2): рамка неактивной панели не выключается через
+			// SetBorder(false), а красится цветом поверхности — иначе при
+			// каждой смене фокуса содержимое сдвигалось бы на 2 строки и 2
+			// столбца, и раскладка «прыгала» бы на Tab.
+			// Не делать: убирать рамку у неактивных — нестабильная сетка.
+			p.body.SetBorderColor(colorPanelBg)
+		}
+		if p.header != nil {
+			p.header.setActive(active)
 		}
 	}
 	return false

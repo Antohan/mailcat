@@ -245,7 +245,8 @@ func TestOnDaySelectedAgenda(t *testing.T) {
 	if len(s.dayLinks) != 1 {
 		t.Errorf("dayLinks = %d ссылок, хочу 1 (для модала g)", len(s.dayLinks))
 	}
-	if title := s.agenda.GetTitle(); !strings.Contains(title, "1 встреча") {
+	// RD-2: заголовок панели живёт в строке-заголовке, не в рамке.
+	if title := s.agendaHeader.title; !strings.Contains(title, "1 ВСТРЕЧА") {
 		t.Errorf("заголовок панели: %q", title)
 	}
 }

@@ -21,6 +21,10 @@ type calendarScreen struct {
 	grid   *tview.Table
 	agenda *tview.List
 
+	// Строки-заголовки панелей (RD-2): месяц и повестка дня.
+	gridHeader   *panelHeader
+	agendaHeader *panelHeader
+
 	year      int
 	month     time.Month
 	events    []mail.Event // кэш текущего месяца
@@ -38,11 +42,14 @@ func newCalendarScreen(a *App) *calendarScreen {
 	s.grid = tview.NewTable().SetSelectable(true, true).SetSeparator(' ')
 	s.grid.SetBorder(true)
 	s.agenda = tview.NewList().ShowSecondaryText(false)
-	s.agenda.SetBorder(true).SetTitle(" Повестка дня ")
+	s.agenda.SetBorder(true)
 
+	// RD-2: заголовки — отдельные строки над панелями (см. panel.go).
+	s.gridHeader = newPanelHeader("Календарь")
+	s.agendaHeader = newPanelHeader("Повестка дня")
 	s.root = tview.NewFlex().
-		AddItem(s.grid, 0, 55, true).
-		AddItem(s.agenda, 0, 45, false)
+		AddItem(panelColumn(s.gridHeader, s.grid), 0, 55, true).
+		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 45, false)
 
 	s.grid.SetSelectionChangedFunc(func(row, col int) {
 		s.onDaySelected(row, col)
@@ -147,7 +154,7 @@ func (s *calendarScreen) loadMonth() {
 // день — инверсия выделения таблицы (разные маркеры).
 func (s *calendarScreen) render() {
 	s.grid.Clear()
-	s.grid.SetTitle(" " + MonthTitle(s.year, s.month) + " ")
+	s.gridHeader.SetTitle(MonthTitle(s.year, s.month))
 	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 	for col, name := range weekdays {
 		s.grid.SetCell(0, col, tview.NewTableCell(name).
@@ -210,7 +217,7 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 			s.agenda.AddItem(line, "", 0, nil)
 		}
 	}
-	s.agenda.SetTitle(" " + AgendaTitle(day, len(s.dayEvents)) + " ")
+	s.agendaHeader.SetTitle(AgendaTitle(day, len(s.dayEvents)))
 }
 
 // openEventDetails показывает детали выбранной встречи; ссылки на созвон
