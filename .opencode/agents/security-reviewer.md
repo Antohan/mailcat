@@ -1,10 +1,10 @@
 ---
 description: Ревью изменений по чек-листу docs/SECURITY.md — только чтение
 mode: subagent
-# Flash on purpose: the checklist is mechanical, the hard review points live
-# in the procedure below (invariants, budget caps). Runs once per stage over a
-# commit range, not per task.
-model: deepseek-v4.1-flash-free
+# No pinned `model:` on purpose: a model id that fails to resolve silently
+# removes the subagent from the session's list (observed with a pinned Flash
+# id — security-reviewer disappeared from the release session). The reviewer
+# inherits the session model; the mechanical checklist keeps it honest.
 permissions:
     - action: edit
       resource: "*"

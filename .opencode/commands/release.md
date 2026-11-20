@@ -18,7 +18,11 @@ stop and report; do not fix things on your own inside a release session.
    wait for the answer. Do not proceed on an assumption.
 3. Spawn `security-reviewer` over the iteration range — from the last release
    merge (currently `b53745f`) to `dev`. A verdict containing КРИТИЧНО
-   findings stops the release.
+   findings stops the release. If the subagent is not in this session's list,
+   run the same review through a general subagent — give it pointers only
+   (`docs/SECURITY.md`, invariants in `HANDOFF.md → Не трогать`), require
+   read-only behaviour and the ≤10-line verdict, and mark the final report
+   «ревью деградировано: general вместо security-reviewer».
 4. Ask: «Релизим? Merge dev → main». On an explicit «да»:
    `git checkout main` → `git merge --no-ff dev -m "Release: итерация 2 —
    <тема>"` → `git switch dev`. Both steps are permission-guarded (ask) —

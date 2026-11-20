@@ -115,8 +115,9 @@ times.
 
 **Models.** Flash by default; flagship (via `/models`) for the `ews-specialist`
 subagent and for iteration tasks where layout or link-registry design matters
-(UI-2, UI-4). `security-reviewer` runs on Flash on purpose: its checklist is
-mechanical.
+(UI-2, UI-4). `security-reviewer` inherits the session model — do not pin a
+`model:` in its file: a pinned id that fails to resolve silently removes the
+subagent from the session list (observed on the release session).
 
 ## Handoff file
 
