@@ -1,8 +1,9 @@
 package ui
 
-// Каркас TUI-приложения: страницы Почта/Календарь, статусная строка,
-// глобальные клавиши (1 — почта, 2 — календарь, q/Ctrl-C — выход).
-// Календарь на этапе 2 — заглушка (экран появится на этапе 4).
+// Каркас TUI-приложения: страницы Почта/Календарь, две строки статуса
+// (UI-9: сообщения — «Загрузка…»/ошибки/результаты, ниже — подсказки клавиш,
+// видны всегда), глобальные клавиши (1 — почта, 2 — календарь, q/Ctrl-C —
+// выход). Календарь на этапе 2 — заглушка (экран появится на этапе 4).
 
 import (
 	"context"
@@ -57,7 +58,8 @@ type bordered interface {
 type App struct {
 	tapp   *tview.Application
 	pages  *tview.Pages
-	status *tview.TextView
+	status *tview.TextView // строка сообщений (UI-9): «Загрузка…», ошибки, результаты
+	hint   *tview.TextView // строка подсказок (UI-9): видна всегда, ниже строки сообщений
 	detail *tview.TextView // экран деталей письма (страница pageDetails)
 	event  *tview.TextView // экран деталей встречи (страница pageEvent)
 
@@ -73,15 +75,15 @@ type App struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// Поколение строки статуса (UI-7): showError запускает таймер
+	// Поколение строки сообщений (UI-7): showError запускает таймер
 	// автоочистки; каждое новое сообщение меняет поколение, и устаревший
 	// таймер не затирает свежий статус.
 	statusGen int
 
 	// In-flight загрузки (UI-8): id → надпись индикатора. Пока карта не
-	// пуста, showHint показывает индикатор, а не подсказку экрана.
-	// Доступ только из главного потока TUI (ввод и QueueUpdateDraw) —
-	// без мьютекса.
+	// пуста, строка сообщений держит индикатор; строка подсказок от
+	// загрузок не зависит (UI-9). Доступ только из главного потока TUI
+	// (ввод и QueueUpdateDraw) — без мьютекса.
 	loads   map[int]string
 	loadSeq int
 
@@ -116,7 +118,8 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	}
 	a.tapp = tview.NewApplication()
 	a.pages = tview.NewPages()
-	a.status = tview.NewTextView().SetText(hintMail)
+	a.status = tview.NewTextView()
+	a.hint = tview.NewTextView().SetText(hintMail)
 
 	a.mail = newMailScreen(a)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
@@ -188,10 +191,15 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	a.event = event
 	a.pages.AddPage(pageEvent, event, true, false)
 
+	// WHY (UI-9): две строки статуса вместо одной — подсказки клавиш видны
+	// ВСЕГДА: раньше ошибки и «Загрузка…» вытесняли их из единственной строки.
+	// Не делать: вернуть совмещённую строку «сообщение поверх подсказки» —
+	// при ошибке пользователь снова теряет клавиши экрана.
 	root := tview.NewFlex().
 		SetDirection(tview.FlexRow).
 		AddItem(a.pages, 0, 1, true).
-		AddItem(a.status, 1, 0, false)
+		AddItem(a.status, 1, 0, false). // строка сообщений — над подсказками
+		AddItem(a.hint, 1, 0, false)    // строка подсказок — самая нижняя
 
 	a.tapp.SetRoot(root, true).EnableMouse(true)
 	a.tapp.SetInputCapture(a.globalKeys)
@@ -275,7 +283,8 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		case '2':
 			// Сначала страница и подсказка, потом ensureLoaded: без кэша
-			// он выведет «Загрузка…» поверх подсказки — так и задумано.
+			// он выведет «Загрузка…» в строку сообщений — подсказки
+			// останутся на месте (UI-9).
 			a.closeModals(a.calendar.grid)
 			a.pages.SwitchToPage(pageCalendar)
 			a.showHint()
@@ -355,32 +364,27 @@ func (a *App) showEventDetails(ev mail.Event) {
 	a.showHint()
 }
 
-// setStatus выводит подсказку/статус в строку состояния (текст наш, не из EWS).
-// Цвет возвращается к обычному: красным бывает только ошибка (showError).
-// Смена поколения (statusGen) гасит висящий таймер автоочистки ошибки.
+// setStatus выводит сообщение в строку сообщений (UI-9) — «Загрузка…»,
+// «Скачивание …», «Открыто: …» (текст наш, не из EWS). Цвет возвращается
+// к обычному: красным бывает только ошибка (showError). Смена поколения
+// (statusGen) гасит висящий таймер автоочистки ошибки.
 func (a *App) setStatus(text string) {
 	a.statusGen++
 	a.status.SetTextColor(tview.Styles.PrimaryTextColor)
 	a.status.SetText(text)
 }
 
-// showHint ставит подсказку текущего экрана (UI-7): у каждого экрана свой
-// набор клавиш. Вызывается после каждой смены страницы и по завершении
-// загрузок — статус-бар всегда соответствует видимому экрану.
-// WHY: при незавершённой загрузке показываем индикатор, а не подсказку —
-// смена страницы/автоочистка ошибки не должны гасить «Загрузка…» (UI-8).
+// showHint ставит подсказку текущего экрана (UI-7) в нижнюю строку (UI-9):
+// у каждого экрана свой набор клавиш, и подсказки видны ВСЕГДА — сообщения,
+// ошибки и загрузки живут строкой выше и эту строку не трогают.
 func (a *App) showHint() {
-	if label, ok := a.loadLabel(); ok {
-		a.setStatus(label)
-		return
-	}
-	a.setStatus(a.pageHint())
+	a.hint.SetText(a.pageHint())
 }
 
 // beginLoad показывает индикатор загрузки на время GetItem/FindItem (UI-8)
 // и возвращает id для endLoad. Каждая ветка завершения горутины (успех,
 // ошибка, устаревший ответ) обязана ровно один раз вызвать endLoad(id)
-// внутри QueueUpdateDraw — иначе подсказка экрана не вернётся.
+// внутри QueueUpdateDraw — иначе индикатор не погаснет.
 func (a *App) beginLoad(label string) int {
 	a.loadSeq++
 	if a.loads == nil {
@@ -391,15 +395,16 @@ func (a *App) beginLoad(label string) int {
 	return a.loadSeq
 }
 
-// endLoad снимает завершившуюся загрузку: полётов не осталось — подсказка
-// экрана, остался — надпись ещё идущей (загрузки могут перекрываться).
+// endLoad снимает завершившуюся загрузку: полётов не осталось — строка
+// сообщений гаснет (подсказки и так видны всегда), остался — надпись ещё
+// идущей (загрузки могут перекрываться).
 func (a *App) endLoad(id int) {
 	delete(a.loads, id)
 	if label, ok := a.loadLabel(); ok {
 		a.setStatus(label)
 		return
 	}
-	a.showHint()
+	a.setStatus("")
 }
 
 // loadLabel — надпись любой незавершённой загрузки; одновременно их
@@ -431,12 +436,13 @@ func (a *App) pageHint() string {
 	}
 }
 
-// showError показывает ошибку в статусной строке красным (UI-7); не падает и
+// showError показывает ошибку в строке сообщений красным (UI-7); не падает и
 // не модалит: сетевые проблемы (в т.ч. VPN) пользователь видит и может
-// повторить (u). Через errStatusTTL строка сама возвращается к подсказке
-// экрана; таймер живёт по поколению statusGen и не трогает более новый статус.
-// Текст ошибок EWS — серверный: Sanitize обязателен (§3, ревью этапа 2);
-// усечение — по рунам, чтобы не рвать кириллицу.
+// повторить (u). Через errStatusTTL строка сама гаснет (подсказки — в своей
+// строке ниже, их ошибка не трогает, UI-9); таймер живёт по поколению
+// statusGen и не трогает более новый статус. Текст ошибок EWS — серверный:
+// Sanitize обязателен (§3, ревью этапа 2); усечение — по рунам, чтобы не
+// рвать кириллицу.
 func (a *App) showError(err error) {
 	msg := security.Sanitize(err.Error())
 	if runes := []rune(msg); len(runes) > 200 {
@@ -451,13 +457,18 @@ func (a *App) showError(err error) {
 	})
 }
 
-// clearError возвращает подсказку экрана после таймаута ошибки (UI-7).
+// clearError гасит сообщение после таймаута ошибки (UI-7): идёт загрузка —
+// в строке сообщений возвращается её индикатор, иначе строка пуста.
 // Поколение не совпало — статус уже сменился, ничего не трогаем.
 func (a *App) clearError(gen int) {
 	if a.statusGen != gen {
 		return
 	}
-	a.showHint()
+	if label, ok := a.loadLabel(); ok {
+		a.setStatus(label)
+		return
+	}
+	a.setStatus("")
 }
 
 // paintFocusFrames красит рамку панели с фокусом акцентным цветом, остальные —

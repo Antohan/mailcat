@@ -182,7 +182,7 @@ func (s *mailScreen) loadFolders() {
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.mainFolders, s.techFolders = SplitFolders(folders, s.app.cfg.UI.HiddenFolders)
 			s.renderFolders()
-			s.app.endLoad(id) // вернёт подсказку; selectFolder сменит на «Загрузка писем…»
+			s.app.endLoad(id) // погасит индикатор; selectFolder сменит на «Загрузка писем…»
 			// Стартуем с входящих (distinguished) — отдельным запросом.
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})

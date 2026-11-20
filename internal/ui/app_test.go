@@ -122,17 +122,21 @@ func TestPageHint(t *testing.T) {
 	}
 }
 
-// TestErrorAutoClear (UI-7): после таймаута ошибка сменяется подсказкой
-// экрана; таймер с устаревшим поколением свежий статус не затирает.
+// TestErrorAutoClear (UI-7/UI-9): ошибка живёт в строке сообщений и не
+// трогает строку подсказок; после таймаута сообщение гаснет; таймер с
+// устаревшим поколением свежий статус не затирает.
 func TestErrorAutoClear(t *testing.T) {
 	a := newTestApp(t)
 	a.showError(errors.New("сеть недоступна"))
 	if text := a.status.GetText(false); !strings.Contains(text, "Ошибка") {
 		t.Fatalf("ошибка не показана: %q", text)
 	}
+	if got := a.hint.GetText(false); got != hintMail {
+		t.Errorf("ошибка затронула строку подсказок: %q", got)
+	}
 	a.clearError(a.statusGen) // то, что таймер прислал бы в QueueUpdateDraw
-	if text := a.status.GetText(false); text != hintMail {
-		t.Errorf("после таймаута нет подсказки экрана: %q", text)
+	if text := a.status.GetText(false); text != "" {
+		t.Errorf("сообщение не погасло после таймаута: %q", text)
 	}
 	// Статус сменился после ошибки — таймер должен устареть.
 	a.showError(errors.New("вторая ошибка"))
@@ -143,14 +147,17 @@ func TestErrorAutoClear(t *testing.T) {
 	}
 }
 
-// TestLoadIndicator (UI-8): пока GetItem/FindItem в полёте, статус-бар держит
-// индикатор загрузки — подсказка экрана (смена страницы, автоочистка ошибки)
-// его не затирает; последняя endLoad возвращает подсказку экрана.
+// TestLoadIndicator (UI-8/UI-9): индикатор загрузки живёт в строке сообщений
+// и сосуществует с подсказками — смена страницы и автоочистка ошибки надпись
+// не затирают; последняя endLoad гасит строку сообщений, подсказки остаются.
 func TestLoadIndicator(t *testing.T) {
 	a := newTestApp(t)
 	id := a.beginLoad("Загрузка писем…")
 	if text := a.status.GetText(false); text != "Загрузка писем…" {
 		t.Fatalf("индикатор не показан: %q", text)
+	}
+	if got := a.hint.GetText(false); got != hintMail {
+		t.Fatalf("подсказки пропали во время загрузки: %q", got)
 	}
 	a.showHint() // смена страницы во время загрузки
 	if text := a.status.GetText(false); text != "Загрузка писем…" {
@@ -162,14 +169,37 @@ func TestLoadIndicator(t *testing.T) {
 	if text := a.status.GetText(false); text != "Загрузка писем…" {
 		t.Errorf("надпись ещё идущей загрузки потеряна: %q", text)
 	}
-	// Ошибка во время загрузки: автоочистка возвращает индикатор, не подсказку.
+	// Ошибка во время загрузки: автоочистка возвращает индикатор, не пустую строку.
 	a.showError(errors.New("сбой"))
 	a.clearError(a.statusGen) // то, что таймер прислал бы в QueueUpdateDraw
 	if text := a.status.GetText(false); text != "Загрузка писем…" {
 		t.Errorf("после ошибки не вернулся индикатор загрузки: %q", text)
 	}
 	a.endLoad(id)
-	if text := a.status.GetText(false); text != hintMail {
-		t.Errorf("после последней загрузки нет подсказки экрана: %q", text)
+	if text := a.status.GetText(false); text != "" {
+		t.Errorf("после последней загрузки строка сообщений не погасла: %q", text)
+	}
+	if got := a.hint.GetText(false); got != hintMail {
+		t.Errorf("подсказки после загрузки не на месте: %q", got)
+	}
+}
+
+// TestHintLineFollowsPages (UI-9): нижняя строка — подсказки видимого экрана,
+// видны ВСЕГДА: сообщения, ошибки и загрузки их не меняют.
+func TestHintLineFollowsPages(t *testing.T) {
+	a := newTestApp(t)
+	a.pages.SwitchToPage(pageCalendar)
+	a.showHint()
+	if got := a.hint.GetText(false); got != hintCalendar {
+		t.Errorf("строка подсказок не сменилась со страницей: %q", got)
+	}
+	id := a.beginLoad("Загрузка календаря…")
+	a.showError(errors.New("сбой"))
+	if got := a.hint.GetText(false); got != hintCalendar {
+		t.Errorf("сообщение/ошибка затронули строку подсказок: %q", got)
+	}
+	a.endLoad(id)
+	if got := a.hint.GetText(false); got != hintCalendar {
+		t.Errorf("конец загрузки затронул строку подсказок: %q", got)
 	}
 }
