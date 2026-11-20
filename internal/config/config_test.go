@@ -131,6 +131,24 @@ func TestMissingFile(t *testing.T) {
 	}
 }
 
+// TestLoadHiddenFolders: [ui] hidden_folders читается списком (iter2 UI-1:
+// техпапки, которые пользователь хочет скрыть полностью).
+func TestLoadHiddenFolders(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.toml")
+	toml := "server = \"https://mail.example\"\nusername = 'COMPANY\\ivanov'\n\n[ui]\nhidden_folders = [\"Спам\", \"Опции\"]\n"
+	if err := os.WriteFile(path, []byte(toml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.UI.HiddenFolders) != 2 || cfg.UI.HiddenFolders[0] != "Спам" || cfg.UI.HiddenFolders[1] != "Опции" {
+		t.Errorf("UI.HiddenFolders = %v, хочу [Спам Опции]", cfg.UI.HiddenFolders)
+	}
+}
+
 // TestValidate: таблица некорректных значений -> ошибки на русском.
 func TestValidate(t *testing.T) {
 	cases := []struct {

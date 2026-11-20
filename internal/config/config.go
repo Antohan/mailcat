@@ -30,7 +30,8 @@ type Config struct {
 
 // UI — настройки интерфейса.
 type UI struct {
-	Language string `toml:"language"`
+	Language      string   `toml:"language"`
+	HiddenFolders []string `toml:"hidden_folders"` // точные имена папок: не показывать в панели вообще (iter2 UI-1)
 }
 
 // Notify — правила уведомлений о новых письмах.

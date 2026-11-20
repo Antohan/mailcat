@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/rivo/tview"
@@ -48,6 +49,65 @@ func FormatFolder(f mail.Folder) string {
 		return fmt.Sprintf("%s (%d)", name, f.UnreadCount)
 	}
 	return name
+}
+
+// standardFolders — фиксированный порядок стандартных папок в панели (UI-1).
+var standardFolders = []string{
+	"Входящие", "Черновики", "Исходящие", "Отправленные", "Удалённые", "Нежелательная",
+}
+
+// technicalFolders — служебные папки, замеченные на живом сервере (обкатка
+// 20.11): в основном списке — шум, но клиент read-only и «спрятать» ≠
+// «удалить», поэтому они уходят в сворачиваемую секцию «Ещё ▸», а не в никуда.
+// WHY: точный список, а не эвристика по имени — незнакомую папку можно
+// принять за пользовательскую; additions — через ui.hidden_folders в конфиге.
+var technicalFolders = map[string]bool{
+	"Conversation Action Settings": true,
+	"Корневая папка Yammer":        true,
+	"Опции":                        true,
+}
+
+// SplitFolders делит ответ FindFolder для панели «Папки» (UI-1): основной
+// список — стандартные в порядке standardFolders, затем остальные по
+// алфавиту (байтовый порядок stdlib: латиница раньше кириллицы; approved-
+// deps не включают x/text/collate, а смешанных алфавитов в одном ящике
+// почти не бывает); technicalFolders — отдельным списком для «Ещё ▸».
+// hidden — точные имена из ui.hidden_folders, исключаются полностью.
+func SplitFolders(folders []mail.Folder, hidden []string) (main, technical []mail.Folder) {
+	hiddenSet := make(map[string]bool, len(hidden))
+	for _, h := range hidden {
+		hiddenSet[h] = true
+	}
+	main = make([]mail.Folder, 0, len(folders))
+	for _, f := range folders {
+		switch {
+		case hiddenSet[f.DisplayName]:
+			// полностью скрыта пользователем
+		case technicalFolders[f.DisplayName]:
+			technical = append(technical, f)
+		default:
+			main = append(main, f)
+		}
+	}
+	rank := func(f mail.Folder) int {
+		for i, name := range standardFolders {
+			if f.DisplayName == name {
+				return i
+			}
+		}
+		return len(standardFolders)
+	}
+	sort.SliceStable(main, func(i, j int) bool {
+		ri, rj := rank(main[i]), rank(main[j])
+		if ri != rj {
+			return ri < rj
+		}
+		return main[i].DisplayName < main[j].DisplayName
+	})
+	sort.Slice(technical, func(i, j int) bool {
+		return technical[i].DisplayName < technical[j].DisplayName
+	})
+	return main, technical
 }
 
 // FormatMessageHeader — блок заголовков письма для панели просмотра:

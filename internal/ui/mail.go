@@ -17,6 +17,13 @@ import (
 
 const pageSizeCap = 100 // защита от нулевого page_size в конфиге
 
+// Маркеры сворачиваемой секции техпапок (UI-1). Не проходят FormatFolder —
+// статический текст, не из EWS.
+const (
+	moreFoldersClosed = "Ещё ▸"
+	moreFoldersOpen   = "Ещё ▾"
+)
+
 type mailScreen struct {
 	app  *App
 	root *tview.Flex
@@ -32,6 +39,11 @@ type mailScreen struct {
 	offset     int  // Offset следующей страницы FindItem
 	lastPage   bool // IncludesLastItemInRange последней страницы
 	loading    bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
+
+	// Папки панели (UI-1): основной список и техпапки секции «Ещё ▸».
+	mainFolders []mail.Folder
+	techFolders []mail.Folder
+	techOpen    bool
 	// WHY: поколение выбора папки — ответ, пришедший после переключения,
 	// относится к прежней папке и не должен стирать уже загруженный список.
 	// Не делать: сравнивать имя папки вместо поколения — при возврате A→B→A
@@ -71,6 +83,11 @@ func newMailScreen(a *App) *mailScreen {
 		AddItem(s.preview, 0, 2, true)
 
 	s.folders.SetChangedFunc(func(_ int, mainText, _ string, _ rune) {
+		// «Ещё ▸/▾» — не папка: смещение курсора через пункт секции
+		// не должно подменять имя текущей папки.
+		if mainText == moreFoldersClosed || mainText == moreFoldersOpen {
+			return
+		}
 		s.folderName = mainText
 	})
 	s.folders.SetSelectedFunc(func(_ int, _ string, _ string, _ rune) {
@@ -138,8 +155,9 @@ func (s *mailScreen) openDetails(row int) {
 	}()
 }
 
-// loadFolders заполняет панель папок (FindFolder от msgfolderroot) и открывает
-// «Входящие» (distinguished inbox — первая страница писем).
+// loadFolders заполняет панель папок (FindFolder от msgfolderroot): основной
+// список + техпапки в секции «Ещё ▸» (UI-1) — и открывает «Входящие»
+// (distinguished inbox — первая страница писем).
 func (s *mailScreen) loadFolders() {
 	s.app.setStatus("Загрузка папок…")
 	go func() {
@@ -150,18 +168,50 @@ func (s *mailScreen) loadFolders() {
 		}
 		folders := mail.Folders(list)
 		s.app.tapp.QueueUpdateDraw(func() {
-			s.folders.Clear()
-			for _, f := range folders {
-				display := FormatFolder(f)
-				s.folders.AddItem(display, "", 0, func() {
-					s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, display)
-				})
-			}
+			s.mainFolders, s.techFolders = SplitFolders(folders, s.app.cfg.UI.HiddenFolders)
+			s.renderFolders()
 			s.app.setStatus(statusHelpFmt)
 			// Стартуем с входящих (distinguished) — отдельным запросом.
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})
 	}()
+}
+
+// renderFolders перестраивает панель целиком: основной список, затем пункт
+// «Ещё ▸/▾» и, когда секция развернута, техпапки. Целиком — потому что
+// сворачивание/разворачивание меняет хвост списка одним махом.
+func (s *mailScreen) renderFolders() {
+	s.folders.Clear()
+	add := func(f mail.Folder) {
+		display := FormatFolder(f)
+		s.folders.AddItem(display, "", 0, func() {
+			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, display)
+		})
+	}
+	for _, f := range s.mainFolders {
+		add(f)
+	}
+	if len(s.techFolders) == 0 {
+		return
+	}
+	mark := moreFoldersClosed
+	if s.techOpen {
+		mark = moreFoldersOpen
+	}
+	s.folders.AddItem(mark, "", 0, s.toggleTech)
+	if s.techOpen {
+		for _, f := range s.techFolders {
+			add(f)
+		}
+	}
+}
+
+// toggleTech сворачивает/разворачивает секцию техпапок. Курсор возвращается
+// на пункт «Ещё», чтобы повторное Enter срабатывало как сворачивание.
+func (s *mailScreen) toggleTech() {
+	s.techOpen = !s.techOpen
+	s.renderFolders()
+	s.folders.SetCurrentItem(len(s.mainFolders))
 }
 
 // selectFolder переключает текущую папку и сбрасывает список.
