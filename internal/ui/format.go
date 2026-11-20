@@ -144,8 +144,12 @@ func SplitFolders(folders []mail.Folder, hidden []string) (main, technical []mai
 }
 
 // FormatMessageHeader — блок заголовков письма для панели просмотра:
-// От/Кому/Дата/Тема. Реальный адрес отправителя показывается всегда
-// (SECURITY.md §4.1).
+// От/Кому/Дата/Тема + 📎 N при вложениях (UI-3, метаданные GetItem).
+// WHY: маркер — в строке темы, а не отдельной строкой: ниже в карточке
+// FormatAttachments уже печатает список с заголовком «Вложения:».
+// Важность (⚠) не показывается: item:Importance нет в EWS-REFERENCE, с
+// сервера не приходит (открытый вопрос в HANDOFF «Открыто»).
+// Реальный адрес отправителя показывается всегда (SECURITY.md §4.1).
 func FormatMessageHeader(m mail.Message) string {
 	var b strings.Builder
 	b.WriteString("От:    " + security.Sanitize(m.From.String()) + "\n")
@@ -155,7 +159,11 @@ func FormatMessageHeader(m mail.Message) string {
 	if !m.Received.IsZero() {
 		b.WriteString("Дата:  " + m.Received.Local().Format("02.01.2006 15:04") + "\n")
 	}
-	b.WriteString("Тема:  " + security.Sanitize(m.Subject) + "\n")
+	topic := "Тема:  " + security.Sanitize(m.Subject)
+	if n := len(m.Attachments); n > 0 {
+		topic += fmt.Sprintf("  📎 %d", n)
+	}
+	b.WriteString(topic + "\n")
 	return b.String()
 }
 

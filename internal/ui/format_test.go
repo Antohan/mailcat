@@ -130,20 +130,28 @@ func TestFormatFolder(t *testing.T) {
 	}
 }
 
-// TestFormatMessageHeader: блок заголовков для панели просмотра.
+// TestFormatMessageHeader: блок заголовков для панели просмотра;
+// UI-3 — 📎 N при вложениях (метаданные GetItem), без вложений маркера нет.
 func TestFormatMessageHeader(t *testing.T) {
 	m := mail.Message{
 		MessageSummary: mail.MessageSummary{
 			Subject: "Отчёт Q3",
 			From:    mail.Address{Name: "Иванов И.", Email: "ivanov@company.example"},
 		},
-		To: []mail.Address{{Email: "apetrova@company.example"}, {Email: "vsidorov@company.example"}},
+		To:          []mail.Address{{Email: "apetrova@company.example"}, {Email: "vsidorov@company.example"}},
+		Attachments: []mail.Attachment{{Name: "report.pdf"}, {Name: "данные.csv"}},
 	}
 	h := FormatMessageHeader(m)
-	for _, want := range []string{"От:", "Иванов И. <ivanov@company.example>", "Кому:", "apetrova@company.example", "vsidorov@company.example", "Тема:", "Отчёт Q3"} {
+	for _, want := range []string{"От:", "Иванов И. <ivanov@company.example>", "Кому:", "apetrova@company.example", "vsidorov@company.example", "Тема:", "Отчёт Q3", "📎 2"} {
 		if !contains(h, want) {
 			t.Errorf("в заголовках нет %q:\n%s", want, h)
 		}
+	}
+	bare := FormatMessageHeader(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "Пусто", From: mail.Address{Email: "a@b.c"}},
+	})
+	if contains(bare, "📎") {
+		t.Errorf("маркер 📎 без вложений:\n%s", bare)
 	}
 }
 
