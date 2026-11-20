@@ -76,11 +76,11 @@ func TestFormatMessageRowEscaped(t *testing.T) {
 // TestFormatFolderEscaped: имя папки с тегом экранируется для tview.List.
 // Кириллица в скобках ([ВХОД]) тегом не является — проходит как есть.
 func TestFormatFolderEscaped(t *testing.T) {
-	got := FormatFolder(mail.Folder{DisplayName: `["x"]Входящие`})
+	got := FormatFolder(mail.Folder{DisplayName: `["x"]Входящие`}, false)
 	if !strings.Contains(got, `["x"[]`) {
 		t.Errorf("имя папки не экранировано: %q", got)
 	}
-	if got2 := FormatFolder(mail.Folder{DisplayName: `[ВХОД]ящик`}); got2 != `[ВХОД]ящик` {
+	if got2 := FormatFolder(mail.Folder{DisplayName: `[ВХОД]ящик`}, false); !strings.Contains(got2, `[ВХОД]ящик`) {
 		t.Errorf("безопасные скобки искажены: %q", got2)
 	}
 }

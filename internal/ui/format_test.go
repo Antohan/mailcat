@@ -4,6 +4,7 @@ package ui
 // через security.Sanitize (SECURITY.md §3: граница UI) — это фиксируется здесь.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -118,15 +119,45 @@ func TestFormatMessageRowSanitized(t *testing.T) {
 	}
 }
 
-// TestFormatFolder: имя папки + счётчик непрочитанных.
+// TestFormatFolder: иконка стандартной папки, выравнивание счётчика на
+// колонку folderNameCol, счётчик — цветовой тег textSecondary (RD-3).
+// Тема в тестах переключаема, поэтому проверяем структуру, а не hex цвета.
 func TestFormatFolder(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	if got := FormatFolder(f); got != "Входящие (23)" {
-		t.Errorf("FormatFolder = %q", got)
+	got := FormatFolder(f, false)
+	if !strings.HasPrefix(got, "📥 Входящие") {
+		t.Errorf("нет иконки входящих: %q", got)
+	}
+	if !strings.Contains(got, "[#") || !strings.HasSuffix(got, "](23)") {
+		t.Errorf("счётчик без цвета textSecondary/не прижат: %q", got)
+	}
+	if width := displayWidth("📥 Входящие"); !strings.Contains(got, strings.Repeat(" ", folderNameCol-width)) {
+		t.Errorf("счётчик не выровнен на колонку %d: %q", folderNameCol, got)
 	}
 	f2 := mail.Folder{DisplayName: "Отправленные"}
-	if got := FormatFolder(f2); got != "Отправленные" {
-		t.Errorf("FormatFolder без непрочитанных = %q", got)
+	if got2 := FormatFolder(f2, false); !strings.HasPrefix(got2, "📤 Отправленные") || strings.Contains(got2, "(0)") {
+		t.Errorf("FormatFolder без непрочитанных = %q", got2)
+	}
+	// Нестандартная папка: отступ вместо иконки, тегов в имени нет.
+	f3 := mail.Folder{DisplayName: "Архив"}
+	if got3 := FormatFolder(f3, false); !strings.HasPrefix(got3, "   Архив") {
+		t.Errorf("нет отступа у нестандартной папки: %q", got3)
+	}
+}
+
+// TestFormatFolderActive: открытая папка — текст accent + жирный (RD-3);
+// счётчик остаётся вторичным, акцентируется только имя.
+func TestFormatFolderActive(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	got := FormatFolder(f, true)
+	if !strings.Contains(got, "::b]") {
+		t.Errorf("активная папка не жирная: %q", got)
+	}
+	if !strings.Contains(got, fmt.Sprintf("[%s::b]", hexTag(colorAccent))) {
+		t.Errorf("активная папка не accent: %q", got)
+	}
+	if got := FormatFolder(f, false); strings.Contains(got, "::b]") {
+		t.Errorf("неактивная папка жирная: %q", got)
 	}
 }
 

@@ -4,6 +4,7 @@ package ui
 // фиксированный порядок, остальные — алфавит, техпапки — секция «Ещё ▸».
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/rivo/tview"
@@ -91,8 +92,8 @@ func TestRenderFoldersToggle(t *testing.T) {
 	if main, _ := s.folders.GetItemText(1); main != "Ещё ▸" {
 		t.Errorf("маркер секции = %q, хочу «Ещё ▸»", main)
 	}
-	if main, _ := s.folders.GetItemText(0); main != "Входящие (2)" {
-		t.Errorf("первый пункт = %q, хочу «Входящие (2)»", main)
+	if main, _ := s.folders.GetItemText(0); !strings.Contains(main, "📥 Входящие") || !strings.HasSuffix(main, "](2)") {
+		t.Errorf("первый пункт = %q, хочу «📥 Входящие» со счётчиком 2", main)
 	}
 
 	s.toggleTech()

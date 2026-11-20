@@ -5,7 +5,6 @@ package ui
 // QueueUpdateDraw), поэтому мьютекс не нужен (ARCHITECTURE.md §3).
 
 import (
-	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -58,6 +57,10 @@ type mailScreen struct {
 	mainFolders []mail.Folder
 	techFolders []mail.Folder
 	techOpen    bool
+	// folderRows — папка на каждой строке списка (индексы совпадают с пунктами
+	// tview.List, у «Ещё ▸/▾» нулевая папка); по ней активная папка красится
+	// и восстанавливается при движении курсора.
+	folderRows []mail.Folder
 	// WHY: поколение выбора папки — ответ, пришедший после переключения,
 	// относится к прежней папке и не должен стирать уже загруженный список.
 	// Не делать: сравнивать имя папки вместо поколения — при возврате A→B→A
@@ -108,13 +111,17 @@ func newMailScreen(a *App) *mailScreen {
 		AddItem(panelColumn(s.messagesHeader, s.messages), 0, pctMessages, false).
 		AddItem(panelColumn(s.previewHeader, s.preview), 0, pctPreview, true)
 
-	s.folders.SetChangedFunc(func(_ int, mainText, _ string, _ rune) {
+	s.folders.SetChangedFunc(func(i int, mainText, _ string, _ rune) {
 		// «Ещё ▸/▾» — не папка: смещение курсора через пункт секции
 		// не должно подменять имя текущей папки.
 		if mainText == moreFoldersClosed || mainText == moreFoldersOpen {
 			return
 		}
-		s.folderName = mainText
+		if i < len(s.folderRows) {
+			s.folderName = s.folderRows[i].DisplayName
+		}
+		// Курсор въехал/съехал с открытой папки — там другой вид строки.
+		s.applyActiveFolderStyle()
 	})
 	s.folders.SetSelectedFunc(func(_ int, _ string, _ string, _ rune) {
 		s.app.tapp.SetFocus(s.messages)
@@ -214,16 +221,19 @@ func (s *mailScreen) loadFolders() {
 // сворачивание/разворачивание меняет хвост списка одним махом.
 func (s *mailScreen) renderFolders() {
 	s.folders.Clear()
+	s.folderRows = nil
 	add := func(f mail.Folder) {
-		display := FormatFolder(f)
+		s.folderRows = append(s.folderRows, f)
+		display := FormatFolder(f, s.isActiveFolder(f))
 		s.folders.AddItem(display, "", 0, func() {
-			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, display)
+			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, f.DisplayName)
 		})
 	}
 	for _, f := range s.mainFolders {
 		add(f)
 	}
 	if len(s.techFolders) == 0 {
+		s.applyActiveFolderStyle()
 		return
 	}
 	mark := moreFoldersClosed
@@ -235,6 +245,34 @@ func (s *mailScreen) renderFolders() {
 		for _, f := range s.techFolders {
 			add(f)
 		}
+	}
+	s.applyActiveFolderStyle()
+}
+
+// isActiveFolder — строка соответствует открытой папке. ID пуст только у
+// distinguished inbox на старте — тогда сравниваем по имени.
+// WHY: имя, а не ID, ровно до первого переключения папки; сравнение по ID
+// после загрузки — надёжно и не зависит от переименований.
+func (s *mailScreen) isActiveFolder(f mail.Folder) bool {
+	if s.folder.ID != "" {
+		return f.ID == s.folder.ID
+	}
+	return f.DisplayName == s.folderName
+}
+
+// applyActiveFolderStyle — вид строки открытой папки: accent + жирный, но
+// БЕЗ тегов, когда курсор стоит на ней самой.
+// WHY: выделенная строка красится инверсией (фон accent, инвариант RD-1),
+// и accent-текст на accent-фоне становится невидимым; у выделенной строки
+// остаётся штатный вид инверсии. SetItemText не будит SetChangedFunc —
+// рекурсии нет.
+func (s *mailScreen) applyActiveFolderStyle() {
+	cursor := s.folders.GetCurrentItem()
+	for i, f := range s.folderRows {
+		if !s.isActiveFolder(f) {
+			continue
+		}
+		s.folders.SetItemText(i, FormatFolder(f, i != cursor), "")
 	}
 }
 
@@ -397,14 +435,16 @@ func (s *mailScreen) showPreview(row int) {
 
 // updateInboxUnread обновляет счётчик непрочитанных «Входящих» из watcher'а
 // (этап 6: QueueUpdateDraw). n<0 — счётчик неизвестен, пункт не трогаем.
+// Источник истины — mainFolders, а не текст строки: текст теперь содержит
+// иконку и цветовые теги (RD-3), по нему матчиться нельзя.
 func (s *mailScreen) updateInboxUnread(n int) {
 	if n < 0 {
 		return
 	}
-	for i := 0; i < s.folders.GetItemCount(); i++ {
-		main, _ := s.folders.GetItemText(i)
-		if strings.HasPrefix(main, "Входящие") {
-			s.folders.SetItemText(i, FormatFolder(mail.Folder{DisplayName: "Входящие", UnreadCount: n}), "")
+	for i := range s.mainFolders {
+		if s.mainFolders[i].DisplayName == "Входящие" {
+			s.mainFolders[i].UnreadCount = n
+			s.renderFolders()
 			return
 		}
 	}

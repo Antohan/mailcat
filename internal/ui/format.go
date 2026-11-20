@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"mailcat/internal/mail"
@@ -74,14 +76,67 @@ func FormatMessageRow(m mail.MessageSummary, orgDomains []string, now time.Time)
 	}
 }
 
-// FormatFolder — пункт списка папок с счётчиком непрочитанных; Sanitize +
-// tview.Escape (List интерпретирует теги безусловно).
-func FormatFolder(f mail.Folder) string {
-	name := tview.Escape(security.Sanitize(f.DisplayName))
-	if f.UnreadCount > 0 {
-		return fmt.Sprintf("%s (%d)", name, f.UnreadCount)
+// folderIcons — unicode-иконки стандартных папок (RD-3); остальные папки —
+// без иконки, с отступом под иконку. Точный список, а не эвристика по
+// подстроке: «Архив Входящие» не должен получить иконку входящих.
+var folderIcons = map[string]string{
+	"Входящие":      "📥",
+	"Отправленные":  "📤",
+	"Черновики":     "📝",
+	"Удалённые":     "🗑",
+	"Нежелательная": "🚫",
+}
+
+// folderNameCol — ширина колонки имени (иконка/отступ + имя): 3 клетки на
+// иконку-эмодзи (двойная ширина) и 13 на «Нежелательная». Счётчик прижат
+// вправо выравниванием на эту колонку; у более длинных имён — минимальный
+// отступ в 1 клетку.
+const folderNameCol = 16
+
+// displayWidth — наивная ширина в клетках терминала: руны по одной, плюс
+// лишняя клетка на каждый эмодзи из folderIcons (в Terminal.app они двойной
+// ширины — это и проверяем). WHY: считаем только собственные иконки, а не
+// общий west-asian-алгоритм — зависимость uniseg не одобрена (AGENTS.md §6),
+// а имена с CJK дают заниженную ширину; выравнивание best effort.
+func displayWidth(s string) int {
+	w := utf8.RuneCountInString(s)
+	for _, icon := range folderIcons {
+		if strings.Contains(s, icon) {
+			w += utf8.RuneCountInString(icon)
+		}
 	}
-	return name
+	return w
+}
+
+// hexTag — цвет роли темы в виде тега tview («#2563eb»), чтобы цвет строки
+// менялся вместе с темой, а не был захардкожен в тексте.
+func hexTag(c tcell.Color) string {
+	return fmt.Sprintf("#%06x", c.Hex())
+}
+
+// FormatFolder — пункт списка папок: иконка/отступ, имя, счётчик непрочитанных
+// цветом textSecondary (прижат вправо на folderNameCol). active — папка
+// открыта: текст accent + жирный. Sanitize + tview.Escape сохраняются (List
+// интерпретирует теги безусловно — данные экранируются, теги наши).
+func FormatFolder(f mail.Folder, active bool) string {
+	indent, hasIcon := folderIcons[f.DisplayName]
+	if !hasIcon {
+		indent = "   "
+	} else {
+		indent += " "
+	}
+	pad := folderNameCol - displayWidth(indent) - utf8.RuneCountInString(f.DisplayName)
+	if pad < 1 {
+		pad = 1
+	}
+	row := indent + tview.Escape(security.Sanitize(f.DisplayName)) + strings.Repeat(" ", pad)
+	if active {
+		row = fmt.Sprintf("[%s::b]%s[-::-]", hexTag(colorAccent), row)
+	}
+	if f.UnreadCount > 0 {
+		return fmt.Sprintf("%s[%s](%d)", row, hexTag(colorTextSecondary), f.UnreadCount)
+	}
+	return row
 }
 
 // standardFolders — фиксированный порядок стандартных папок в панели (UI-1).
