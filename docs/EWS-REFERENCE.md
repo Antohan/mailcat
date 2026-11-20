@@ -103,14 +103,9 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 ```xml
 <m:FindItem Traversal="Shallow">
   <m:ItemShape>
-    <t:BaseShape>IdOnly</t:BaseShape>
+    <t:BaseShape>Default</t:BaseShape>
     <t:AdditionalProperties>
-      <t:FieldURI FieldURI="item:Subject"/>
       <t:FieldURI FieldURI="item:DateTimeReceived"/>
-      <t:FieldURI FieldURI="item:IsRead"/>
-      <t:FieldURI FieldURI="item:HasAttachments"/>
-      <t:FieldURI FieldURI="message:From"/>
-      <t:FieldURI FieldURI="message:Sender"/>
     </t:AdditionalProperties>
   </m:ItemShape>
   <m:IndexedPageItemView MaxEntriesReturned="50" Offset="0" BasePoint="Beginning"/>
@@ -125,6 +120,12 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   </m:ParentFolderIds>
 </m:FindItem>
 ```
+
+Форма `Default` (не `IdOnly` + список FieldURI): Default сам возвращает
+`Subject`, `IsRead`, `From`, `HasAttachments`; `DateTimeReceived` в Default
+нет — добирается единственным FieldURI. Проверено на живом Exchange 2019
+(15.2.2562): `item:IsRead` в AdditionalProperties → HTTP 500
+`ErrorInvalidRequest` — не использовать (остальные FieldURI проходят).
 
 Ответ (сокращённо):
 
@@ -161,7 +162,6 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 <m:GetItem>
   <m:ItemShape>
     <t:BaseShape>Default</t:BaseShape>
-    <t:BodyType BodyType="Best"/>
     <t:AdditionalProperties>
       <t:FieldURI FieldURI="item:TextBody"/>
       <t:FieldURI FieldURI="message:InternetMessageId"/>
@@ -176,10 +176,14 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 </m:GetItem>
 ```
 
+Без `t:BodyType@BodyType="Best"`: живой Exchange 2019 (15.2.2562) отвечает
+500 `ErrorInvalidRequest` на BodyType в ItemShape (проверено изолированно,
+без него все FieldURI проходят). TextBody от BodyType не зависит.
+
 Ответ — `m:GetItemResponseMessage/m:Items/t:Message` с:
-- `<t:Body BodyType="Html">…</t:Body>` (или `Text`) — при `BodyType="Best"` сервер сам
-  выбирает лучший вариант; HTML конвертируем в текст на клиенте (html2text);
-- `<t:TextBody>` — готовый текстовый вариант (если сервер вернул);
+- `<t:TextBody>` — готовый текстовый вариант (основной путь);
+- `<t:Body BodyType="Html">…</t:Body>` — если сервер вернул только HTML,
+  конвертируем в текст на клиенте (html2text, оффлайн-fallback);
 - `<t:Attachments>` — список вложений:
   `<t:FileAttachment><t:AttachmentId Id="AAMk..."/><t:Name>report.pdf</t:Name>
   <t:ContentType>application/pdf</t:ContentType><t:ContentLength>2097152</t:ContentLength>
@@ -218,11 +222,6 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   </m:ItemShape>
   <m:CalendarView StartDate="2026-11-01T00:00:00Z" EndDate="2026-11-30T23:59:59Z"
                   MaxEntriesReturned="500"/>
-  <m:SortOrder>
-    <t:FieldOrder Order="Ascending">
-      <t:FieldURI FieldURI="calendar:Start"/>
-    </t:FieldOrder>
-  </m:SortOrder>
   <m:ParentFolderIds>
     <t:DistinguishedFolderId Id="calendar"/>
   </m:ParentFolderIds>
@@ -253,6 +252,8 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   Это read-only свойство — показываем «вы приняли/под вопросом/не ответили».
 - С `CalendarView` НЕ используется `IndexedPageItemView` — пагинации нет, ставим
   разумный `MaxEntriesReturned`.
+- С `CalendarView` запрещены `SortOrder` и `Restriction` (ErrorInvalidOperation,
+  правило протокола): ответ всегда упорядочен сервером по `Start` по возрастанию.
 - Даты — xs:dateTime c смещением; в запросе используем UTC (`Z`), в UI показываем в
   локальной зоне.
 
@@ -268,7 +269,7 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 |---|---|
 | `item:Subject`, `item:DateTimeReceived`, `item:DateTimeSent` | тема, даты |
 | `item:IsRead`, `item:HasAttachments` | флаги |
-| `item:TextBody`, `item:Body` (через BodyType) | тело |
+| `item:TextBody` | тело (текст) |
 | `message:From`, `message:Sender` | отправитель |
 | `message:ToRecipients`, `message:CcRecipients` | получатели |
 | `message:InternetMessageId` | Message-ID |

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:FindFolderResponse>
+      <m:ResponseMessages>
+        <m:FindFolderResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:RootFolder TotalNumberOfFoldersInView="3">
+            <t:Folders>
+              <t:Folder>
+                <t:FolderId Id="AQApA0000001" ChangeKey="AQAAAB000001"/>
+                <t:DisplayName>Входящие</t:DisplayName>
+                <t:TotalCount>1234</t:TotalCount>
+                <t:UnreadCount>23</t:UnreadCount>
+                <t:ChildFolderCount>2</t:ChildFolderCount>
+              </t:Folder>
+              <t:Folder>
+                <t:FolderId Id="AQApA0000002" ChangeKey="AQAAAB000002"/>
+                <t:DisplayName>Отправленные</t:DisplayName>
+                <t:TotalCount>890</t:TotalCount>
+                <t:UnreadCount>0</t:UnreadCount>
+                <t:ChildFolderCount>1</t:ChildFolderCount>
+              </t:Folder>
+              <t:Folder>
+                <t:FolderId Id="AQApA0000003" ChangeKey="AQAAAB000003"/>
+                <t:DisplayName>Черновики</t:DisplayName>
+                <t:TotalCount>5</t:TotalCount>
+                <t:UnreadCount>5</t:UnreadCount>
+                <t:ChildFolderCount>0</t:ChildFolderCount>
+              </t:Folder>
+            </t:Folders>
+          </m:RootFolder>
+        </m:FindFolderResponseMessage>
+      </m:ResponseMessages>
+    </m:FindFolderResponse>
+  </soap:Body>
+</soap:Envelope>

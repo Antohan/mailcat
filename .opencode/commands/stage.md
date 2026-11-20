@@ -1,12 +1,19 @@
 ---
-description: Загрузить контекст этапа N из docs/PLAN.md и предложить следующую задачу
+description: Загрузить задачу этапа N и сразу приступить к реализации
 ---
 
-Прочитай `docs/PLAN.md` и найди этап с номером $ARGUMENTS.
+Read `docs/HANDOFF.md` first (state, next task, open items), then ONLY the
+section of stage $ARGUMENTS in `docs/PLAN.md`. Do not open other documents.
 
-1. Выведи кратко: цель этапа, список его задач с текущим статусом чекбоксов
-   (посмотри фактическое состояние кода в репозитории — что уже реализовано).
-2. Определи первую незавершённую задачу этапа и предложи план её реализации:
-   какие пакеты/файлы затронет, какие разделы docs/* прочитать, какие тесты
-   добавить.
-3. Жди подтверждения пользователя, затем приступай (правила — AGENTS.md).
+1. Take the first unchecked task of the stage; check it against the actual code
+   with a quick `grep`/`ls` inside the package — never a repo-wide read.
+2. If the task is fully described in PLAN.md, implement it right away (rules in
+   AGENTS.md, including "Token budget rules").
+3. Ask the user only on real ambiguity.
+4. Close the task: `/check` → commit `stage<N>: <done>` → tick the checkbox in
+   PLAN.md → rewrite `docs/HANDOFF.md` (≤25 lines, newest on top).
+   End of stage only: move the invariants from `Не трогать` that survived into
+   `docs/ARCHITECTURE.md §3`, delete the rest.
+5. Report in at most five lines: what changed, what was verified, what is next.
+   Then say that the task is closed and the next one needs a new session — and
+   stop.

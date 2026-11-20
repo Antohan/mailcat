@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:GetItemResponse>
+      <m:ResponseMessages>
+        <m:GetItemResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:Items>
+            <t:Message>
+              <t:ItemId Id="AAMkAGI2MDE=" ChangeKey="CQAAABYA0AA="/>
+              <t:Subject>Отчёт Q3</t:Subject>
+              <t:Sensitivity>Normal</t:Sensitivity>
+              <t:Body BodyType="Html">&lt;html&gt;&lt;body&gt;&lt;p&gt;Отчёт за Q3 готов. Детали во вложении.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</t:Body>
+              <t:BodyPreview>Отчёт за Q3 готов. Детали во вложении.</t:BodyPreview>
+              <t:TextBody>Отчёт за Q3 готов. Детали во вложении.</t:TextBody>
+              <t:DateTimeSent>2026-11-17T10:12:00Z</t:DateTimeSent>
+              <t:InternetMessageId>&lt;CAFxKQ9Jx7@mail.company.example&gt;</t:InternetMessageId>
+              <t:ToRecipients>
+                <t:Mailbox>
+                  <t:Name>Петрова А.</t:Name>
+                  <t:EmailAddress>apetrova@company.example</t:EmailAddress>
+                </t:Mailbox>
+                <t:Mailbox>
+                  <t:Name>Сидоров В.</t:Name>
+                  <t:EmailAddress>vsidorov@company.example</t:EmailAddress>
+                </t:Mailbox>
+              </t:ToRecipients>
+              <t:CcRecipients>
+                <t:Mailbox>
+                  <t:Name>Кузнецов Д.</t:Name>
+                  <t:EmailAddress>dkuznetsov@company.example</t:EmailAddress>
+                </t:Mailbox>
+              </t:CcRecipients>
+              <t:Attachments>
+                <t:FileAttachment>
+                  <t:AttachmentId Id="AAMkAGI2ATT1="/>
+                  <t:Name>report.pdf</t:Name>
+                  <t:ContentType>application/pdf</t:ContentType>
+                  <t:ContentLength>2097152</t:ContentLength>
+                </t:FileAttachment>
+                <t:FileAttachment>
+                  <t:AttachmentId Id="AAMkAGI2ATT2="/>
+                  <t:Name>данные.csv</t:Name>
+                  <t:ContentType>text/csv</t:ContentType>
+                  <t:ContentLength>1024</t:ContentLength>
+                </t:FileAttachment>
+              </t:Attachments>
+            </t:Message>
+          </m:Items>
+        </m:GetItemResponseMessage>
+      </m:ResponseMessages>
+    </m:GetItemResponse>
+  </soap:Body>
+</soap:Envelope>
