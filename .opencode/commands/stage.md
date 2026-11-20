@@ -1,5 +1,6 @@
 ---
 description: Загрузить задачу из текущего плана итерации и сразу приступить
+agent: go-implementer
 ---
 
 Read `docs/HANDOFF.md` first (state, next task), then ONLY the task $ARGUMENTS

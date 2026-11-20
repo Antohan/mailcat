@@ -1,5 +1,6 @@
 ---
 description: Release procedure — verify iteration DoD, security review, merge dev→main after user confirmation
+agent: go-implementer
 ---
 
 You are running the release procedure for the current iteration. The release
