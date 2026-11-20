@@ -88,6 +88,12 @@ type App struct {
 	mail     *mailScreen
 	calendar *calendarScreen
 
+	// Каталоги вложений, созданные при старте (T-1): сбой доступа к диску
+	// виден при первом сохранении — до скачивания файла, а не после.
+	attDownloadDir string
+	attTempDir     string
+	attDirErr      error
+
 	// Панели, рамка активной из которых красится акцентом (UI-6).
 	focusPanels []bordered
 }
@@ -194,6 +200,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 
 // Run запускает цикл событий; блокируется до выхода (q/Ctrl-C).
 func (a *App) Run() error {
+	a.prepareAttachmentDirs() // T-1: каталоги вложений — при старте, не при первом сохранении
 	a.mail.loadFolders()
 	if a.cfg.Notify.Enabled { // enabled=false — watcher не запускается вовсе (DoD этапа 6)
 		a.startWatcher()
@@ -201,6 +208,18 @@ func (a *App) Run() error {
 	err := a.tapp.Run()
 	a.cancel() // контекст сессии гасится вместе с TUI
 	return err
+}
+
+// prepareAttachmentDirs создаёт каталоги вложений при старте (T-1): ошибка
+// доступа к ~/Downloads всплывает при первом же сохранении с ясной
+// диагностикой, а не после скачивания вложения; сами пути запоминаются —
+// saveAttachment ничего не создаёт в горутине.
+func (a *App) prepareAttachmentDirs() {
+	a.attDownloadDir, a.attDirErr = security.DownloadDir()
+	if a.attDirErr != nil {
+		return
+	}
+	a.attTempDir, a.attDirErr = security.TempDir()
 }
 
 // startWatcher поднимает фоновый опрос «Входящих» (этап 6). Ошибки сети —
@@ -250,12 +269,14 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 	case tcell.KeyRune:
 		switch event.Rune() {
 		case '1':
+			a.closeModals(a.mail.messages)
 			a.pages.SwitchToPage(pageMail)
 			a.showHint()
 			return nil
 		case '2':
 			// Сначала страница и подсказка, потом ensureLoaded: без кэша
 			// он выведет «Загрузка…» поверх подсказки — так и задумано.
+			a.closeModals(a.calendar.grid)
 			a.pages.SwitchToPage(pageCalendar)
 			a.showHint()
 			a.calendar.ensureLoaded()
@@ -266,6 +287,22 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 		}
 	}
 	return event
+}
+
+// closeModals убирает модальные страницы (links/attachments/confirm) при
+// переключении 1/2 (T-1, «Esc-источник модала»): SwitchToPage скрывает
+// модал, но фокус остаётся у его скрытого списка — Esc затем уводил на
+// страницу-источник модала, давно покинутую пользователем, а остальные
+// клавиши шли в невидимый список. Если сверху не модал — фокус не трогаем.
+func (a *App) closeModals(focus tview.Primitive) {
+	front, _ := a.pages.GetFrontPage()
+	if front != pageLinks && front != pageAttachments && front != pageConfirm {
+		return
+	}
+	a.pages.RemovePage(pageLinks)
+	a.pages.RemovePage(pageAttachments)
+	a.pages.RemovePage(pageConfirm)
+	a.tapp.SetFocus(focus)
 }
 
 // showDetails выводит полное письмо на экран деталей (страница поверх почты).
