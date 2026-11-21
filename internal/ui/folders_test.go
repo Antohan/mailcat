@@ -80,9 +80,10 @@ func TestRenderFoldersToggle(t *testing.T) {
 	s := &mailScreen{
 		app: &App{cfg: &config.Config{}},
 		// Список создаётся как в newMailScreen: только текст пунктов.
-		folders:     tview.NewList(),
-		mainFolders: []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}},
-		techFolders: []mail.Folder{{DisplayName: "Опции"}, {DisplayName: "Корневая папка Yammer"}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}},
+		techFolders:    []mail.Folder{{DisplayName: "Опции"}, {DisplayName: "Корневая папка Yammer"}},
+		messagesHeader: newPanelHeader("Письма"), // renderFolders обновляет и заголовок (V-2)
 	}
 
 	s.renderFolders()
@@ -116,9 +117,10 @@ func TestRenderFoldersToggle(t *testing.T) {
 // TestRenderFoldersNoTech: без техпапок пункт «Ещё ▸» не добавляется.
 func TestRenderFoldersNoTech(t *testing.T) {
 	s := &mailScreen{
-		app:         &App{cfg: &config.Config{}},
-		folders:     tview.NewList(),
-		mainFolders: []mail.Folder{{DisplayName: "Входящие"}},
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие"}},
+		messagesHeader: newPanelHeader("Письма"),
 	}
 	s.renderFolders()
 	if got := s.folders.GetItemCount(); got != 1 {

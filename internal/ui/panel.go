@@ -12,10 +12,12 @@ import (
 	"github.com/rivo/tview"
 )
 
-// panelHeader — строка «ПАПКИ ─────────» над панелью.
+// panelHeader — строка «ПАПКИ ─────────» над панелью; справа может быть
+// вторая часть (счётчик списка писем, V-2).
 type panelHeader struct {
 	*tview.Box
 	title  string
+	right  string
 	active bool
 }
 
@@ -29,9 +31,23 @@ func newPanelHeader(title string) *panelHeader {
 	return h
 }
 
+// headerGap — зазор между текстом заголовка и линией (П.4а): линия не
+// прилипает ни к левой подписи, ни к правому счётчику.
+const headerGap = 2
+
 // SetTitle меняет заголовок: месяц календаря, число встреч в повестке.
 func (h *panelHeader) SetTitle(title string) *panelHeader {
 	h.title = strings.ToUpper(title)
+	h.right = ""
+	return h
+}
+
+// SetListTitle — заголовок списка писем (V-2): слева «Папка · N непрочитанных»,
+// справа «всего T · стр. p/P». Без капса, в отличие от SetTitle: имя папки —
+// данные с сервера, капс его искажает.
+func (h *panelHeader) SetListTitle(left, right string) *panelHeader {
+	h.title = left
+	h.right = right
 	return h
 }
 
@@ -52,11 +68,19 @@ func (h *panelHeader) Draw(screen tcell.Screen) {
 		color = colorAccent
 	}
 	_, printed := tview.Print(screen, h.title, x, y, w, tview.AlignLeft, color)
+	end, gapR := x+w, 0
+	if h.right != "" {
+		// Правая часть — приглушённая всегда: это служебные счётчики, акцент
+		// зарезервирован за активной панелью (RD-1).
+		_, wRight := tview.Print(screen, h.right, x, y, w, tview.AlignRight, colorTextSecondary)
+		end -= wRight
+		gapR = headerGap
+	}
 	// WHY: линия — textSecondary, а не hairline: hairline (222,226,230) на
 	// белой поверхности не читается, и разделитель выглядел отсутствующим.
 	// Не делать: возвращать hairline — заголовки снова «висят в воздухе».
 	rule := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
-	for i := printed + 1; i < w; i++ {
+	for i := printed + headerGap; i < end-gapR; i++ {
 		screen.SetContent(x+i, y, tview.Borders.Horizontal, nil, rule)
 	}
 }

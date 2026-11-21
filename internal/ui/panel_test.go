@@ -78,6 +78,67 @@ func TestPanelLayoutSizes(t *testing.T) {
 	}
 }
 
+// TestListTitle (V-2): левая часть — «Папка · N непрочитанных» (счётчик из
+// кэша FindFolder, без него — только имя), правая — «всего T · стр. p/P»;
+// до первой страницы папки правой части нет.
+func TestListTitle(t *testing.T) {
+	s := &mailScreen{
+		folderName:     "Входящие",
+		pageSize:       50,
+		mainFolders:    []mail.Folder{{ID: "f1", DisplayName: "Входящие", UnreadCount: 6}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	check := func(left, right string) {
+		t.Helper()
+		s.updateListTitle()
+		if s.messagesHeader.title != left || s.messagesHeader.right != right {
+			t.Errorf("заголовок = %q | %q, хочу %q | %q", s.messagesHeader.title, s.messagesHeader.right, left, right)
+		}
+	}
+	check("Входящие · 6 непрочитанных", "") // страницы ещё не грузились
+	s.totalInView, s.offset = 1234, 50
+	check("Входящие · 6 непрочитанных", "всего 1234 · стр. 1/25")
+	s.offset = 1234 // неполная последняя страница
+	check("Входящие · 6 непрочитанных", "всего 1234 · стр. 25/25")
+	s.offset, s.totalInView, s.mainFolders[0].UnreadCount = 6, 6, 0
+	check("Входящие", "всего 6 · стр. 1/1")
+}
+
+// TestPanelHeaderRightPart (V-2, П.4а): правая часть прижата к правому краю,
+// линия между частями не прилипает ни к одной из них (зазор headerGap).
+func TestPanelHeaderRightPart(t *testing.T) {
+	h := newPanelHeader("Папка").SetListTitle("Папка", "всего 2 · стр. 1/2")
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	defer sim.Fini()
+	sim.SetSize(40, 1)
+	h.SetRect(0, 0, 40, 1)
+	h.Draw(sim)
+
+	const (
+		line      = '─'
+		rightText = "всего 2 · стр. 1/2"
+	)
+	rightStart := 40 - len([]rune(rightText))
+	runes := simRow(sim, 0)
+	if string(runes[rightStart:]) != rightText {
+		t.Fatalf("правая часть не у правого края: %q", string(runes))
+	}
+	if runes[5+1] == line { // зазор слева: сразу за «Папка» линии быть не должно
+		t.Errorf("линия прилипла к левой подписи: %q", string(runes))
+	}
+	if runes[5+headerGap] != line {
+		t.Errorf("линия не началась после зазора: %q", string(runes))
+	}
+	for _, i := range []int{rightStart - headerGap, rightStart - 1} {
+		if runes[i] == line {
+			t.Errorf("линия прилипла к правой части (колонка %d): %q", i, string(runes))
+		}
+	}
+}
+
 // TestMessageRowReadState (RD-4, V-1): непрочитанное — жирный accent на
 // строке 1 пункта, прочитанное — textPrimary без жирного; время (колонка 1)
 // и тема (строка 2) всегда textSecondary — приглушены в обеих группах;

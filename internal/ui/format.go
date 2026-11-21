@@ -190,6 +190,21 @@ func hexTag(c tcell.Color) string {
 	return fmt.Sprintf("#%06x", c.Hex())
 }
 
+// pluralUnread — «1 непрочитанное», «3/5/11 непрочитанных»: русская
+// морфология для заголовка списка (V-2). 11–14 и *0/*5–*9 — родительный
+// множительный; *1 — именительный единственный (21 непрочитанное).
+func pluralUnread(n int) string {
+	d := n % 100
+	switch {
+	case d >= 11 && d <= 14, d%10 == 0 || d%10 >= 5:
+		return fmt.Sprintf("%d непрочитанных", n)
+	case d%10 == 1:
+		return fmt.Sprintf("%d непрочитанное", n)
+	default:
+		return fmt.Sprintf("%d непрочитанных", n)
+	}
+}
+
 // FormatFolder — пункт списка папок: иконка/отступ, имя, счётчик непрочитанных
 // цветом textSecondary (прижат вправо на folderNameCol). active — папка
 // открыта: текст accent + жирный. Sanitize + tview.Escape сохраняются (List

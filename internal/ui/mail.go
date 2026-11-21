@@ -5,6 +5,7 @@ package ui
 // QueueUpdateDraw), поэтому мьютекс не нужен (ARCHITECTURE.md §3).
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -12,6 +13,7 @@ import (
 
 	"mailcat/internal/ews"
 	"mailcat/internal/mail"
+	"mailcat/internal/security"
 )
 
 const pageSizeCap = 100 // защита от нулевого page_size в конфиге
@@ -55,10 +57,11 @@ type mailScreen struct {
 	// selRow — строка таблицы с выделенным пунктом (строка 1, V-1): строка
 	// темы ниже невыбираема, её выделение красит paintSubject вручную.
 	// -1 = выделения нет.
-	selRow   int
-	offset   int  // Offset следующей страницы FindItem
-	lastPage bool // IncludesLastItemInRange последней страницы
-	loading  bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
+	selRow      int
+	offset      int  // Offset следующей страницы FindItem
+	lastPage    bool // IncludesLastItemInRange последней страницы
+	totalInView int  // TotalItemsInView последней страницы (счётчик «всего», V-2)
+	loading     bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
 
 	// RD-7: пересборка списка после перечитывания/смены папки. Старые строки
 	// остаются на экране до прихода свежих (без мерцания); выделение
@@ -279,6 +282,7 @@ func (s *mailScreen) renderFolders() {
 		}
 	}
 	s.applyActiveFolderStyle()
+	s.updateListTitle()
 }
 
 // isActiveFolder — строка соответствует открытой папке. ID пуст только у
@@ -324,6 +328,7 @@ func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 	s.folderName = name
 	s.offset = 0
 	s.lastPage = false
+	s.totalInView = 0 // счётчики прежней папки не показываем — ждём ответ (WHY в updateListTitle)
 	s.keepSelection()
 	s.rebuildPending = true
 	s.preview.SetText(mutedText(previewEmptyHint))
@@ -372,6 +377,8 @@ func (s *mailScreen) loadMessages() {
 			}
 			s.offset = page.NextOffset
 			s.lastPage = page.IncludesLast
+			s.totalInView = page.TotalInView
+			s.updateListTitle()
 			if s.rebuildPending {
 				s.rebuildPending = false
 				s.rebuildRows(added)
@@ -603,6 +610,53 @@ func (s *mailScreen) updateInboxUnread(n int) {
 			return
 		}
 	}
+}
+
+// updateListTitle — заголовок панели писем (V-2): слева «Папка · N непрочитанных»,
+// справа «всего T · стр. p/P». Непрочитанные — из кэша FindFolder; T —
+// TotalInView, p = offset/pageSize (IndexedPagingOffset выдаёт NextOffset
+// кратным pageSize, finditem_test). Правая часть скрывается, пока в этой папке
+// не загружена ни одна страница (после selectFolder счётчики прежней папки не
+// показываем — «всего 0» во время загрузки выглядело бы как пустая папка).
+func (s *mailScreen) updateListTitle() {
+	left := tview.Escape(security.Sanitize(s.folderName))
+	if u, ok := s.currentFolderUnread(); ok && u > 0 {
+		left += " · " + pluralUnread(u)
+	}
+	right := ""
+	if s.offset > 0 || s.lastPage {
+		// Оба — ceil: последняя страница неполная, offset=1234 при
+		// pageSize=50 — это страница 25, а не 24.
+		pages := (s.totalInView + s.pageSize - 1) / s.pageSize
+		page := (s.offset + s.pageSize - 1) / s.pageSize
+		if pages < 1 {
+			pages = 1
+		}
+		if page < 1 {
+			page = 1
+		}
+		if page > pages {
+			page = pages
+		}
+		right = fmt.Sprintf("всего %d · стр. %d/%d", s.totalInView, page, pages)
+	}
+	s.messagesHeader.SetListTitle(left, right)
+}
+
+// currentFolderUnread — непрочитанные открытой папки из кэша списка папок.
+// false — папки в FindFolder-ответе нет, счётчик неизвестен (пустое имя тоже).
+func (s *mailScreen) currentFolderUnread() (int, bool) {
+	if s.folderName == "" {
+		return 0, false
+	}
+	for _, fs := range [][]mail.Folder{s.mainFolders, s.techFolders} {
+		for _, f := range fs {
+			if s.isActiveFolder(f) {
+				return f.UnreadCount, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // cycleFocus перебирает панели почты по кругу (Tab).

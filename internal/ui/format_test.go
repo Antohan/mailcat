@@ -128,6 +128,20 @@ func TestTruncateEllipsis(t *testing.T) {
 	}
 }
 
+// TestPluralUnread (V-2): русская морфология счётчика в заголовке списка.
+func TestPluralUnread(t *testing.T) {
+	cases := map[int]string{
+		1: "1 непрочитанное", 2: "2 непрочитанных", 5: "5 непрочитанных",
+		11: "11 непрочитанных", 14: "14 непрочитанных", 21: "21 непрочитанное",
+		24: "24 непрочитанных", 100: "100 непрочитанных", 111: "111 непрочитанных",
+	}
+	for n, want := range cases {
+		if got := pluralUnread(n); got != want {
+			t.Errorf("pluralUnread(%d) = %q, хочу %q", n, got, want)
+		}
+	}
+}
+
 // TestFormatFolder: иконка стандартной папки, выравнивание счётчика на
 // колонку folderNameCol, счётчик — цветовой тег textSecondary (RD-3).
 // Тема в тестах переключаема, поэтому проверяем структуру, а не hex цвета.
