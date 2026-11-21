@@ -222,6 +222,12 @@ func newMailScreen(a *App) *mailScreen {
 		case tcell.KeyRight:
 			s.app.tapp.SetFocus(s.preview)
 			return nil
+		case tcell.KeyRune:
+			if event.Rune() == 'g' || event.Rune() == 'G' {
+				row, _ := s.messages.GetSelection()
+				s.openLinks(row)
+				return nil
+			}
 		}
 		return tabHook(event)
 	})
@@ -232,7 +238,12 @@ func newMailScreen(a *App) *mailScreen {
 // openDetails открывает полноэкранный экран деталей письма (Enter): все
 // заголовки, полный текст, список вложений (PLAN.md этап 2); Esc — назад.
 func (s *mailScreen) openDetails(row int) {
-	idx := s.itemIndex(row)
+	s.loadMessage(s.itemIndex(row), s.app.showDetails)
+}
+
+// loadMessage догружает письмо GetItem (тело, вложения) и отдаёт его на
+// UI-потоке в done. From — из строки списка: GetItem его не присылает.
+func (s *mailScreen) loadMessage(idx int, done func(mail.Message)) {
 	if idx < 0 || idx >= len(s.items) {
 		return
 	}
@@ -252,9 +263,37 @@ func (s *mailScreen) openDetails(row int) {
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.app.endLoad(id)
 			s.setConn(true)
-			s.app.showDetails(full)
+			done(full)
 		})
 	}()
+}
+
+// openLinks — g на списке: реестр ссылок выбранного письма. В сводке FindItem
+// тела нет, поэтому догружаем GetItem; ссылок нет — сообщение в статус-строке
+// вместо пустого модала.
+func (s *mailScreen) openLinks(row int) {
+	s.loadMessage(s.itemIndex(row), func(m mail.Message) {
+		links := messageLinks(m)
+		if len(links) == 0 {
+			s.app.setStatus("Ссылок нет")
+			return
+		}
+		s.app.showLinks(links, func() {
+			s.app.pages.SwitchToPage(pageMail)
+			s.app.tapp.SetFocus(s.messages)
+		})
+	})
+}
+
+// messageLinks собирает ссылки тела тем же реестром, что и экран деталей.
+func messageLinks(m mail.Message) []mail.LinkInfo {
+	reg := mail.NewLinkRegistry()
+	if m.BodyHTML != "" {
+		reg.RenderBodyHTML(m.BodyHTML)
+	} else {
+		reg.RenderBody(m.BodyText)
+	}
+	return reg.List()
 }
 
 // loadFolders заполняет панель папок (FindFolder от msgfolderroot): основной
