@@ -2,8 +2,9 @@
 
 You are building **mailcat** — a read-only client for corporate mail and calendar
 (on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
-tasks of the current iteration plan, `docs/PLAN-ITER3.md` (`docs/PLAN.md`,
-`docs/PLAN-ITER2.md` are finished history — do not open or modify them).
+tasks of the current iteration plan, `docs/PLAN-ITER3.1.md` (`docs/PLAN.md`,
+`docs/PLAN-ITER2.md`, `docs/PLAN-ITER3.md` are finished history — do not open
+or modify them).
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
@@ -14,7 +15,7 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 | File | What it gives you |
 | --- | --- |
 | `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
-| `docs/PLAN-ITER3.md` | **current iteration**: tasks, DoD, the CHANGELOG rule |
+| `docs/PLAN-ITER3.1.md` | **current iteration**: tasks, DoD, the CHANGELOG rule |
 | `docs/PLAN-TEMPLATE.md` | mandatory format for composing a new iteration plan |
 | `docs/PLAN.md` | iteration 1 history — do not open in sessions |
 | `docs/ARCHITECTURE.md` | packages, data flow; §3 is the list of invariants |
@@ -44,7 +45,7 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 7. **Russian UI.** Key hints, errors, statuses, folder names («Входящие»,
    «Отправленные»).
 8. **Scope is the current iteration plan.** No "for later" features that
-   `docs/PLAN-ITER3.md` does not describe.
+   `docs/PLAN-ITER3.1.md` does not describe.
 
 ## Code minimalism
 
@@ -67,12 +68,12 @@ Write the smallest complete change (adopted from the ponytail ruleset, MIT):
 
 ## Work
 
-1. Open a session with `/stage <task>` (e.g. `/stage RD-1`): it loads the
+1. Open a session with `/stage <task>` (e.g. `/stage V-1`): it loads the
    iteration plan and the task.
 2. All work happens on the `dev` branch. `main` is release-only: it receives
    a finished iteration as a single merge commit — a release action performed
    on explicit user request, never inside a task session.
-3. One task = one commit (`iter3:RD-1: short description`) plus its
+3. One task = one commit (`iter31:V-1: short description`) plus its
    CHANGELOG.md entry.
 4. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
    fix the cause.
@@ -136,7 +137,7 @@ times.
 prefix is mandatory: a bare id does not resolve and the agent silently
 disappears from lists — observed). Flagship (via `/models`) for the
 `ews-specialist` subagent and for iteration tasks where layout design matters
-(RD-2, RD-6). `security-reviewer` inherits the session model —
+(V-1, V-5). `security-reviewer` inherits the session model —
 do not pin a `model:` in its file (same silent-disappearance failure mode).
 
 ## Handoff file

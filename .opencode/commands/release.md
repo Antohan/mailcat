@@ -10,7 +10,7 @@ stop and report; do not fix things on your own inside a release session.
 
 1. Preconditions (all must hold, otherwise stop and report what is missing):
    - branch is `dev`, working tree clean (`git status`);
-   - every task checkbox in the current iteration plan (`docs/PLAN-ITER3.md`)
+   - every task checkbox in the current iteration plan (`docs/PLAN-ITER3.1.md`)
      is ticked and every DoD point of the plan is met;
    - `/check` (`./scripts/check.sh`) is green;
    - `CHANGELOG.md` has an entry for every iteration commit.
