@@ -19,6 +19,12 @@ var (
 
 	colorPanelBg  = tcell.ColorWhite
 	colorOnAccent = tcell.ColorWhite // текст на акцентной заливке
+
+	// WHY (О-3): «сегодня» — светлый оттенок акцента, а не сам акцент:
+	// сплошной акцент уже занят выделением таблицы, совпадение сделало бы
+	// выбранный день неотличимым от «сегодня».
+	// Не делать: заливать «сегодня» colorAccent.
+	colorTodayBg = tcell.NewRGBColor(219, 234, 254)
 )
 
 // Производные роли для виджетов; заполняются apply*Theme.
@@ -54,6 +60,7 @@ func applyLightTheme() {
 	colorWeekend = tcell.NewRGBColor(199, 115, 110)
 	colorPanelBg = tcell.ColorWhite
 	colorOnAccent = tcell.ColorWhite
+	colorTodayBg = tcell.NewRGBColor(219, 234, 254) // светлый оттенок акцента
 	applyDerivedRoles()
 	applyStyles()
 }
@@ -68,6 +75,7 @@ func applyDarkTheme() {
 	colorWeekend = tcell.NewRGBColor(252, 165, 165)
 	colorPanelBg = tcell.NewRGBColor(24, 24, 27)
 	colorOnAccent = tcell.NewRGBColor(17, 24, 39)
+	colorTodayBg = tcell.NewRGBColor(30, 58, 138) // тёмный оттенок акцента
 	applyDerivedRoles()
 	applyStyles()
 }

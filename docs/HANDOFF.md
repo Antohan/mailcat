@@ -1,23 +1,27 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Задачи RD-1…RD-7 итерации 3 выполнены (чекбоксы PLAN-ITER3.md). Дальше — вне
-кодовой сессии: сверка DoD («Definition of Done» PLAN-ITER3.md) и решение
-пользователя по опциональным О-1…О-3; smoke по TESTING.md §5 — TODO юзера.
+Все задачи итерации 3 выполнены (RD-1…RD-7 + опция О-3; О-1/О-2 пользователь не
+выбирал). Дальше вне кодовой сессии: сверка DoD («Definition of Done»
+PLAN-ITER3.md), smoke по TESTING.md §5 — TODO юзера; релиз — /release по явному
+запросу пользователя.
 
 ## Сделано
-- b0f4eb4 — RD-7: спиннер + сохранение выделения/скролла; 9c2356e — RD-6;
-  45e14ec — RD-5; 8a924bd — RD-4; 1c39486/7941f3a — RD-3; c37695a — RD-2;
-  d26e076 — RD-1; e3e8daf — Release 2.
+- f56aa0b — O-3: ASCII-баннер месяца + заливка «сегодня»; b0f4eb4 — RD-7;
+  9c2356e — RD-6; 45e14ec — RD-5; 8a924bd — RD-4; 1c39486/7941f3a — RD-3;
+  c37695a — RD-2; d26e076 — RD-1; e3e8daf — Release 2.
 
 ## Открыто
-- TODO пользователя (TESTING.md §5): smoke S3–S7 (в т.ч. RD-7: спиннер при
-  тормозящем VPN, u возвращает курсор на то же письмо, пустая папка), темы,
-  resize; визуал Terminal.app/VS Code.
+- TODO пользователя (TESTING.md §5): smoke S3–S7 (спиннер при тормозящем VPN,
+  u возвращает курсор на то же письмо, пустая папка), темы, resize; О-3:
+  баннер и заливка «сегодня» в Terminal.app и VS Code (█, truecolor).
 - НИЗКО: attachments.go ~120 — частичный файл при ошибке Write; Write-операции
   (mark-as-read/delete) отложены — решения у пользователя.
 
 ## Не трогать
+- О-3: заливка «сегодня» — colorTodayBg (оттенок акцента), НЕ colorAccent —
+  он уже выделение таблицы; баннер — свой текст из bannerGlyphs (не из EWS),
+  SetWrap(false).
 - RD-7: спиннер — прямой SetText, не setStatus (statusGen гасит таймер
   ошибки); errorShown стопает тик; Clear только в rebuildRows по свежему gen.
 - RD-6: hint — SetDynamicColors(true), но текст только наш (formatHint из
