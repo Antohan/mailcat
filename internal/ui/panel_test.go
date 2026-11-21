@@ -57,7 +57,8 @@ func TestPanelLayoutSizes(t *testing.T) {
 		}()
 		a.tapp.QueueUpdateDraw(func() {})
 
-		row := simRow(sim, 0)
+		// Строка 0 — верхний бар (V-6), заголовки панелей — строкой ниже.
+		row := simRow(sim, 1)
 		folders := runeIndex(row, "ПАПКИ")
 		messages := runeIndex(row, "ПИСЬМА")
 		preview := runeIndex(row, "ПРОСМОТР")
@@ -207,12 +208,12 @@ func TestMessageListDensity(t *testing.T) {
 	}()
 	a.tapp.QueueUpdateDraw(func() {})
 
-	x0 := runeIndex(simRow(sim, 0), "ПИСЬМА")
+	x0 := runeIndex(simRow(sim, 1), "ПИСЬМА")
 	if x0 < 0 {
 		t.Fatal("заголовок «ПИСЬМА» не найден")
 	}
 	visible := 0
-	for y := 2; y < height-3; y++ {
+	for y := 3; y < height-3; y++ {
 		line := simRow(sim, y)
 		for x := x0 + 2; x < x0+12 && x < len(line); x++ {
 			if line[x] != ' ' && line[x] != 0 {
@@ -248,7 +249,7 @@ func TestV3ThinFrame(t *testing.T) {
 	a.tapp.SetFocus(a.mail.messages)
 	a.tapp.QueueUpdateDraw(func() {})
 
-	row1 := simRow(sim, 1)
+	row1 := simRow(sim, 2) // строка 0 — верхний бар (V-6), 1 — заголовки панелей
 	if runeIndex(row1, "╔") >= 0 || runeIndex(row1, "═") >= 0 || runeIndex(row1, "║") >= 0 {
 		t.Errorf("двойные линии рамки фокуса вернулись: %q", string(row1))
 	}

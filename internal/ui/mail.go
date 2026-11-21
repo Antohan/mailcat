@@ -380,6 +380,8 @@ func (s *mailScreen) toggleTech() {
 // прошла, красная при ошибке. Текст на красной — «Нет связи»: «Connected» с
 // красной точкой врал бы.
 func (s *mailScreen) setConn(ok bool) {
+	s.app.connOK = ok
+	s.app.updateTopBar() // точка верхнего бара (V-6) — тот же статус, что футер
 	dot, label := colorConnected, "Connected"
 	if !ok {
 		dot, label = colorError, "Нет связи"
@@ -394,6 +396,7 @@ func (s *mailScreen) setConn(ok bool) {
 func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 	s.folder = id
 	s.folderName = name
+	s.app.updateTopBar() // «mailcat · <папка>» верхнего бара (V-6)
 	s.offset = 0
 	s.lastPage = false
 	s.totalInView = 0 // счётчики прежней папки не показываем — ждём ответ (WHY в updateListTitle)
