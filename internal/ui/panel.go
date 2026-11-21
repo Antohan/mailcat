@@ -92,3 +92,28 @@ func panelColumn(header *panelHeader, body tview.Primitive) *tview.Flex {
 		AddItem(header, 1, 0, false).
 		AddItem(body, 0, 1, true)
 }
+
+// divider — тонкий вертикальный разделитель колонок (V-3, П.4б): одна
+// линия на весь столбец между панелями, тем же цветом, что и линии
+// заголовков.
+type divider struct {
+	*tview.Box
+}
+
+func newDivider() *divider {
+	return &divider{Box: tview.NewBox()}
+}
+
+// Draw красит колонку символами Borders.Vertical.
+// WHY: цвет textSecondary, не hairline — по той же причине, что и линии
+// заголовков выше: hairline на белой поверхности не читается.
+func (d *divider) Draw(screen tcell.Screen) {
+	d.Box.DrawForSubclass(screen, d)
+	x, y, w, h := d.GetRect()
+	rule := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+	for yy := y; yy < y+h; yy++ {
+		for xx := x; xx < x+w; xx++ {
+			screen.SetContent(xx, yy, tview.Borders.Vertical, nil, rule)
+		}
+	}
+}

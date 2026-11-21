@@ -102,6 +102,16 @@ func applyStyles() {
 	tview.Styles.PrimitiveBackgroundColor = colorPanelBg
 	tview.Styles.ContrastBackgroundColor = colorAccent
 	tview.Styles.BorderColor = colorHairline
+	// WHY (V-3, П.2в): рамка панели с фокусом в tview рисуется двойными
+	// линиями (╔═╗) — для каркаса слишком тяжело. Все шесть focus-символов
+	// сводим к одинарным; цвет рамки (акцент активной панели) ставит
+	// paintFocusFrames, механика UI-6 не меняется.
+	tview.Borders.HorizontalFocus = tview.Borders.Horizontal
+	tview.Borders.VerticalFocus = tview.Borders.Vertical
+	tview.Borders.TopLeftFocus = tview.Borders.TopLeft
+	tview.Borders.TopRightFocus = tview.Borders.TopRight
+	tview.Borders.BottomLeftFocus = tview.Borders.BottomLeft
+	tview.Borders.BottomRightFocus = tview.Borders.BottomRight
 	tview.Styles.TitleColor = colorTextSecondary
 	tview.Styles.GraphicsColor = colorTextPrimary
 	tview.Styles.PrimaryTextColor = colorTextPrimary

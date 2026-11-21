@@ -133,9 +133,16 @@ func newMailScreen(a *App) *mailScreen {
 	s.foldersHeader = newPanelHeader("Папки")
 	s.messagesHeader = newPanelHeader("Письма")
 	s.previewHeader = newPanelHeader("Просмотр")
+	// WHY (V-3, П.4б): разделители между колонками — по одной тонкой линии,
+	// той же толщины и цвета, что линии заголовков (ПАПКИ ↔ ПИСЬМА и
+	// ПИСЬМА ↔ ПРОСМОТР согласованы). Рамки панелей при этом остаются
+	// невидимыми у неактивных (RD-2) — двойных линий между колонками нет.
+	d1, d2 := newDivider(), newDivider()
 	s.root = tview.NewFlex().
 		AddItem(panelColumn(s.foldersHeader, s.folders), 0, pctFolders, false).
+		AddItem(d1, 1, 0, false).
 		AddItem(panelColumn(s.messagesHeader, s.messages), 0, pctMessages, false).
+		AddItem(d2, 1, 0, false).
 		AddItem(panelColumn(s.previewHeader, s.preview), 0, pctPreview, true)
 
 	s.folders.SetChangedFunc(func(i int, mainText, _ string, _ rune) {

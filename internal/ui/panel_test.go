@@ -227,3 +227,42 @@ func TestMessageListDensity(t *testing.T) {
 	a.tapp.Stop()
 	<-done
 }
+
+// TestV3ThinFrame — сторож каркаса V-3: рамка панели с фокусом одинарная
+// (не двойные focus-линии tview), между колонками — по одному тонкому
+// вертикальному разделителю.
+func TestV3ThinFrame(t *testing.T) {
+	a := newTestApp(t)
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(110, 28)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = a.tapp.Run()
+	}()
+	a.tapp.QueueUpdateDraw(func() {})
+	a.tapp.SetFocus(a.mail.messages)
+	a.tapp.QueueUpdateDraw(func() {})
+
+	row1 := simRow(sim, 1)
+	if runeIndex(row1, "╔") >= 0 || runeIndex(row1, "═") >= 0 || runeIndex(row1, "║") >= 0 {
+		t.Errorf("двойные линии рамки фокуса вернулись: %q", string(row1))
+	}
+	// Разделители: на строке 1 ровно две тонкие вертикальные линии,
+	// не совпадающие с краями рамок.
+	divs := 0
+	for _, r := range row1 {
+		if r == '│' {
+			divs++
+		}
+	}
+	if divs != 2 {
+		t.Errorf("разделителей на строке 1: %d, хочу 2: %q", divs, string(row1))
+	}
+	a.tapp.Stop()
+	<-done
+}
