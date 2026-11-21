@@ -652,7 +652,12 @@ func (s *mailScreen) paintSubject(row int, selected bool) {
 	if selected {
 		c.SetTextColor(colorSelectedFg).SetBackgroundColor(colorSelectedBg)
 	} else {
-		c.SetTextColor(colorTextSecondary).SetBackgroundColor(tcell.ColorDefault)
+		// WHY (V-13): SetBackgroundColor снимает прозрачность ячейки, поэтому
+		// ColorDefault оставлял на каждой посещённой строке темы полосу
+		// терминального фона. SetTransparency(true) возвращает поверхность
+		// панели — фон чистый.
+		// Не делать: ColorDefault/любой цвет вместо прозрачности.
+		c.SetTextColor(colorTextSecondary).SetTransparency(true)
 	}
 }
 

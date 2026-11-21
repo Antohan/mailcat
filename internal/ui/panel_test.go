@@ -267,3 +267,27 @@ func TestV3ThinFrame(t *testing.T) {
 	a.tapp.Stop()
 	<-done
 }
+
+// TestPaintSubjectClearsHighlight (V-13): снятие выделения со строки темы
+// возвращает ячейке прозрачность, а не цветной/терминальный фон — иначе на
+// каждой посещённой строке остаётся полоса.
+func TestPaintSubjectClearsHighlight(t *testing.T) {
+	a := newTestApp(t)
+	rows := []mail.MessageSummary{{
+		Subject:  "Тема",
+		From:     mail.Address{Name: "Иван Петров", Email: "ivan.petrov@example.com"},
+		Received: time.Now(),
+	}}
+	a.mail.items = append(a.mail.items, rows...)
+	a.mail.appendRows(rows)
+
+	subj := a.mail.itemRows[0] + 1
+	a.mail.paintSubject(subj, true)
+	if c := a.mail.messages.GetCell(subj, 0); c.Transparent {
+		t.Fatal("выделенная тема: ячейка прозрачна, заливки нет")
+	}
+	a.mail.paintSubject(subj, false)
+	if c := a.mail.messages.GetCell(subj, 0); !c.Transparent {
+		t.Errorf("снятая тема: ячейка не прозрачна (Transparent=false) — останется полоса")
+	}
+}
