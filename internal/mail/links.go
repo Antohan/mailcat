@@ -33,7 +33,10 @@ func NewLinkRegistry() *LinkRegistry { return &LinkRegistry{} }
 // List возвращает зарегистрированные ссылки по порядку.
 func (r *LinkRegistry) List() []LinkInfo { return r.links }
 
-var reBareURL = regexp.MustCompile(`https?://[^\s<>"'\x60\x7f]+`)
+// WHY: `<?`/`>?` поглощают скобки автолинка <https://…> в матч — иначе после
+// замены URL маркером остаются огрызки «<[1] host>» (баг V-10).
+// Не трогать: без них в RenderBody делали бы Trim по краям матча.
+var reBareURL = regexp.MustCompile(`<?https?://[^\s<>"'\x60\x7f]+>?`)
 
 // reAnchor — грубый разбор <a href="...">...</a> (тела писем не являются
 // валидным XML — парсеры encoding/xml непригодны). Значение — в двойных или
@@ -71,7 +74,8 @@ func (r *LinkRegistry) RenderBody(text string) string {
 		return ""
 	}
 	return reBareURL.ReplaceAllStringFunc(text, func(url string) string {
-		return r.register(strings.TrimRight(url, ".,);!?"), "")
+		// Скобки автолинка уже в матче (reBareURL) — срезаем их с URL.
+		return r.register(strings.TrimRight(strings.Trim(url, "<>"), ".,);!?"), "")
 	})
 }
 
