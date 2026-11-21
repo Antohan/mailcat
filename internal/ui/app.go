@@ -7,6 +7,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -32,19 +33,28 @@ const (
 	pageAttachments = "attachments"
 	pageConfirm     = "confirm"
 
-	// Подсказки статус-бара по экрану (UI-7): у почты и календаря свои
-	// наборы клавиш, модалы — свои (дублируют заголовки панелей).
-	hintMail        = "↑↓ · Enter читать · u · v · g · 1/2 · q"
-	hintCalendar    = "←→↑↓ день · n/p месяц · Enter детали · 1/2 · q"
-	hintDetails     = "Esc — к списку · g ссылки · v вложения · 1/2 · q"
-	hintEvent       = "Esc — к календарю · g ссылки · 1/2 · q"
-	hintLinks       = "Enter открыть · Esc — назад"
-	hintAttachments = "s сохранить · o открыть · Esc — назад"
-	hintConfirm     = "←→ выбор · Enter подтвердить"
-
 	// errStatusTTL — сколько висит ошибка в статус-баре до автоочистки
 	// (UI-7): хватает прочитать текст, статус-бар не «залипает».
 	errStatusTTL = 8 * time.Second
+)
+
+// hintSeg — «клавиша — описание» подсказки экрана (RD-6): пустое desc —
+// клавиша без пояснения.
+type hintSeg struct {
+	key, desc string
+}
+
+// Подсказки статус-бара по экрану (UI-7): у почты и календаря свои наборы
+// клавиш, модалы — свои (дублируют заголовки панелей). RD-6: клавиши и
+// описания разведены по полям, красит их formatHint.
+var (
+	hintMail        = []hintSeg{{"↑↓", ""}, {"Enter", "читать"}, {"u", ""}, {"v", ""}, {"g", ""}, {"1/2", ""}, {"q", ""}}
+	hintCalendar    = []hintSeg{{"←→↑↓", "день"}, {"n/p", "месяц"}, {"Enter", "детали"}, {"1/2", ""}, {"q", ""}}
+	hintDetails     = []hintSeg{{"Esc", "— к списку"}, {"g", "ссылки"}, {"v", "вложения"}, {"1/2", ""}, {"q", ""}}
+	hintEvent       = []hintSeg{{"Esc", "— к календарю"}, {"g", "ссылки"}, {"1/2", ""}, {"q", ""}}
+	hintLinks       = []hintSeg{{"Enter", "открыть"}, {"Esc", "— назад"}}
+	hintAttachments = []hintSeg{{"s", "сохранить"}, {"o", "открыть"}, {"Esc", "— назад"}}
+	hintConfirm     = []hintSeg{{"←→", "выбор"}, {"Enter", "подтвердить"}}
 )
 
 // bordered — панель почты/календаря с рамкой (UI-6): у Box нет геттера цвета
@@ -129,7 +139,9 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	a.tapp = tview.NewApplication()
 	a.pages = tview.NewPages()
 	a.status = tview.NewTextView()
-	a.hint = tview.NewTextView().SetText(hintMail)
+	a.hint = tview.NewTextView().
+		SetDynamicColors(true). // RD-6: красит клавиши; текст наш, не из EWS — escape-инвариант не задет
+		SetText(formatHint(hintMail))
 
 	a.mail = newMailScreen(a)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
@@ -437,23 +449,43 @@ func (a *App) loadLabel() (string, bool) {
 	return "", false
 }
 
+// formatHint собирает текст нижней строки (RD-6): клавиша — акцент жирным,
+// описание — второстепенным цветом, разделитель « · ». Цвета — hex ролей
+// темы: роль — переменная applyTheme, у тегов tview имён ролей нет. Текст
+// подсказок — наш, не из EWS: теги безопасны, escape не нужен.
+func formatHint(segs []hintSeg) string {
+	key := fmt.Sprintf("[#%06x::b]", colorAccent.Hex())
+	desc := fmt.Sprintf("[#%06x]", colorTextSecondary.Hex())
+	var b strings.Builder
+	for i, s := range segs {
+		if i > 0 {
+			b.WriteString(" " + desc + "· ")
+		}
+		b.WriteString(key + s.key)
+		if s.desc != "" {
+			b.WriteString(" " + desc + s.desc)
+		}
+	}
+	return b.String()
+}
+
 // pageHint — подсказка для верхней видимой страницы (модалы закрывают экран).
 func (a *App) pageHint() string {
 	switch name, _ := a.pages.GetFrontPage(); name {
 	case pageCalendar:
-		return hintCalendar
+		return formatHint(hintCalendar)
 	case pageDetails:
-		return hintDetails
+		return formatHint(hintDetails)
 	case pageEvent:
-		return hintEvent
+		return formatHint(hintEvent)
 	case pageLinks:
-		return hintLinks
+		return formatHint(hintLinks)
 	case pageAttachments:
-		return hintAttachments
+		return formatHint(hintAttachments)
 	case pageConfirm:
-		return hintConfirm
+		return formatHint(hintConfirm)
 	default:
-		return hintMail
+		return formatHint(hintMail)
 	}
 }
 

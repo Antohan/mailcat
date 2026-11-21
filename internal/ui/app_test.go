@@ -8,6 +8,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -103,12 +104,12 @@ func TestPaintFocusFramesWired(t *testing.T) {
 func TestPageHint(t *testing.T) {
 	a := newTestApp(t)
 	hints := map[string]string{
-		pageMail:        hintMail,
-		pageCalendar:    hintCalendar,
-		pageDetails:     hintDetails,
-		pageEvent:       hintEvent,
-		pageLinks:       hintLinks,
-		pageAttachments: hintAttachments,
+		pageMail:        formatHint(hintMail),
+		pageCalendar:    formatHint(hintCalendar),
+		pageDetails:     formatHint(hintDetails),
+		pageEvent:       formatHint(hintEvent),
+		pageLinks:       formatHint(hintLinks),
+		pageAttachments: formatHint(hintAttachments),
 	}
 	// Модальные страницы не существуют до первого открытия — добавляем
 	// заглушку, SwitchToPage непроверенной страницы ничего не меняет.
@@ -122,6 +123,18 @@ func TestPageHint(t *testing.T) {
 	}
 }
 
+// TestFormatHint (RD-6): в нижней панели клавиши отделены от описаний —
+// клавиша акцентом жирным, описание — второстепенным цветом; текст наш
+// (не из EWS), поэтому теги динамических цветов тут допустимы.
+func TestFormatHint(t *testing.T) {
+	got := formatHint([]hintSeg{{"Esc", "— назад"}, {"q", ""}})
+	want := fmt.Sprintf("[#%06x::b]Esc [#%06x]— назад [#%06x]· [#%06x::b]q",
+		colorAccent.Hex(), colorTextSecondary.Hex(), colorTextSecondary.Hex(), colorAccent.Hex())
+	if got != want {
+		t.Errorf("formatHint = %q, хочу %q", got, want)
+	}
+}
+
 // TestErrorAutoClear (UI-7/UI-9): ошибка живёт в строке сообщений и не
 // трогает строку подсказок; после таймаута сообщение гаснет; таймер с
 // устаревшим поколением свежий статус не затирает.
@@ -131,7 +144,7 @@ func TestErrorAutoClear(t *testing.T) {
 	if text := a.status.GetText(false); !strings.Contains(text, "Ошибка") {
 		t.Fatalf("ошибка не показана: %q", text)
 	}
-	if got := a.hint.GetText(false); got != hintMail {
+	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Errorf("ошибка затронула строку подсказок: %q", got)
 	}
 	a.clearError(a.statusGen) // то, что таймер прислал бы в QueueUpdateDraw
@@ -156,7 +169,7 @@ func TestLoadIndicator(t *testing.T) {
 	if text := a.status.GetText(false); text != "Загрузка писем…" {
 		t.Fatalf("индикатор не показан: %q", text)
 	}
-	if got := a.hint.GetText(false); got != hintMail {
+	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Fatalf("подсказки пропали во время загрузки: %q", got)
 	}
 	a.showHint() // смена страницы во время загрузки
@@ -179,7 +192,7 @@ func TestLoadIndicator(t *testing.T) {
 	if text := a.status.GetText(false); text != "" {
 		t.Errorf("после последней загрузки строка сообщений не погасла: %q", text)
 	}
-	if got := a.hint.GetText(false); got != hintMail {
+	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Errorf("подсказки после загрузки не на месте: %q", got)
 	}
 }
@@ -190,16 +203,16 @@ func TestHintLineFollowsPages(t *testing.T) {
 	a := newTestApp(t)
 	a.pages.SwitchToPage(pageCalendar)
 	a.showHint()
-	if got := a.hint.GetText(false); got != hintCalendar {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendar) {
 		t.Errorf("строка подсказок не сменилась со страницей: %q", got)
 	}
 	id := a.beginLoad("Загрузка календаря…")
 	a.showError(errors.New("сбой"))
-	if got := a.hint.GetText(false); got != hintCalendar {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendar) {
 		t.Errorf("сообщение/ошибка затронули строку подсказок: %q", got)
 	}
 	a.endLoad(id)
-	if got := a.hint.GetText(false); got != hintCalendar {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendar) {
 		t.Errorf("конец загрузки затронул строку подсказок: %q", got)
 	}
 }
