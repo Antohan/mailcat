@@ -34,8 +34,9 @@ func TestExternalMark(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRow: колонки [ВНЕШН] | имя отправителя | тема | дата (UI-2).
-func TestFormatMessageRow(t *testing.T) {
+// TestFormatMessageListItem: [строка 1 = ● + [ВНЕШН] + отправитель, время,
+// строка 2 = тема с отступом под отправителя] (V-1).
+func TestFormatMessageListItem(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
 	recv := time.Date(2026, 11, 20, 10, 12, 44, 0, time.Local) // сегодня → HH:MM
 	m := mail.MessageSummary{
@@ -43,26 +44,23 @@ func TestFormatMessageRow(t *testing.T) {
 		Received: recv,
 		From:     mail.Address{Name: "Иванов И.", Email: "ivanov@partner.tld"},
 	}
-	row := FormatMessageRow(m, orgDomains, now)
-	if len(row) != 4 {
-		t.Fatalf("колонок %d, хочу 4: %v", len(row), row)
+	row := FormatMessageListItem(m, orgDomains, now)
+	if len(row) != 3 {
+		t.Fatalf("частей %d, хочу 3: %v", len(row), row)
 	}
-	if row[0] != "[ВНЕШН]" {
-		t.Errorf("метка = %q", row[0])
+	if row[0] != "● [ВНЕШН] Иванов И." {
+		t.Errorf("строка 1 = %q", row[0])
 	}
-	if row[1] != "Иванов И." {
-		t.Errorf("отправитель = %q, хочу имя из t:Name", row[1])
+	if row[1] != "10:12" {
+		t.Errorf("время = %q, хочу компактное HH:MM для сегодняшнего", row[1])
 	}
-	if row[2] != "Отчёт Q3" {
-		t.Errorf("тема = %q", row[2])
-	}
-	if row[3] != "10:12" {
-		t.Errorf("дата = %q, хочу компактную HH:MM для сегодняшнего", row[3])
+	if !strings.HasPrefix(row[2], subjectIndent) || !strings.HasSuffix(row[2], "Отчёт Q3") {
+		t.Errorf("строка 2 = %q, хочу отступ + тему", row[2])
 	}
 }
 
-// TestFormatMessageRowFallback: без t:Name — локальная часть адреса (UI-2).
-func TestFormatMessageRowFallback(t *testing.T) {
+// TestFormatMessageListItemFallback: без t:Name — локальная часть адреса (UI-2).
+func TestFormatMessageListItemFallback(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
 	cases := []struct {
 		from mail.Address
@@ -74,9 +72,9 @@ func TestFormatMessageRowFallback(t *testing.T) {
 		{mail.Address{Email: "@host"}, "@host"}, // пустая локальная часть — адрес целиком
 	}
 	for _, tc := range cases {
-		row := FormatMessageRow(mail.MessageSummary{From: tc.from}, orgDomains, now)
-		if row[1] != tc.want {
-			t.Errorf("отправитель %v = %q, хочу %q", tc.from, row[1], tc.want)
+		row := FormatMessageListItem(mail.MessageSummary{From: tc.from}, orgDomains, now)
+		if !strings.HasSuffix(row[0], tc.want) {
+			t.Errorf("отправитель %v = %q, хочу суффикс %q", tc.from, row[0], tc.want)
 		}
 	}
 }
@@ -106,16 +104,27 @@ func TestFormatShortDate(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRowSanitized: тема с escape-инъекцией sanitized до tview.
-func TestFormatMessageRowSanitized(t *testing.T) {
+// TestFormatMessageListItemSanitized: тема с escape-инъекцией sanitized до tview.
+func TestFormatMessageListItemSanitized(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
 	m := mail.MessageSummary{
 		Subject: "плохая\x1b]8;;http://evil\x1b\\тема",
 		From:    mail.Address{Email: "a@b.c"},
 	}
-	row := FormatMessageRow(m, orgDomains, now)
-	if row[2] != "плохаятема" {
+	row := FormatMessageListItem(m, orgDomains, now)
+	if !strings.HasSuffix(row[2], "плохаятема") {
 		t.Errorf("тема не санитизирована: %q", row[2])
+	}
+}
+
+// TestTruncateEllipsis: обрезка с «…» ровно в max рун, короткая строка —
+// без изменений (V-1: тема строки 2).
+func TestTruncateEllipsis(t *testing.T) {
+	if got := truncateEllipsis("тема", 10); got != "тема" {
+		t.Errorf("короткая строка изменена: %q", got)
+	}
+	if got, want := truncateEllipsis("очень длинная тема письма", 12), "очень длинн…"; got != want {
+		t.Errorf("truncateEllipsis = %q, хочу %q", got, want)
 	}
 }
 

@@ -89,17 +89,37 @@ func senderLabel(a mail.Address) string {
 	return tview.Escape(security.Sanitize(email))
 }
 
-// FormatMessageRow — колонки строки списка писем (UI-2): [ВНЕШН] | имя
-// отправителя (t:Name, fallback — локальная часть адреса) | тема |
-// компактная дата (FormatShortDate). Текст из EWS
-// проходит Sanitize (§3) и tview.Escape — Table интерпретирует теги цветов/
-// регионов безусловно (ревью этапа 2).
-func FormatMessageRow(m mail.MessageSummary, orgDomains []string, now time.Time) []string {
+// messageDot — точка статуса в строке 1 пункта списка (V-1). Цвет задаёт
+// ячейка в appendRows (colorUnread — непрочитан, colorTextPrimary —
+// прочитан; в тёмной теме colorUnread = accent), поэтому знак один для
+// обоих состояний.
+const messageDot = "●"
+
+// externalMarkCol — фиксированная ширина маркера [ВНЕШН] (П.4г): пустой
+// маркер дополняется пробелами, чтобы отправители всех строк начинались с
+// одного столбца и панель не «дышала» при появлении внешних писем.
+const externalMarkCol = 8
+
+// subjectIndent — отступ строки 2 (темы): «● » (2) + externalMarkCol.
+var subjectIndent = strings.Repeat(" ", 2+externalMarkCol)
+
+// FormatMessageListItem — контент двухстрочного пункта списка писем (V-1):
+// [строка 1, время, строка 2]. Строка 1 — точка статуса + [ВНЕШН]
+// фиксированной ширины + отправитель (t:Name, fallback — локальная часть
+// адреса); время — отдельная правая колонка (appendRows ставит AlignRight,
+// панели не «дышет»); строка 2 — тема с отступом под отправителя, усечение
+// с «…» делает truncateEllipsis в DrawFunc (WHY у неё). Цвета и жирность
+// назначает appendRows через SetTextColor, а не теги в тексте: выделенная
+// строка Table перекрашивается целиком через SetSelectedStyle, теги бы
+// пробивались (исключение — точка статуса, WHY у dotLine). Текст из EWS
+// проходит Sanitize (§3) и tview.Escape — Table интерпретирует
+// теги цветов/регионов безусловно (ревью этапа 2).
+func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.Time) []string {
+	mark := fmt.Sprintf("%-*s", externalMarkCol, ExternalMark(m.From.Email, orgDomains))
 	return []string{
-		ExternalMark(m.From.Email, orgDomains),
-		senderLabel(m.From),
-		tview.Escape(security.Sanitize(m.Subject)),
+		messageDot + " " + mark + senderLabel(m.From),
 		FormatShortDate(now, m.Received),
+		subjectIndent + tview.Escape(security.Sanitize(m.Subject)),
 	}
 }
 
@@ -133,6 +153,35 @@ func displayWidth(s string) int {
 		}
 	}
 	return w
+}
+
+// truncateEllipsis — обрезка строки под max клеток с «…» в конце.
+// WHY: своё, а не встроенное многоточие tview.Table — tview сравнивает
+// байтовую длину напечатанного (end-start) с шириной в клетках, у кириллицы
+// байты вдвое больше клеток и условие «текст не влез» всегда ложно.
+// Порог по рунам, не по клеткам — same best effort, что и displayWidth.
+func truncateEllipsis(s string, max int) string {
+	if max < 1 {
+		return ""
+	}
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:max-1]) + "…"
+}
+
+// dotLine красит точку статуса тегом: непрочитанный — colorUnread (в тёмной
+// теме accent), прочитанный — colorRead (muted, П.1 референса). WHY: тег
+// осознанно пробивает SetSelectedStyle — статус письма виден и на выделенной
+// строке; «[-]» возвращает остальной текст (отправителя) в цвет ячейки/
+// выделения.
+func dotLine(text string, unread bool) string {
+	c := colorRead
+	if unread {
+		c = colorUnread
+	}
+	return "[" + hexTag(c) + "]" + messageDot + "[-]" + strings.TrimPrefix(text, messageDot)
 }
 
 // hexTag — цвет роли темы в виде тега tview («#2563eb»), чтобы цвет строки

@@ -78,9 +78,10 @@ func TestPanelLayoutSizes(t *testing.T) {
 	}
 }
 
-// TestMessageRowReadState (RD-4): непрочитанное — жирный accent на колонках
-// 0–2, прочитанное — textPrimary без жирного, дата (колонка 3) всегда
-// textSecondary; [ВНЕШН] отдельного цвета не имеет.
+// TestMessageRowReadState (RD-4, V-1): непрочитанное — жирный accent на
+// строке 1 пункта, прочитанное — textPrimary без жирного; время (колонка 1)
+// и тема (строка 2) всегда textSecondary — приглушены в обеих группах;
+// [ВНЕШН] отдельного цвета не имеет.
 func TestMessageRowReadState(t *testing.T) {
 	a := newTestApp(t)
 	rows := []mail.MessageSummary{
@@ -97,17 +98,20 @@ func TestMessageRowReadState(t *testing.T) {
 		return fg, attr
 	}
 
-	fg, attr := rowStyle(a.mail.itemRows[0], 2)
+	fg, attr := rowStyle(a.mail.itemRows[0], 0)
 	if fg != colorUnread || attr&tcell.AttrBold == 0 {
-		t.Errorf("тема непрочитанного: цвет %v, атрибуты %v; хочу %v + жирный", fg, attr, colorUnread)
+		t.Errorf("строка 1 непрочитанного: цвет %v, атрибуты %v; хочу %v + жирный", fg, attr, colorUnread)
 	}
-	fg, attr = rowStyle(a.mail.itemRows[1], 2)
+	fg, attr = rowStyle(a.mail.itemRows[1], 0)
 	if fg != colorTextPrimary || attr&tcell.AttrBold != 0 {
-		t.Errorf("тема прочитанного: цвет %v, атрибуты %v; хочу %v без жирного", fg, attr, colorTextPrimary)
+		t.Errorf("строка 1 прочитанного: цвет %v, атрибуты %v; хочу %v без жирного", fg, attr, colorTextPrimary)
 	}
 	for i := range rows {
-		if fg, _ = rowStyle(a.mail.itemRows[i], 3); fg != colorRead {
-			t.Errorf("дата строки %d: цвет %v, хочу textSecondary %v", i, fg, colorRead)
+		if fg, _ = rowStyle(a.mail.itemRows[i], 1); fg != colorRead {
+			t.Errorf("время строки %d: цвет %v, хочу textSecondary %v", i, fg, colorRead)
+		}
+		if fg, _ = rowStyle(a.mail.itemRows[i]+1, 0); fg != colorTextSecondary {
+			t.Errorf("тема строки %d: цвет %v, хочу textSecondary %v", i, fg, colorTextSecondary)
 		}
 	}
 }

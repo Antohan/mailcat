@@ -52,6 +52,10 @@ type mailScreen struct {
 	// разделители дней сдвигают нумерацию, сырой row колбэков в items писать
 	// нельзя. Заполняется только в appendRows.
 	itemRows []int
+	// selRow — строка таблицы с выделенным пунктом (строка 1, V-1): строка
+	// темы ниже невыбираема, её выделение красит paintSubject вручную.
+	// -1 = выделения нет.
+	selRow   int
 	offset   int  // Offset следующей страницы FindItem
 	lastPage bool // IncludesLastItemInRange последней страницы
 	loading  bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
@@ -82,7 +86,7 @@ type mailScreen struct {
 }
 
 func newMailScreen(a *App) *mailScreen {
-	s := &mailScreen{app: a, pageSize: a.cfg.PageSize}
+	s := &mailScreen{app: a, pageSize: a.cfg.PageSize, selRow: -1}
 	if s.pageSize < 1 || s.pageSize > pageSizeCap {
 		s.pageSize = 50
 	}
@@ -96,12 +100,15 @@ func newMailScreen(a *App) *mailScreen {
 
 	s.messages = tview.NewTable().
 		SetSelectable(true, false).
-		SetSeparator('\u2502')
+		SetSeparator('│').
+		SetSelectedStyle(tcell.StyleDefault.Background(colorSelectedBg).Foreground(colorSelectedFg))
 	s.messages.SetBorder(true)
-	// WHY: tview считает ширину колонки максимумом по ячейкам и выбрасывает
-	// колонки, не влезающие целиком, — длинная тема выталкивала дату за край
-	// панели (обкатка 20.11). Капы пересчитываются на каждом Draw, до
-	// раскладки колонок, — переживают resize терминала.
+	// WHY (V-1): кап ширины колонки 0 обязателен. tview выбрасывает колонки,
+	// не влезающие целиком, — без капа длинная тема выталкивает колонку
+	// времени (наблюдалось на симуляции). Кап пересчитывается на каждом Draw,
+	// до раскладки колонок, — переживает resize терминала; усечение с «…» —
+	// truncateEllipsis там же (встроенное многоточие tview не работает для
+	// кириллицы).
 	s.messages.SetDrawFunc(s.clampMessageColumns)
 
 	// WHY (RD-5): dynamic colors включены — тема жирная, линия и заглушки
@@ -144,6 +151,13 @@ func newMailScreen(a *App) *mailScreen {
 		s.app.tapp.SetFocus(s.messages)
 	})
 	s.messages.SetSelectionChangedFunc(func(row, _ int) {
+		if row != s.selRow {
+			if s.selRow >= 0 {
+				s.paintSubject(s.selRow+1, false)
+			}
+			s.paintSubject(row+1, true)
+			s.selRow = row
+		}
 		s.showPreview(row)
 		s.maybeLoadNextPage(row)
 	})
@@ -393,6 +407,7 @@ func (s *mailScreen) rebuildRows(added []mail.MessageSummary) {
 	s.items = added
 	s.itemRows = nil
 	s.messages.Clear()
+	s.selRow = -1 // ячейки пересобраны: без сброса Select на ту же строку пропустил бы paintSubject (WHY у paintSubject)
 	s.appendRows(added)
 	if len(s.items) == 0 {
 		s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)").SetTextColor(colorTextSecondary))
@@ -439,42 +454,47 @@ func rowAfterReload(items []mail.MessageSummary, id string, prev int) int {
 	return prev
 }
 
-// clampMessageColumns ограничивает ширину колонок «отправитель» и «тема»
-// текущей шириной панели, чтобы колонка даты всегда оставалась видимой
-// (UI-2). Возврат — стандартный внутренний прямоугольник Box с рамкой.
+// clampMessageColumns ограничивает ширину колонки 0 (строки 1 и 2 пункта,
+// V-1) внутренней шириной панели минус колонка времени и режет текст с
+// «…» под эту ширину (truncateEllipsis). Полный текст берётся из s.items
+// при каждом Draw, а не хранится в ячейке: иначе усечение не пережило бы
+// расширение панели (resize). WHY: встроенное многоточие tview не рисуется
+// для кириллицы — байты против клеток (WHY у truncateEllipsis). Возврат —
+// стандартный внутренний прямоугольник Box с рамкой.
 func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
-	const markW, dateW = len("[ВНЕШН]"), 5 // «15:04» / «02.01»
-	inner := w - 2                         // рамка панели
-	if inner > 0 {
-		sender := inner / 4
-		if sender > 18 {
-			sender = 18
-		}
-		if sender < 8 {
-			sender = 8
-		}
-		subject := inner - (markW + 1) - (sender + 1) - (dateW + 1) - 1
-		if subject < 4 {
-			subject = 4 // уже панель без внешних писем — tview сам ужмёт тему
-		}
+	const timeW = 5 // «15:04» / «02.01»
+	if inner := w - 2; inner > timeW+1 {
+		maxW := inner - timeW - 1
 		for row := 0; row < s.messages.GetRowCount(); row++ {
-			if c := s.messages.GetCell(row, 1); c != nil {
-				c.SetMaxWidth(sender)
+			if c := s.messages.GetCell(row, 0); c != nil {
+				c.SetMaxWidth(maxW)
 			}
-			if c := s.messages.GetCell(row, 2); c != nil {
-				c.SetMaxWidth(subject)
+		}
+		for i, row := range s.itemRows {
+			if i >= len(s.items) {
+				break
+			}
+			parts := FormatMessageListItem(s.items[i], s.app.cfg.InternalDomains(), time.Now())
+			if c := s.messages.GetCell(row, 0); c != nil {
+				c.SetText(dotLine(truncateEllipsis(parts[0], maxW), !s.items[i].IsRead))
+			}
+			if c := s.messages.GetCell(row+1, 0); c != nil {
+				c.SetText(truncateEllipsis(parts[2], maxW))
 			}
 		}
 	}
 	return x + 1, y + 1, w - 2, h - 2
 }
 
-// appendRows дописывает строки в таблицу (RD-4): непрочитанные — жирный
-// accent (колонки 0–2), прочитанные — обычный textPrimary; дата (колонка 3)
-// всегда textSecondary — приглушена в обеих группах. [ВНЕШН] отдельного
-// цвета не получает (SECURITY §4) — красится цветом своей группы.
-// О-1: перед первой строкой каждой группы дня — разделитель «Сегодня /
-// Вчера / Ранее» (не выделяемая строка colorTextSecondary).
+// appendRows дописывает строки в таблицу (RD-4, V-1): пункт письма — две
+// строки таблицы. Строка 1 (точка + [ВНЕШН] + отправитель) — невычитанные
+// жирный accent (colorUnread), прочитанные — textPrimary; время — правая
+// колонка colorRead (приглушено в обеих группах). [ВНЕШН] отдельного цвета
+// не получает (SECURITY §4). Строка 2 (тема) — colorTextSecondary и
+// невыбираема: курсор прыгает пункт→пункт, а её выделение красит paintSubject
+// вручную (tview красит только выбираемые строки). О-1: перед первой строкой
+// каждой группы дня — разделитель «Сегодня / Вчера / Ранее» (не выделяемая
+// строка colorTextSecondary).
 func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
 	now := time.Now()
@@ -490,23 +510,37 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 					SetTextColor(colorTextSecondary).
 					SetSelectable(false)) // без Expansion: расширил бы колонку 0
 		}
+		parts := FormatMessageListItem(m, s.app.cfg.InternalDomains(), now)
 		row := s.messages.GetRowCount()
 		s.itemRows = append(s.itemRows, row)
-		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains(), now) {
-			expansion := 0
-			if col == 2 {
-				expansion = 1 // тема забирает свободную ширину
-			}
-			cell := tview.NewTableCell(text).SetExpansion(expansion)
-			if col == 3 {
-				cell.SetTextColor(colorRead)
-			} else if !m.IsRead {
-				cell.SetTextColor(colorUnread).SetAttributes(tcell.AttrBold)
-			} else {
-				cell.SetTextColor(colorTextPrimary)
-			}
-			s.messages.SetCell(row, col, cell)
+		// dotLine: точка своим цветом тегом (muted у прочитанных, П.1);
+		// базовый цвет ячейки — отправитель (WHY у dotLine).
+		line1 := tview.NewTableCell(dotLine(parts[0], !m.IsRead)).SetExpansion(1)
+		if !m.IsRead {
+			line1.SetTextColor(colorUnread).SetAttributes(tcell.AttrBold)
+		} else {
+			line1.SetTextColor(colorTextPrimary)
 		}
+		s.messages.SetCell(row, 0, line1)
+		s.messages.SetCell(row, 1, tview.NewTableCell(parts[1]).
+			SetTextColor(colorRead).SetAlign(tview.AlignRight))
+		s.messages.SetCell(row+1, 0, tview.NewTableCell(parts[2]).
+			SetExpansion(1).SetTextColor(colorTextSecondary).SetSelectable(false))
+	}
+}
+
+// paintSubject красит строку темы (row — строка 2) в состояние выделения
+// её пункта: строка невыбираема, tview сам её не красит. После пересборки
+// списка ячейки уже нет — nil пропускается.
+func (s *mailScreen) paintSubject(row int, selected bool) {
+	c := s.messages.GetCell(row, 0)
+	if c == nil {
+		return
+	}
+	if selected {
+		c.SetTextColor(colorSelectedFg).SetBackgroundColor(colorSelectedBg)
+	} else {
+		c.SetTextColor(colorTextSecondary).SetBackgroundColor(tcell.ColorDefault)
 	}
 }
 

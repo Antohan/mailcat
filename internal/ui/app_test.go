@@ -57,20 +57,20 @@ func TestShowErrorRunesTruncation(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRowEscaped: теги tview в теме/имени отправителя
+// TestFormatMessageListItemEscaped: теги tview в теме/имени отправителя
 // экранируются (Table интерпретирует [red] даже без SetDynamicColors;
 // tview.Escape вставляет "[]" внутрь тега — семантика tview).
-func TestFormatMessageRowEscaped(t *testing.T) {
+func TestFormatMessageListItemEscaped(t *testing.T) {
 	m := mail.MessageSummary{
 		Subject: "[red]СРОЧНО[-] проверка",
 		From:    mail.Address{Email: `["evil"]@x.example`},
 	}
-	row := FormatMessageRow(m, []string{"company.example"}, time.Now())
+	row := FormatMessageListItem(m, []string{"company.example"}, time.Now())
 	if !strings.Contains(row[2], "[red[]") {
 		t.Errorf("тег [red] в теме не экранирован: %q", row[2])
 	}
-	if !strings.Contains(row[1], `["evil"[]`) {
-		t.Errorf("region-тег в адресе не экранирован: %q", row[1])
+	if !strings.Contains(row[0], `["evil"[]`) {
+		t.Errorf("region-тег в адресе не экранирован: %q", row[0])
 	}
 }
 
