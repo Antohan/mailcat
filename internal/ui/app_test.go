@@ -123,13 +123,15 @@ func TestPageHint(t *testing.T) {
 	}
 }
 
-// TestFormatHint (RD-6): в нижней панели клавиши отделены от описаний —
-// клавиша акцентом жирным, описание — второстепенным цветом; текст наш
-// (не из EWS), поэтому теги динамических цветов тут допустимы.
+// TestFormatHint (V-7, RD-6): клавиша — в бейдже `[клавиша]` акцентом
+// жирным, подпись — второстепенным цветом; текст наш (не из EWS), теги
+// динамических цветов допустимы, «[» бейджа экранирован от парсера tview.
 func TestFormatHint(t *testing.T) {
-	got := formatHint([]hintSeg{{"Esc", "— назад"}, {"q", ""}})
-	want := fmt.Sprintf("[#%06x::b]Esc [#%06x]— назад [#%06x]· [#%06x::b]q",
-		colorAccent.Hex(), colorTextSecondary.Hex(), colorTextSecondary.Hex(), colorAccent.Hex())
+	got := formatHint([]hintSeg{{"Esc", "назад"}, {"q", "выход"}})
+	want := fmt.Sprintf("[#%06x::b]%s [#%06x]назад [#%06x]· [#%06x::b]%s [#%06x]выход",
+		colorAccent.Hex(), tview.Escape("[Esc]"),
+		colorTextSecondary.Hex(), colorTextSecondary.Hex(),
+		colorAccent.Hex(), tview.Escape("[q]"), colorTextSecondary.Hex())
 	if got != want {
 		t.Errorf("formatHint = %q, хочу %q", got, want)
 	}
