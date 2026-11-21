@@ -1,24 +1,25 @@
 # mailcat — HANDOFF
 
 ## Дальше
-RD-7: микро-UX — braille-спиннер (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏) в строке сообщений; обновление
-списка (u, смена папки) сохраняет выделение по ItemId и скролл; пустая папка —
-muted-заглушка. Читать docs/PLAN-ITER3.md (RD-7), internal/ui/app.go
-(beginLoad/endLoad), internal/ui/mail.go.
+Задачи RD-1…RD-7 итерации 3 выполнены (чекбоксы PLAN-ITER3.md). Дальше — вне
+кодовой сессии: сверка DoD («Definition of Done» PLAN-ITER3.md) и решение
+пользователя по опциональным О-1…О-3; smoke по TESTING.md §5 — TODO юзера.
 
 ## Сделано
-- 9c2356e — RD-6: нижняя панель — клавиши accent жирным, описания
-  textSecondary (hintSeg + formatHint); 45e14ec — RD-5: просмотр письма;
-  8a924bd — RD-4: список; 1c39486/7941f3a — RD-3: папки; c37695a — RD-2:
-  каркас; d26e076 — RD-1: палитра; e3e8daf — Release 2.
+- b0f4eb4 — RD-7: спиннер + сохранение выделения/скролла; 9c2356e — RD-6;
+  45e14ec — RD-5; 8a924bd — RD-4; 1c39486/7941f3a — RD-3; c37695a — RD-2;
+  d26e076 — RD-1; e3e8daf — Release 2.
 
 ## Открыто
-- TODO пользователя (TESTING.md §5): smoke S3–S6 (превью/детали RD-5, нижняя
-  панель RD-6), темы, resize; визуал Terminal.app/VS Code.
+- TODO пользователя (TESTING.md §5): smoke S3–S7 (в т.ч. RD-7: спиннер при
+  тормозящем VPN, u возвращает курсор на то же письмо, пустая папка), темы,
+  resize; визуал Terminal.app/VS Code.
 - НИЗКО: attachments.go ~120 — частичный файл при ошибке Write; Write-операции
   (mark-as-read/delete) отложены — решения у пользователя.
 
 ## Не трогать
+- RD-7: спиннер — прямой SetText, не setStatus (statusGen гасит таймер
+  ошибки); errorShown стопает тик; Clear только в rebuildRows по свежему gen.
 - RD-6: hint — SetDynamicColors(true), но текст только наш (formatHint из
   hintSeg); серверный текст не писать; теги — hex ролей (Color.Hex()).
 - RD-5: preview/details — EWS-текст только Sanitize + tview.Escape; a.event
