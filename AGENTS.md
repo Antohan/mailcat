@@ -46,6 +46,25 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 8. **Scope is the current iteration plan.** No "for later" features that
    `docs/PLAN-ITER3.md` does not describe.
 
+## Code minimalism
+
+Write the smallest complete change (adopted from the ponytail ruleset, MIT):
+
+- Ladder, in order: already in the codebase? → stdlib/platform feature? →
+  installed dependency (approved list only, rule 6)? → minimum code that works.
+  Never add a dependency for a few lines.
+- No unrequested features, abstractions, wrappers, config or "for later" code —
+  name what you skipped in one line instead.
+- The shortest working diff wins, but it must be complete: update all callers,
+  tests and fixtures the change touches; a bug fix goes to the root cause in
+  shared code, not to each symptom.
+- New non-trivial logic (branches, loops, parsers) needs one small test;
+  trivial changes don't.
+- A deliberate limitation gets a code comment: `shortcut: <the limit>, <when
+  to upgrade>` — and one line in `HANDOFF.md → Открыто`.
+- Never cut: validation, error handling against data loss, security,
+  accessibility, anything the task explicitly asks for.
+
 ## Work
 
 1. Open a session with `/stage <task>` (e.g. `/stage RD-1`): it loads the
