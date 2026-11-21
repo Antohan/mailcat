@@ -6,6 +6,7 @@
 минимум высоты; скриншот обязателен). Старт: `/stage V-6`.
 
 ## Сделано
+- iter31:fix (1c633d0): «u» при пустом сайдбаре вызывает loadFolders (после ошибки старта без VPN), иначе — прежнее поведение; тест через мок-EWS.
 - iter31 V-5: шапка деталей — аватар-инициалы, «Имя <email>», дата справа, «Кому», линия, тема жирным; колонка чтения 90 (центр) / вся минус поля (<100); «Вложения N»; 📎 убран; скриншоты opencode/v5-*.txt. iter31 V-4…V-10 и релиз 2 — `git log --oneline` (b56a77d…, e3e8daf).
 
 ## Открыто
@@ -15,6 +16,7 @@
 - item:Importance нет в EWS-REFERENCE (min_importance, ⚠). Отложено: write-операции, палитра Catppuccin, сниппет item:Preview (риск 500).
 
 ## Не трогать
+- fix: refreshFolder при пустом сайдбаре зовёт loadFolders (восстановление после старта без VPN) — обычный «u» не менять.
 - V-5: DrawFunc пересобирает карточку шапки по ширине, гард `a.detailsW`; тело кэшируется в `detailsTail` (resize не перегенерирует реестр ссылок); `layoutDetails` — только из before-draw; паддинг даты — `tview.TaggedStringWidth`; усечение — `truncateEllipsis`; `FormatMessageHeader` — только превью.
 - V-4: разделители — пункты списка с перескоком; «Ещё» — `s.moreIdx`; футер SetWrap(false); applyActiveFolderStyle пересчитывает ВСЕ строки.
 - V-3/V-1/V-2: рамки одинарные; разделители textSecondary; неактивные рамки невидимы (RD-2); truncateEllipsis («…» tview ломает кириллицу); selRow=-1 в rebuildRows; [ВНЕШН] externalMarkCol=8; headerGap=2.
