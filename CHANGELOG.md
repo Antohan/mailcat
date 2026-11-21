@@ -2,6 +2,11 @@
 
 > Формат записи — «Журнал решений» в docs/PLAN-ITER3.md. Новые записи — сверху.
 
+## 2026-11-21 · iter3:RD-6 · нижняя панель: клавиши отделены от описаний
+- Сделано: подсказки — сегменты «клавиша — описание» (`hintSeg` + `formatHint`): клавиша — акцент жирным, описание — textSecondary; строка сообщений и строка подсказок не слиты (UI-9), набор по активной странице — как был.
+- Решения: цвета в тегах — hex ролей темы (`Color.Hex()`): роли — переменные applyTheme, у тегов tview имён ролей нет; фон нейтральный уже был (`PrimitiveBackgroundColor = colorPanelBg`), кода не нужно.
+- Отклонения от плана/золотых правил: нет.
+
 ## 2026-11-21 · iter3:RD-5 · просмотр письма: структура и пустые состояния
 - Сделано: `FormatMessageHeader` — порядок Тема (жирная) → От → Кому (если есть) → Дата → линия-разделитель; превью строит тот же блок из MessageSummary (Message без Кому/вложений); preview и details переведены на SetDynamicColors(true) — весь текст из EWS через Sanitize + tview.Escape, включая имена вложений в `FormatAttachments` (escapeForList, находка security-reviewer); пустые состояния: «Выберите письмо — Enter» (создание/смена папки), «(Письмо без текста)» в деталях, «(писем нет)» — muted (textSecondary). Тесты: порядок/жирность/разделитель/escape-инъекция в TestFormatMessageHeader, сторож evil-name в TestFormatAttachments.
 - Решения: линия-разделитель — фикс 32 «─», не ширина панели (узкое окно переносит сам TextView); превью переиспользует FormatMessageHeader — структура превью и деталей не разойдётся; dynamic colors включены только у preview/details, TextView встречи (a.event) не тронут (showEventDetails пишет без Escape).

@@ -1,36 +1,31 @@
 # mailcat — HANDOFF
 
 ## Дальше
-RD-6: нижняя панель — клавиши отделены от описаний. Читать `docs/PLAN-ITER3.md`
-(RD-6), `internal/ui/app.go` (константы `hint*`, `showHint`, `status`/`hint`).
+RD-7: микро-UX — braille-спиннер (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏) в строке сообщений; обновление
+списка (u, смена папки) сохраняет выделение по ItemId и скролл; пустая папка —
+muted-заглушка. Читать docs/PLAN-ITER3.md (RD-7), internal/ui/app.go
+(beginLoad/endLoad), internal/ui/mail.go.
 
 ## Сделано
-- 45e14ec — RD-5: просмотр письма (структура, dynamic colors + Escape, пустые
-  состояния); 8a924bd — RD-4: список писем; 1c39486/7941f3a — RD-3: папки;
-  c37695a — RD-2: каркас; d26e076 — RD-1: палитра; e3e8daf — Release 2.
+- 9c2356e — RD-6: нижняя панель — клавиши accent жирным, описания
+  textSecondary (hintSeg + formatHint); 45e14ec — RD-5: просмотр письма;
+  8a924bd — RD-4: список; 1c39486/7941f3a — RD-3: папки; c37695a — RD-2:
+  каркас; d26e076 — RD-1: палитра; e3e8daf — Release 2.
 
 ## Открыто
-- TODO пользователя (TESTING.md §5): smoke S3–S6 (в т.ч. превью/детали RD-5),
-  темы, resize; визуал в Terminal.app/VS Code.
+- TODO пользователя (TESTING.md §5): smoke S3–S6 (превью/детали RD-5, нижняя
+  панель RD-6), темы, resize; визуал Terminal.app/VS Code.
 - НИЗКО: attachments.go ~120 — частичный файл при ошибке Write; Write-операции
-  (mark-as-read/delete, [write]) отложены — решения у пользователя.
+  (mark-as-read/delete) отложены — решения у пользователя.
 
 ## Не трогать
-- RD-5: preview/details TextView — SetDynamicColors(true): любой текст из EWS в
-  них только через Sanitize + tview.Escape (FormatMessageHeader / showDetails /
-  FormatAttachments — escapeForList; находка security-reviewer), «просто
-  SetText» = тег-инъекция; a.event остаётся dynamic=false (showEventDetails
-  пишет без Escape). Разделитель письма — фикс 32 «─» textSecondary; превью
-  строит FormatMessageHeader от MessageSummary, свой форматтер не заводить.
-- RD-4: цвет ячейки tview живёт в `Style` (сеттеры не пишут в legacy
-  Color/Attributes при заданном Style; в тестах `Style.Decompose()`);
-  непрочитанные — accent; [ВНЕШН] — цвет своей группы.
-- RD-3: активная папка = открытая (ID; до первого переключения — имя);
-  accent-теги снимаются под курсором; счётчик watcher'а — через mainFolders.
-- RD-2: заголовок — `panelHeader` (капс, accent у активной); линия —
-  textSecondary, не hairline; рамка неактивной красится `colorPanelBg`.
-- RD-1: цвета в виджетах — только роли `theme.go`; фокус и выделение — accent.
-- UI-9: подсказки — showHint→a.hint; ошибки — setStatus→a.status; endLoad(id)
-  один раз на ветку; красный — только colorError; очистка по statusGen.
-- EWS: item:IsRead в FindItem / t:BodyType в GetItem → 500; CalendarView без
-  SortOrder/Restriction; read-only; tls только internal/ews.
+- RD-6: hint — SetDynamicColors(true), но текст только наш (formatHint из
+  hintSeg); серверный текст не писать; теги — hex ролей (Color.Hex()).
+- RD-5: preview/details — EWS-текст только Sanitize + tview.Escape; a.event
+  dynamic=false; превью — FormatMessageHeader от MessageSummary.
+- RD-4: цвет ячейки — в Style (тесты — Style.Decompose()); непрочитанные — accent.
+- RD-3: активная папка = открытая (ID, до переключения — имя); счётчик — mainFolders.
+- RD-2: заголовок — panelHeader; линия textSecondary; рамка неактивной colorPanelBg.
+- RD-1: цвета — только роли theme.go; фокус/выделение — accent.
+- UI-9: подсказки→a.hint, сообщения→a.status; endLoad один раз; красный — colorError.
+- EWS: item:IsRead в FindItem / t:BodyType в GetItem → 500; read-only; tls в internal/ews.
