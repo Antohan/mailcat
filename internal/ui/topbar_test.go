@@ -1,6 +1,6 @@
 package ui
 
-// Тесты верхнего бара (V-6).
+// Тесты верхнего бара (V-6, V-11).
 
 import (
 	"regexp"
@@ -10,9 +10,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 )
 
-// TestTopBar: одна строка над pages — слева «mailcat · <папка>» (имя из EWS
-// экранировано), справа дата/время и точка связи у самого правого края
-// (красная до первого успеха, зелёная после — как футер сайдбара V-4).
+// TestTopBar: одна строка над pages — только «mailcat · <папка>» (имя из EWS
+// экранировано). Дата/время и точка связи убраны (V-11): статус связи —
+// футер сайдбара (setConn).
 func TestTopBar(t *testing.T) {
 	a := newTestApp(t)
 	a.mail.folderName = `Отчёты["x"]`
@@ -30,18 +30,8 @@ func TestTopBar(t *testing.T) {
 	if !strings.Contains(row, "mailcat · Отчёты") || !strings.Contains(row, `["x"]`) {
 		t.Errorf("строка 0 = %q", row)
 	}
-	if !regexp.MustCompile(`\d{2}\.\d{2}\.\d{4} \d{2}:\d{2} ●$`).MatchString(row) {
-		t.Errorf("дата/точка не прижаты вправо: %q", row)
-	}
-	_, _, st, _ := sim.GetContent(109, 0)
-	if fg, _, _ := st.Decompose(); fg != colorError {
-		t.Errorf("точка не красная до первого успеха: %v", st)
-	}
-	a.connOK = true
-	a.tapp.QueueUpdateDraw(a.updateTopBar)
-	_, _, st, _ = sim.GetContent(109, 0)
-	if fg, _, _ := st.Decompose(); fg != colorConnected {
-		t.Errorf("точка не зелёная после успеха: %v", st)
+	if regexp.MustCompile(`\d{2}\.\d{2}\.\d{4}`).MatchString(row) || strings.Contains(row, "●") {
+		t.Errorf("дата/точка верхнего бара не убраны: %q", row)
 	}
 	a.mail.folderName = ""
 	a.tapp.QueueUpdateDraw(a.updateTopBar)

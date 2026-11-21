@@ -82,13 +82,11 @@ type App struct {
 	pages  *tview.Pages
 	status *tview.TextView // строка сообщений (UI-9): «Загрузка…», ошибки, результаты
 	hint   *tview.TextView // строка подсказок (UI-9): видна всегда, ниже строки сообщений
-	// Верхний бар (V-6): одна строка — «mailcat · <папка>» слева, дата/время
-	// и точка связи справа. connOK — последняя EWS-операция прошла (V-4).
-	topLeft  *tview.TextView
-	topRight *tview.TextView
-	connOK   bool
-	detail   *tview.TextView // экран деталей письма (страница pageDetails)
-	event    *tview.TextView // экран деталей встречи (страница pageEvent)
+	// Верхний бар (V-6, V-11): одна строка — только «mailcat · <папка>» слева;
+	// дата/время и точка связи убраны (статус связи — футер сайдбара, V-4).
+	topLeft *tview.TextView
+	detail  *tview.TextView // экран деталей письма (страница pageDetails)
+	event   *tview.TextView // экран деталей встречи (страница pageEvent)
 
 	// Колонка чтения письма (V-5, П.1): спейсеры по бокам a.detail; ширина
 	// readWidth по центру или вся ширина минус поля на узком терминале.
@@ -254,14 +252,8 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	a.event = event
 	a.pages.AddPage(pageEvent, event, true, false)
 
-	// Верхний бар (V-6): Flex(Columns) — левая часть растягивается, правые
-	// (дата 16 + пробел + ●) прижаты к правому краю фиксированной шириной,
-	// паддинг вручную не нужен. One-line: SetWrap(false) у обеих частей.
+	// Верхний бар (V-11): одна строка — «mailcat · <папка>» на всю ширину.
 	a.topLeft = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	a.topRight = tview.NewTextView().SetDynamicColors(true).SetWrap(false).SetTextAlign(tview.AlignRight)
-	topBar := tview.NewFlex().
-		AddItem(a.topLeft, 0, 1, false).
-		AddItem(a.topRight, topBarRightW, 0, false)
 	a.updateTopBar()
 
 	// WHY (UI-9): две строки статуса вместо одной — подсказки клавиш видны
@@ -270,7 +262,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	// при ошибке пользователь снова теряет клавиши экрана.
 	root := tview.NewFlex().
 		SetDirection(tview.FlexRow).
-		AddItem(topBar, 1, 0, false). // верхний бар — одна строка (V-6)
+		AddItem(a.topLeft, 1, 0, false). // верхний бар — одна строка (V-6, V-11)
 		AddItem(a.pages, 0, 1, true).
 		AddItem(a.status, 1, 0, false). // строка сообщений — над подсказками
 		AddItem(a.hint, 1, 0, false)    // строка подсказок — самая нижняя
@@ -287,46 +279,22 @@ func (a *App) Run() error {
 	if a.cfg.Notify.Enabled { // enabled=false — watcher не запускается вовсе (DoD этапа 6)
 		a.startWatcher()
 	}
-	// Часы верхнего бара (V-6): раз в минуту через QueueUpdateDraw; выход — по
-	// ctx сессии (Run ниже гасит его при остановке TUI).
-	go func() {
-		tick := time.NewTicker(time.Minute)
-		defer tick.Stop()
-		for {
-			select {
-			case <-a.ctx.Done():
-				return
-			case <-tick.C:
-				a.tapp.QueueUpdateDraw(a.updateTopBar)
-			}
-		}
-	}()
+	// V-11: часы верхнего бара убраны вместе с датой/временем — тикер не нужен.
 	err := a.tapp.Run()
 	a.cancel() // контекст сессии гасится вместе с TUI
 	return err
 }
 
-// topBarRightW — ширина правой части верхнего бара (V-6): дата/время
-// «02.01.2006 15:04» (16 клеток) + пробел + точка связи.
-const topBarRightW = 18
-
-// updateTopBar пересобирает верхний бар (V-6): «mailcat · <папка>» слева
-// (имя папки — данные EWS: Sanitize + Escape, инвариант escape), дата/время
-// и точка связи справа (цвета — роли V-4: colorConnected/colorError).
-// Зовётся при смене папки (selectFolder), статуса связи (setConn) и раз в
-// минуту из тикера Run.
+// updateTopBar пересобирает верхний бар (V-6, V-11): «mailcat · <папка>» —
+// имя папки из EWS: Sanitize + Escape (инвариант escape). Дата/время и точка
+// связи убраны: статус связи живёт в футере сайдбара (V-4, V-12).
+// Зовётся при старте и смене папки (selectFolder).
 func (a *App) updateTopBar() {
 	left := "[::b]mailcat[-::-]"
 	if name := a.mail.folderName; name != "" {
 		left += mutedText(" · ") + tview.Escape(security.Sanitize(name))
 	}
 	a.topLeft.SetText(left)
-	dot := colorConnected
-	if !a.connOK {
-		dot = colorError
-	}
-	a.topRight.SetText(mutedText(time.Now().Format("02.01.2006 15:04")) +
-		" [" + hexTag(dot) + "]●[-]")
 }
 
 // prepareAttachmentDirs создаёт каталоги вложений при старте (T-1): ошибка

@@ -380,8 +380,6 @@ func (s *mailScreen) toggleTech() {
 // прошла, красная при ошибке. Текст на красной — «Нет связи»: «Connected» с
 // красной точкой врал бы.
 func (s *mailScreen) setConn(ok bool) {
-	s.app.connOK = ok
-	s.app.updateTopBar() // точка верхнего бара (V-6) — тот же статус, что футер
 	dot, label := colorConnected, "Connected"
 	if !ok {
 		dot, label = colorError, "Нет связи"
