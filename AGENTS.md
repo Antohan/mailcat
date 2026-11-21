@@ -133,9 +133,11 @@ separate conversation; a coding session receives a task and returns a report.
 A ten-message discussion inside a session re-bills its whole context ten
 times.
 
-**Models.** Flash by default — pinned as `zai/glm-5.3-flash` (the provider
-prefix is mandatory: a bare id does not resolve and the agent silently
-disappears from lists — observed). Flagship (via `/models`) for the
+**Models.** Flash by default — pinned as `deepseek/deepseek-flash` (deepseek
+provider, pay-as-you-go: авторизуйте `opencode auth login` → DeepSeek до
+первой сессии). The provider prefix is mandatory: a bare id does not resolve
+and the agent silently disappears from lists — observed. Flagship (via
+`/models`) for the
 `ews-specialist` subagent and for iteration tasks where layout design matters
 (V-1, V-5). `security-reviewer` inherits the session model —
 do not pin a `model:` in its file (same silent-disappearance failure mode).

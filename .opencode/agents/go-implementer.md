@@ -1,12 +1,15 @@
 ---
 description: Основной агент разработки mailcat — пишет код по задачам итераций (сейчас docs/PLAN-ITER3.1.md)
 mode: primary
-# Default model is GLM Flash from the Z.AI subscription (cheap, fine for
-# routine tasks); switch to the flagship glm-5.3 with /models for
-# layout-heavy tasks (V-1, V-5 in PLAN-ITER3.1).
+# Default model is DeepSeek Flash via the deepseek provider (API key,
+# pay-as-you-go — no 5-hour windows); switch to the flagship glm-5.3 with
+# /models for layout-heavy tasks (V-1, V-5 in PLAN-ITER3.1).
 # The provider prefix is mandatory: a bare id does not resolve and the agent
 # silently disappears from the picker (observed).
-model: zai/glm-5.3-flash
+# REQUIREMENT: authorize the deepseek provider first — `opencode auth login`
+# → DeepSeek (API key from platform.deepseek.com). Without auth the model
+# fails to resolve and the agent silently disappears.
+model: deepseek/deepseek-flash
 # Hard cap: a stuck task must stop, not loop (AGENTS.md, "Circuit breaker").
 steps: 40
 ---
