@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/gdamore/tcell/v2"
@@ -264,11 +265,13 @@ func SplitFolders(folders []mail.Folder, hidden []string) (main, technical []mai
 	return main, technical
 }
 
-// FormatMessageHeader — блок заголовков письма (RD-5): Тема (жирный) → От →
-// Кому (если есть) → Дата → линия-разделитель; тело печатает вызывающий.
-// Служит и превью (MessageSummary без Кому/вложений), и деталям письма.
-// WHY: маркер — в строке темы, а не отдельной строкой: ниже в карточке
-// FormatAttachments уже печатает список с заголовком «Вложения:».
+// FormatMessageHeader — блок заголовков превью-панели письма (RD-5): Тема
+// (жирный) → От → Кому (если есть) → Дата → линия-разделитель; тело печатает
+// вызывающий. Служит превью (MessageSummary без Кому/вложений). Страница
+// деталей письма с V-5 рисует шапку через FormatMessageCard.
+// WHY: маркера вложений «📎 N» больше нет (П.2а — без иконок): количество
+// показывает секция «Вложения N» (FormatAttachments) на странице деталей,
+// а в превью сводка FindItem вложений не содержит.
 // Важность (⚠) не показывается: item:Importance нет в EWS-REFERENCE, с
 // сервера не приходит (открытый вопрос в HANDOFF «Открыто»).
 // Реальный адрес отправителя показывается всегда (SECURITY.md §4.1).
@@ -277,9 +280,6 @@ func SplitFolders(folders []mail.Folder, hidden []string) (main, technical []mai
 func FormatMessageHeader(m mail.Message) string {
 	var b strings.Builder
 	topic := tview.Escape(security.Sanitize(m.Subject))
-	if n := len(m.Attachments); n > 0 {
-		topic += fmt.Sprintf("  📎 %d", n)
-	}
 	fmt.Fprintf(&b, "[::b]Тема:  %s[-::-]\n", topic)
 	b.WriteString("От:    " + tview.Escape(security.Sanitize(m.From.String())) + "\n")
 	if len(m.To) > 0 {
@@ -292,9 +292,14 @@ func FormatMessageHeader(m mail.Message) string {
 	return b.String()
 }
 
-// headerRuleWidth — длина линии-разделителя под заголовками письма (RD-5):
-// фикс, а не ширина панели — узкое окно TextView переносит сам.
+// headerRuleWidth — длина линии-разделителя под заголовками превью и секции
+// вложений (RD-5): фикс, а не ширина панели — узкое окно TextView переносит сам.
 const headerRuleWidth = 32
+
+// readWidth — ширина колонки чтения письма в клетках (V-5, П.1 референса):
+// ~90 колонок по центру панели; терминал уже — вся ширина минус поля
+// (layoutDetails в app.go).
+const readWidth = 90
 
 // mutedText красит статический текст интерфейса (не из EWS — escape не нужен)
 // в textSecondary. Заглушки и линия-разделитель письма (RD-2/RD-5):
@@ -303,8 +308,77 @@ func mutedText(s string) string {
 	return fmt.Sprintf("[%s]%s[-]", hexTag(colorTextSecondary), s)
 }
 
-// FormatAttachments — список вложений с человекочитаемыми размерами
-// (модал деталей, этап 3 добавит клавиши действий).
+// initials — инициалы аватара (V-5): первые буквы до двух слов имени,
+// заглавные; без имени — буква адреса (локальная часть); взять нечего — «?».
+// Буквы только (unicode.IsLetter): в цветной блок аватара текст из EWS идёт
+// без Escape — квадратная скобка в инициалах стала бы тегом tview
+// (инвариант escape), поэтому данные здесь ещё и Sanitize.
+func initials(name, email string) string {
+	for _, src := range []string{name, email} {
+		var out []rune
+		for _, w := range strings.Fields(security.Sanitize(src)) {
+			for _, r := range w {
+				if unicode.IsLetter(r) {
+					out = append(out, unicode.ToUpper(r))
+					break
+				}
+			}
+			if len(out) == 2 {
+				break
+			}
+		}
+		if len(out) > 0 {
+			return string(out)
+		}
+	}
+	return "?"
+}
+
+// FormatMessageCard — шапка письма на странице деталей (V-5, референс П.1):
+// строка 1 — аватар-инициалы (4 клетки на accent) + «Имя <email>» + дата
+// справа (паддинг до width); строка 2 — «Кому: …» (переносит TextView);
+// линия во всю ширину колонки; тема жирным — как заголовок тела, дальше
+// showDetails печатает тело. width — ширина колонки чтения в клетках.
+// Паддинг даты считает печатную ширину tview.TaggedStringWidth (цвет-теги не
+// в счёт), усечение имени — truncateEllipsis по рунам (best effort, WHY у
+// неё). Все данные EWS — Sanitize + tview.Escape (инвариант escape).
+func FormatMessageCard(m mail.Message, width int) string {
+	var b strings.Builder
+	// Аватар ровно 4 клетки (« %-2s »): имя и дата стартуют с известных
+	// колонок при любой длине инициалов.
+	fmt.Fprintf(&b, "[%s:%s:b] %-2s [-:-:-]",
+		hexTag(colorOnAccent), hexTag(colorAccent), initials(m.From.Name, m.From.Email))
+	date := ""
+	if !m.Received.IsZero() {
+		date = m.Received.Local().Format("02.01.2006 15:04")
+	}
+	whoMax := width - 5 - 1 // аватар (4) + пробел + зазор до даты
+	if date != "" {
+		whoMax -= len(date)
+	}
+	if whoMax < 1 {
+		whoMax = 1
+	}
+	who := tview.Escape(truncateEllipsis(security.Sanitize(m.From.String()), whoMax))
+	b.WriteString(" " + who)
+	if date != "" {
+		pad := width - 5 - tview.TaggedStringWidth(who) - len(date)
+		if pad < 1 {
+			pad = 1
+		}
+		b.WriteString(strings.Repeat(" ", pad) + date)
+	}
+	b.WriteString("\n")
+	if len(m.To) > 0 {
+		b.WriteString("Кому:  " + tview.Escape(security.Sanitize(joinAddresses(m.To))) + "\n")
+	}
+	b.WriteString(mutedText(strings.Repeat("─", width)) + "\n")
+	fmt.Fprintf(&b, "[::b]%s[-::-]", tview.Escape(security.Sanitize(m.Subject)))
+	return b.String()
+}
+
+// FormatAttachments — секция вложений на странице деталей (V-5): линия,
+// «Вложения N» жирным и пункты «имя (размер)» с человекочитаемыми размерами.
 func FormatAttachments(list []mail.Attachment) string {
 	if len(list) == 0 {
 		return ""
@@ -316,7 +390,9 @@ func FormatAttachments(list []mail.Attachment) string {
 		// иначе стал бы тегом (находка security-reviewer).
 		lines = append(lines, fmt.Sprintf("  • %s (%s)", escapeForList(a.Name), a.SizeLabel()))
 	}
-	return "Вложения:\n" + strings.Join(lines, "\n")
+	return mutedText(strings.Repeat("─", headerRuleWidth)) + "\n" +
+		fmt.Sprintf("[::b]Вложения %d[-::-]", len(list)) + "\n" +
+		strings.Join(lines, "\n")
 }
 
 func joinAddresses(list []mail.Address) string {

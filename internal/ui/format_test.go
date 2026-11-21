@@ -10,6 +10,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rivo/tview"
 	"mailcat/internal/mail"
 )
 
@@ -193,8 +194,8 @@ func TestFormatFolderActive(t *testing.T) {
 	}
 }
 
-// TestFormatMessageHeader: блок заголовков для панели просмотра;
-// UI-3 — 📎 N при вложениях (метаданные GetItem), без вложений маркера нет.
+// TestFormatMessageHeader: блок заголовков превью-панели (V-5: детали письма
+// перешли на FormatMessageCard, маркер 📎 заменён секцией «Вложения N»).
 func TestFormatMessageHeader(t *testing.T) {
 	m := mail.Message{
 		MessageSummary: mail.MessageSummary{
@@ -205,16 +206,14 @@ func TestFormatMessageHeader(t *testing.T) {
 		Attachments: []mail.Attachment{{Name: "report.pdf"}, {Name: "данные.csv"}},
 	}
 	h := FormatMessageHeader(m)
-	for _, want := range []string{"От:", "Иванов И. <ivanov@company.example>", "Кому:", "apetrova@company.example", "vsidorov@company.example", "Тема:", "Отчёт Q3", "📎 2"} {
+	for _, want := range []string{"От:", "Иванов И. <ivanov@company.example>", "Кому:", "apetrova@company.example", "vsidorov@company.example", "Тема:", "Отчёт Q3"} {
 		if !contains(h, want) {
 			t.Errorf("в заголовках нет %q:\n%s", want, h)
 		}
 	}
-	bare := FormatMessageHeader(mail.Message{
-		MessageSummary: mail.MessageSummary{Subject: "Пусто", From: mail.Address{Email: "a@b.c"}},
-	})
-	if contains(bare, "📎") {
-		t.Errorf("маркер 📎 без вложений:\n%s", bare)
+	// П.2а (без иконок): маркера 📎 нет ни с вложениями, ни без.
+	if contains(h, "📎") {
+		t.Errorf("иконка 📎 в заголовках:\n%s", h)
 	}
 	// RD-5: порядок Тема → От; тема жирная; линия-разделитель присутствует.
 	if i, j := strings.Index(h, "Тема:"), strings.Index(h, "От:"); i > j {
@@ -235,13 +234,106 @@ func TestFormatMessageHeader(t *testing.T) {
 	}
 }
 
-// TestFormatAttachments: имя + человекочитаемый размер.
+// TestFormatMessageCard: шапка страницы деталей (V-5, референс П.1) —
+// аватар-инициалы, «Имя <email>», дата справа (паддинг до width; ширина
+// печатных клеток меряет tview.TaggedStringWidth), «Кому: …», линия во всю
+// ширину колонки, тема жирным. Узкая колонка усекает имя с «…»
+// (truncateEllipsis, инвариант V-1).
+func TestFormatMessageCard(t *testing.T) {
+	m := mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject:  "Отчёт Q3",
+			From:     mail.Address{Name: "Иванов Иван Иванович", Email: "ivanov@company.example"},
+			Received: time.Date(2026, 11, 21, 15, 4, 0, 0, time.Local),
+		},
+		To: []mail.Address{{Email: "apetrova@company.example"}, {Email: "vsidorov@company.example"}},
+	}
+	card := FormatMessageCard(m, 90)
+	lines := strings.Split(card, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("хочу 4 строки (аватар, кому, линия, тема):\n%s", card)
+	}
+	avatar := "[" + hexTag(colorOnAccent) + ":" + hexTag(colorAccent) + ":b]"
+	if !contains(lines[0], avatar) || !contains(lines[0], " ИИ ") {
+		t.Errorf("нет аватара-инициалов:\n%q", lines[0])
+	}
+	if !contains(lines[0], "Иванов Иван Иванович <ivanov@company.example>") {
+		t.Errorf("нет «Имя <email>»:\n%q", lines[0])
+	}
+	if !contains(lines[0], "21.11.2026 15:04") {
+		t.Errorf("нет даты:\n%q", lines[0])
+	}
+	if w := tview.TaggedStringWidth(lines[0]); w != 90 {
+		t.Errorf("строка 1 = %d клеток, хочу 90 (дата справа):\n%q", w, lines[0])
+	}
+	if !contains(lines[1], "Кому:") || !contains(lines[1], "vsidorov@company.example") {
+		t.Errorf("нет «Кому»:\n%q", lines[1])
+	}
+	if c := strings.Count(lines[2], "─"); c != 90 {
+		t.Errorf("линия = %d клеток, хочу 90:\n%q", c, lines[2])
+	}
+	if i, j := strings.Index(card, "─"), strings.Index(card, "[::b]Отчёт Q3"); i > j {
+		t.Errorf("тема должна идти после линии:\n%s", card)
+	}
+
+	// Узкая колонка: имя усечено с «…», дата всё равно справа до width.
+	narrow := strings.Split(FormatMessageCard(m, 58), "\n")
+	if w := tview.TaggedStringWidth(narrow[0]); w != 58 {
+		t.Errorf("узкая строка 1 = %d клеток, хочу 58:\n%q", w, narrow[0])
+	}
+	if !contains(narrow[0], "…") {
+		t.Errorf("имя не усечено на узкой колонке:\n%q", narrow[0])
+	}
+
+	// Без Кому и даты — строки опускаются (остаются аватар, линия, тема).
+	bare := FormatMessageCard(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "Пусто", From: mail.Address{Email: "a@b.c"}},
+	}, 90)
+	if got := strings.Count(bare, "\n"); got != 2 {
+		t.Errorf("без Кому/даты хочу 3 строки, строк-1 = %d:\n%s", got, bare)
+	}
+
+	// Тема/имя-обманки с тегами не рендерятся как теги (Sanitize + Escape).
+	evil := FormatMessageCard(mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject: "[red]скрыто",
+			From:    mail.Address{Name: "[blue]Зло", Email: "x@y.z"},
+		},
+	}, 90)
+	if !contains(evil, "[red[]") || !contains(evil, "[blue[]") {
+		t.Errorf("теги из EWS не экранированы:\n%s", evil)
+	}
+}
+
+// TestInitials: инициалы аватара (V-5) — до двух первых букв слов имени,
+// заглавные; пустое имя — буква из локальной части адреса; нечего брать — «?».
+func TestInitials(t *testing.T) {
+	cases := []struct{ name, email, want string }{
+		{"Иванов Иван", "", "ИИ"},
+		{"Иванов", "", "И"},
+		{"", "ivanov@corp.example", "I"},
+		{"мария попова", "", "МП"},
+		{"O'Hara Pty Ltd", "", "OP"},
+		{"", "", "?"},
+	}
+	for _, c := range cases {
+		if got := initials(c.name, c.email); got != c.want {
+			t.Errorf("initials(%q, %q) = %q, хочу %q", c.name, c.email, got, c.want)
+		}
+	}
+}
+
+// TestFormatAttachments: имя + человекочитаемый размер; V-5 — секция
+// «Вложения N» с линией-разделителем.
 func TestFormatAttachments(t *testing.T) {
 	list := []mail.Attachment{
 		{Name: "report.pdf", ContentLength: 2097152},
 		{Name: "данные.csv", ContentLength: 1024},
 	}
 	got := FormatAttachments(list)
+	if !contains(got, "Вложения 2") || !contains(got, "──") {
+		t.Errorf("нет секции «Вложения N» с линией:\n%s", got)
+	}
 	if !contains(got, "report.pdf (2.0 МБ)") || !contains(got, "данные.csv (1.0 КБ)") {
 		t.Errorf("FormatAttachments = %q", got)
 	}

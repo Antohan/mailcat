@@ -83,6 +83,14 @@ type App struct {
 	detail *tview.TextView // экран деталей письма (страница pageDetails)
 	event  *tview.TextView // экран деталей встречи (страница pageEvent)
 
+	// Колонка чтения письма (V-5, П.1): спейсеры по бокам a.detail; ширина
+	// readWidth по центру или вся ширина минус поля на узком терминале.
+	detailPage  *tview.Flex
+	detailsWide bool         // текущий режим колонки (пересчёт в layoutDetails)
+	detailsW    int          // ширина, под которую собрана карточка шапки
+	detailsMsg  mail.Message // письмо страницы деталей: пересборка шапки на resize
+	detailsTail string       // тело+вложения+подсказки: кэш, чтобы resize не перегенерировал реестр ссылок
+
 	cfg    *config.Config
 	client *ews.Client
 	log    *slog.Logger
@@ -192,8 +200,26 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		}
 		return event
 	})
+	// Колонка чтения (V-5, П.1): спейсеры по бокам a.detail; раскладку при
+	// resize пересчитывает layoutDetails (до отрисовки, WHY у неё).
+	a.detailPage = tview.NewFlex()
+	a.detailsWide = true // стартовая раскладка широкая; layoutDetails поправит
+	a.detailPage.AddItem(nil, 0, 1, false).
+		AddItem(details, readWidth, 0, true).
+		AddItem(nil, 0, 1, false)
+	// WHY: дата в шапке-карточке паддингом под конкретную ширину — карточку
+	// собираем заново в DrawFunc, когда ширина колонки изменилась (гард по
+	// detailsW — без цикла перерисовки); SetText отрисовывается тем же кадром,
+	// потому что TextView печатает текст после Box.Draw. Тело — из detailsTail:
+	// resize не перегенерирует реестр ссылок.
+	details.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if inner := w - 2; inner > 2 && inner != a.detailsW {
+			a.setDetailsText(inner)
+		}
+		return x + 1, y + 1, w - 2, h - 2
+	})
 	a.detail = details
-	a.pages.AddPage(pageDetails, details, true, false)
+	a.pages.AddPage(pageDetails, a.detailPage, true, false)
 
 	event := tview.NewTextView().
 		SetWrap(true).
@@ -358,28 +384,69 @@ func (a *App) showDetails(m mail.Message) {
 	a.currentLinks = reg.List()
 	a.currentAttachments = m.Attachments
 
-	// RD-5: после линии-разделителя — тело; пустое тело — заглушка.
-	// Escape обязателен: TextView теперь с dynamic colors, сырой «[» из EWS
-	// стал бы тегом.
-	text := FormatMessageHeader(m) + "\n"
+	// RD-5/V-5: шапка-карточка (FormatMessageCard) печатает setDetailsText
+	// перед телом; пустое тело — заглушка. Escape обязателен: TextView с
+	// dynamic colors, сырой «[» из EWS стал бы тегом.
+	var tail strings.Builder
 	if strings.TrimSpace(body) == "" {
-		text += mutedText(noBodyPlaceholder)
+		tail.WriteString(mutedText(noBodyPlaceholder))
 	} else {
-		text += tview.Escape(security.Sanitize(body))
+		tail.WriteString(tview.Escape(security.Sanitize(body)))
 	}
 	if m.InternetMessageID != "" {
-		text += "\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID))
+		tail.WriteString("\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID)))
 	}
 	if atts := FormatAttachments(m.Attachments); atts != "" {
-		text += "\n" + atts + "\n\n(g — ссылки, v — вложения)"
+		tail.WriteString("\n" + atts + "\n\n(g — ссылки, v — вложения)")
 	} else if len(a.currentLinks) > 0 {
-		text += "\n\n(g — ссылки)"
+		tail.WriteString("\n\n(g — ссылки)")
 	}
-	a.detail.SetText(text)
+	// Тело кэшируется: DrawFunc на resize пересобирает только карточку шапки.
+	a.detailsMsg = m
+	a.detailsTail = tail.String()
+	a.setDetailsText(readWidth - 2) // широкая колонка; DrawFunc поправит узкую
 	a.detail.ScrollToBeginning()
 	a.pages.SwitchToPage(pageDetails)
 	a.tapp.SetFocus(a.detail)
 	a.showHint()
+}
+
+// setDetailsText собирает текст страницы деталей: карточка шапки (V-5) под
+// текущую ширину колонки + закэшированный хвост (тело, вложения). Зовётся из
+// showDetails и из DrawFunc при resize — зачем так, см. WHY у DrawFunc.
+func (a *App) setDetailsText(inner int) {
+	a.detailsW = inner
+	a.detail.SetText(FormatMessageCard(a.detailsMsg, inner) + "\n" + a.detailsTail)
+}
+
+// Параметры колонки чтения письма (V-5, П.1): readWidth — из format.go.
+const (
+	detailsWideMin   = 100 // терминал уже — колонка на всю ширину минус поля
+	detailsNarrowPad = 2
+)
+
+// layoutDetails — ширина чтения письма (П.1, V-5): ≥ detailsWideMin — колонка
+// readWidth по центру, уже — вся ширина минус узкие поля. Спейсеры 1:1
+// центрируют колонку сами при любом resize внутри одного режима. Вызов из
+// paintFocusFrames (before-draw): кадр рисуется сразу в новой раскладке.
+// WHY: не в DrawFunc страницы — раскладку после начала отрисовки не
+// перестроить до следующего кадра.
+func (a *App) layoutDetails(w int) {
+	wide := w >= detailsWideMin
+	if wide == a.detailsWide {
+		return
+	}
+	a.detailsWide = wide
+	a.detailPage.Clear()
+	if wide {
+		a.detailPage.AddItem(nil, 0, 1, false).
+			AddItem(a.detail, readWidth, 0, true).
+			AddItem(nil, 0, 1, false)
+	} else {
+		a.detailPage.AddItem(nil, detailsNarrowPad, 0, false).
+			AddItem(a.detail, 0, 1, true).
+			AddItem(nil, detailsNarrowPad, 0, false)
+	}
 }
 
 // showEventDetails выводит детали встречи; ссылки на созвон из «Места» —
@@ -577,7 +644,14 @@ func (a *App) clearError(gen int) {
 // SetFocus/Blur и блокировок не берёт.
 // Неактивные — tview.Styles.BorderColor, а не константа: цвет «прочих» рамок
 // живёт в теме. Возврат false — отрисовка продолжается.
-func (a *App) paintFocusFrames(_ tcell.Screen) bool {
+func (a *App) paintFocusFrames(screen tcell.Screen) bool {
+	// V-5: пересборка колонки чтения (П.1) — до отрисовки кадра. screen nil —
+	// в юнит-тестах хук зовут без экрана (TestPaintFocusFramesWired).
+	if screen != nil {
+		if w, _ := screen.Size(); w > 0 {
+			a.layoutDetails(w)
+		}
+	}
 	for _, p := range a.focusPanels {
 		active := p.body.HasFocus()
 		if active {
