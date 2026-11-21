@@ -166,14 +166,14 @@ func TestErrorAutoClear(t *testing.T) {
 func TestLoadIndicator(t *testing.T) {
 	a := newTestApp(t)
 	id := a.beginLoad("Загрузка писем…")
-	if text := a.status.GetText(false); text != "Загрузка писем…" {
+	if text := a.status.GetText(false); text != spinnerFrames[0:3]+" Загрузка писем…" {
 		t.Fatalf("индикатор не показан: %q", text)
 	}
 	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Fatalf("подсказки пропали во время загрузки: %q", got)
 	}
 	a.showHint() // смена страницы во время загрузки
-	if text := a.status.GetText(false); text != "Загрузка писем…" {
+	if text := a.status.GetText(false); text != spinnerFrames[0:3]+" Загрузка писем…" {
 		t.Errorf("подсказка затёрла индикатор загрузки: %q", text)
 	}
 	// Перекрытие загрузок: завершилась не последняя — остаётся надпись идущей.

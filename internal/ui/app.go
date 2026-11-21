@@ -100,6 +100,11 @@ type App struct {
 	// таймер не затирает свежий статус.
 	statusGen int
 
+	// RD-7: braille-спиннер идёт, пока есть in-flight загрузки; errorShown —
+	// в строке ошибка (showError): спиннер стопается, чтобы не затирать её.
+	spinnerOn  bool
+	errorShown bool
+
 	// In-flight загрузки (UI-8): id → надпись индикатора. Пока карта не
 	// пуста, строка сообщений держит индикатор; строка подсказок от
 	// загрузок не зависит (UI-9). Доступ только из главного потока TUI
@@ -403,8 +408,10 @@ func (a *App) showEventDetails(ev mail.Event) {
 // (statusGen) гасит висящий таймер автоочистки ошибки.
 func (a *App) setStatus(text string) {
 	a.statusGen++
+	a.errorShown = false
 	a.status.SetTextColor(tview.Styles.PrimaryTextColor)
 	a.status.SetText(text)
+	a.startSpinner() // есть загрузка в полёте — вернётся анимация
 }
 
 // showHint ставит подсказку текущего экрана (UI-7) в нижнюю строку (UI-9):
@@ -447,6 +454,38 @@ func (a *App) loadLabel() (string, bool) {
 		return label, true
 	}
 	return "", false
+}
+
+// RD-7: braille-спиннер вместо статичной надписи загрузки. Текст пишется
+// напрямую (не setStatus): смена поколения statusGen здесь не нужна и
+// погасила бы таймер автоочистки ошибки, если он висит.
+const (
+	spinnerFrames   = "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"
+	spinnerInterval = 100 * time.Millisecond
+)
+
+// startSpinner включает анимацию; пока она идёт или загрузок нет — no-op.
+func (a *App) startSpinner() {
+	if a.spinnerOn || len(a.loads) == 0 {
+		return
+	}
+	a.spinnerOn = true
+	a.spinnerStep(0)
+}
+
+// spinnerStep рисует очередной кадр и планирует следующий; тик останавливает
+// анимацию, когда загрузки кончились или в строке показана ошибка.
+func (a *App) spinnerStep(pos int) {
+	if !a.spinnerOn || a.errorShown || len(a.loads) == 0 {
+		a.spinnerOn = false
+		return
+	}
+	frames := []rune(spinnerFrames)
+	label, _ := a.loadLabel()
+	a.status.SetText(string(frames[pos%len(frames)]) + " " + label)
+	time.AfterFunc(spinnerInterval, func() {
+		a.tapp.QueueUpdateDraw(func() { a.spinnerStep(pos + 1) })
+	})
 }
 
 // formatHint собирает текст нижней строки (RD-6): клавиша — акцент жирным,
@@ -502,6 +541,7 @@ func (a *App) showError(err error) {
 		msg = string(runes[:200]) + "…"
 	}
 	a.statusGen++
+	a.errorShown = true // спиннер не должен затирать ошибку своим кадром
 	gen := a.statusGen
 	a.status.SetTextColor(colorError)
 	a.status.SetText("Ошибка: " + msg + "  ·  u — повторить")

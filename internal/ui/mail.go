@@ -52,6 +52,14 @@ type mailScreen struct {
 	lastPage   bool // IncludesLastItemInRange последней страницы
 	loading    bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
 
+	// RD-7: пересборка списка после перечитывания/смены папки. Старые строки
+	// остаются на экране до прихода свежих (без мерцания); выделение
+	// восстанавливается по ItemId, скролл — по сохранённой верхней строке.
+	rebuildPending bool
+	restoreID      string
+	restoreRow     int
+	restoreScroll  int
+
 	// Папки панели (UI-1): основной список и техпапки секции «Ещё ▸».
 	mainFolders []mail.Folder
 	techFolders []mail.Folder
@@ -289,14 +297,16 @@ func (s *mailScreen) toggleTech() {
 	s.folders.SetCurrentItem(len(s.mainFolders))
 }
 
-// selectFolder переключает текущую папку и сбрасывает список.
+// selectFolder переключает текущую папку и перечитывает список. Старые строки
+// остаются на экране до прихода свежих (RD-7, без мерцания): Clear делает
+// только rebuildRows по свежему ответу — устаревший отсечёт поколение gen.
 func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 	s.folder = id
 	s.folderName = name
-	s.items = nil
 	s.offset = 0
 	s.lastPage = false
-	s.messages.Clear()
+	s.keepSelection()
+	s.rebuildPending = true
 	s.preview.SetText(mutedText(previewEmptyHint))
 	s.loadMessages()
 }
@@ -341,9 +351,14 @@ func (s *mailScreen) loadMessages() {
 			if s.gen != gen {
 				return // папка уже сменилась — ответ устарел
 			}
-			s.items = append(s.items, added...)
 			s.offset = page.NextOffset
 			s.lastPage = page.IncludesLast
+			if s.rebuildPending {
+				s.rebuildPending = false
+				s.rebuildRows(added)
+				return
+			}
+			s.items = append(s.items, added...)
 			s.appendRows(added)
 			if len(s.items) == 0 {
 				// RD-5: пустая папка — muted-заглушка (colorTextSecondary).
@@ -351,6 +366,55 @@ func (s *mailScreen) loadMessages() {
 			}
 		})
 	}()
+}
+
+// keepSelection запоминает выделенное письмо (ItemId) и верхнюю видимую
+// строку списка, чтобы rebuildRows вернул пользователя на то же место (RD-7).
+func (s *mailScreen) keepSelection() {
+	s.restoreRow, _ = s.messages.GetSelection()
+	s.restoreScroll, _ = s.messages.GetOffset()
+	if s.restoreRow >= 0 && s.restoreRow < len(s.items) {
+		s.restoreID = s.items[s.restoreRow].ItemID
+	} else {
+		s.restoreID = ""
+	}
+}
+
+// rebuildRows пересобирает список по свежей странице (RD-7): Clear один раз
+// по готовым данным — мерцания нет; выделение — по ItemId (перечитывание той
+// же папки) либо по прежней позиции (новая папка), скролл — как был.
+func (s *mailScreen) rebuildRows(added []mail.MessageSummary) {
+	s.items = added
+	s.messages.Clear()
+	s.appendRows(added)
+	if len(s.items) == 0 {
+		s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)").SetTextColor(colorTextSecondary))
+		s.messages.Select(0, 0)
+		return
+	}
+	row := rowAfterReload(s.items, s.restoreID, s.restoreRow)
+	s.messages.Select(row, 0)
+	if s.restoreScroll < row {
+		s.messages.SetOffset(s.restoreScroll, 0)
+	} // иначе Select уже показал выделенную строку — offset не откатываем
+}
+
+// rowAfterReload решает, где встанет курсор после пересборки списка (RD-7):
+// письмо ищется по ItemId, при промахе курсор остаётся на прежней позиции,
+// стянутой в пределы нового списка.
+func rowAfterReload(items []mail.MessageSummary, id string, prev int) int {
+	if prev < 0 || prev >= len(items) {
+		prev = 0
+	}
+	if id == "" {
+		return prev
+	}
+	for i := range items {
+		if items[i].ItemID == id {
+			return i
+		}
+	}
+	return prev
 }
 
 // clampMessageColumns ограничивает ширину колонок «отправитель» и «тема»
