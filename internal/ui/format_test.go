@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"mailcat/internal/mail"
 )
@@ -142,29 +143,37 @@ func TestPluralUnread(t *testing.T) {
 	}
 }
 
-// TestFormatFolder: иконка стандартной папки, выравнивание счётчика на
-// колонку folderNameCol, счётчик — цветовой тег textSecondary (RD-3).
+// TestFormatFolder: единый отступ без иконок (П.2а), выравнивание счётчика
+// на колонку folderNameCol, счётчик — цветовой тег textSecondary (RD-3).
 // Тема в тестах переключаема, поэтому проверяем структуру, а не hex цвета.
 func TestFormatFolder(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, false)
-	if !strings.HasPrefix(got, "📥 Входящие") {
-		t.Errorf("нет иконки входящих: %q", got)
+	got := FormatFolder(f, false, false)
+	if !strings.HasPrefix(got, "  Входящие") {
+		t.Errorf("нет отступа перед именем: %q", got)
 	}
 	if !strings.Contains(got, "[#") || !strings.HasSuffix(got, "](23)") {
 		t.Errorf("счётчик без цвета textSecondary/не прижат: %q", got)
 	}
-	if width := displayWidth("📥 Входящие"); !strings.Contains(got, strings.Repeat(" ", folderNameCol-width)) {
+	if width := utf8.RuneCountInString("  Входящие"); !strings.Contains(got, strings.Repeat(" ", folderNameCol-width)) {
 		t.Errorf("счётчик не выровнен на колонку %d: %q", folderNameCol, got)
 	}
 	f2 := mail.Folder{DisplayName: "Отправленные"}
-	if got2 := FormatFolder(f2, false); !strings.HasPrefix(got2, "📤 Отправленные") || strings.Contains(got2, "(0)") {
+	if got2 := FormatFolder(f2, false, false); !strings.HasPrefix(got2, "  Отправленные") || strings.Contains(got2, "(0)") {
 		t.Errorf("FormatFolder без непрочитанных = %q", got2)
 	}
-	// Нестандартная папка: отступ вместо иконки, тегов в имени нет.
-	f3 := mail.Folder{DisplayName: "Архив"}
-	if got3 := FormatFolder(f3, false); !strings.HasPrefix(got3, "   Архив") {
-		t.Errorf("нет отступа у нестандартной папки: %q", got3)
+}
+
+// TestFormatFolderSelected: строка под курсором — счётчик colorSelectedFg,
+// чтобы читать его на фоне выделения (П.2б).
+func TestFormatFolderSelected(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	got := FormatFolder(f, false, true)
+	if !strings.Contains(got, fmt.Sprintf("[%s](23)", hexTag(colorSelectedFg))) {
+		t.Errorf("счётчик на выделенной строке не colorSelectedFg: %q", got)
+	}
+	if got2 := FormatFolder(f, false, false); strings.Contains(got2, hexTag(colorSelectedFg)) {
+		t.Errorf("невыделенная строка красится colorSelectedFg: %q", got2)
 	}
 }
 
@@ -172,14 +181,14 @@ func TestFormatFolder(t *testing.T) {
 // счётчик остаётся вторичным, акцентируется только имя.
 func TestFormatFolderActive(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, true)
+	got := FormatFolder(f, true, false)
 	if !strings.Contains(got, "::b]") {
 		t.Errorf("активная папка не жирная: %q", got)
 	}
 	if !strings.Contains(got, fmt.Sprintf("[%s::b]", hexTag(colorAccent))) {
 		t.Errorf("активная папка не accent: %q", got)
 	}
-	if got := FormatFolder(f, false); strings.Contains(got, "::b]") {
+	if got := FormatFolder(f, false, false); strings.Contains(got, "::b]") {
 		t.Errorf("неактивная папка жирная: %q", got)
 	}
 }

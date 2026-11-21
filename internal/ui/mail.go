@@ -6,6 +6,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -75,10 +76,16 @@ type mailScreen struct {
 	mainFolders []mail.Folder
 	techFolders []mail.Folder
 	techOpen    bool
-	// folderRows — папка на каждой строке списка (индексы совпадают с пунктами
-	// tview.List, у «Ещё ▸/▾» нулевая папка); по ней активная папка красится
-	// и восстанавливается при движении курсора.
-	folderRows []mail.Folder
+	// rowByItem — папка на каждой строке списка: индекс пункта tview.List →
+	// папка. Разделители групп и «Ещё ▸/▾» в карту не входят. По ней активная
+	// папка красится и восстанавливается при движении курсора.
+	// WHY (V-4): не срез с индексами 1:1 — разделители групп сдвигают индексы.
+	rowByItem map[int]mail.Folder
+	// moreIdx — индекс пункта «Ещё ▸/▾»; len(mainFolders) больше не равен ему:
+	// разделители групп стоят в списке тоже. Ставится в renderFolders.
+	moreIdx int
+	// connFooter — нижняя строка сайдбара «● Connected · user» (V-4).
+	connFooter *tview.TextView
 	// WHY: поколение выбора папки — ответ, пришедший после переключения,
 	// относится к прежней папке и не должен стирать уже загруженный список.
 	// Не делать: сравнивать имя папки вместо поколения — при возврате A→B→A
@@ -133,28 +140,36 @@ func newMailScreen(a *App) *mailScreen {
 	s.foldersHeader = newPanelHeader("Папки")
 	s.messagesHeader = newPanelHeader("Письма")
 	s.previewHeader = newPanelHeader("Просмотр")
+	// WHY (V-4): футер сайдбара — отдельная строка под списком: «● Connected»
+	// + username; точка зелёная/красная по последней EWS-проверке (setConn).
+	// shortcut: длинный username обрезается по ширине панели (SetWrap(false),
+	// как у баннера О-3) — перенос на вторую строку невидим: высота футера 1.
+	// Поднимать: если юзер попросит полный логин на узком терминале.
+	s.connFooter = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	s.connFooter.SetText(fmt.Sprintf("[%s]●[-][%s] подключение…[-]", hexTag(colorTextSecondary), hexTag(colorTextSecondary)))
+	foldersCol := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(s.foldersHeader, 1, 0, false).
+		AddItem(s.folders, 0, 1, true).
+		AddItem(s.connFooter, 1, 0, false)
 	// WHY (V-3, П.4б): разделители между колонками — по одной тонкой линии,
 	// той же толщины и цвета, что линии заголовков (ПАПКИ ↔ ПИСЬМА и
 	// ПИСЬМА ↔ ПРОСМОТР согласованы). Рамки панелей при этом остаются
 	// невидимыми у неактивных (RD-2) — двойных линий между колонками нет.
 	d1, d2 := newDivider(), newDivider()
 	s.root = tview.NewFlex().
-		AddItem(panelColumn(s.foldersHeader, s.folders), 0, pctFolders, false).
+		AddItem(foldersCol, 0, pctFolders, false).
 		AddItem(d1, 1, 0, false).
 		AddItem(panelColumn(s.messagesHeader, s.messages), 0, pctMessages, false).
 		AddItem(d2, 1, 0, false).
 		AddItem(panelColumn(s.previewHeader, s.preview), 0, pctPreview, true)
 
-	s.folders.SetChangedFunc(func(i int, mainText, _ string, _ rune) {
-		// «Ещё ▸/▾» — не папка: смещение курсора через пункт секции
-		// не должно подменять имя текущей папки.
-		if mainText == moreFoldersClosed || mainText == moreFoldersOpen {
-			return
+	s.folders.SetChangedFunc(func(i int, _, _ string, _ rune) {
+		// «Ещё ▸/▾» и разделители — не папки: их нет в rowByItem, имя текущей
+		// папки не подменяется; вид строк при этом пересчитывается — курсор
+		// мог съехать с открытой папки.
+		if f, ok := s.rowByItem[i]; ok {
+			s.folderName = f.DisplayName
 		}
-		if i < len(s.folderRows) {
-			s.folderName = s.folderRows[i].DisplayName
-		}
-		// Курсор въехал/съехал с открытой папки — там другой вид строки.
 		s.applyActiveFolderStyle()
 	})
 	s.folders.SetSelectedFunc(func(_ int, _ string, _ string, _ rune) {
@@ -228,6 +243,7 @@ func (s *mailScreen) openDetails(row int) {
 		full.From = ref.From // From не приходит в GetItem — берём из строки списка
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.app.endLoad(id)
+			s.setConn(true)
 			s.app.showDetails(full)
 		})
 	}()
@@ -251,6 +267,7 @@ func (s *mailScreen) loadFolders() {
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.mainFolders, s.techFolders = SplitFolders(folders, s.app.cfg.UI.HiddenFolders)
 			s.renderFolders()
+			s.setConn(true)
 			s.app.endLoad(id) // погасит индикатор; selectFolder сменит на «Загрузка писем…»
 			// Стартуем с входящих (distinguished) — отдельным запросом.
 			s.selectFolder(ews.FolderID{}, "Входящие")
@@ -258,30 +275,60 @@ func (s *mailScreen) loadFolders() {
 	}()
 }
 
-// renderFolders перестраивает панель целиком: основной список, затем пункт
-// «Ещё ▸/▾» и, когда секция развернута, техпапки. Целиком — потому что
-// сворачивание/разворачивание меняет хвост списка одним махом.
+// renderFolders перестраивает панель целиком: блок стандартных папок, линия,
+// блок пользовательских, линия, пункт «Ещё ▸/▾» и, когда секция развернута,
+// техпапки (V-4, UI-1). Целиком — потому что сворачивание/разворачивание
+// меняет хвост списка одним махом.
 func (s *mailScreen) renderFolders() {
 	s.folders.Clear()
-	s.folderRows = nil
+	s.rowByItem = make(map[int]mail.Folder)
 	add := func(f mail.Folder) {
-		s.folderRows = append(s.folderRows, f)
-		display := FormatFolder(f, s.isActiveFolder(f))
-		s.folders.AddItem(display, "", 0, func() {
+		idx := s.folders.GetItemCount()
+		s.folders.AddItem(FormatFolder(f, s.isActiveFolder(f), false), "", 0, func() {
 			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, f.DisplayName)
 		})
+		s.rowByItem[idx] = f
 	}
+	// Разделитель — пункт списка: Enter перепрыгивает его, а не уводит фокус
+	// (глобальный SetSelectedFunc перескочил бы в список писем).
+	addSeparator := func() {
+		idx := s.folders.GetItemCount()
+		s.folders.AddItem(fmt.Sprintf("[%s]%s[-]", hexTag(colorTextSecondary), strings.Repeat("─", 13)), "", 0, func() {
+			if idx+1 < s.folders.GetItemCount() {
+				s.folders.SetCurrentItem(idx + 1)
+			}
+		})
+	}
+	isStandard := func(f mail.Folder) bool {
+		for _, name := range standardFolders {
+			if f.DisplayName == name {
+				return true
+			}
+		}
+		return false
+	}
+	seenUser := false
 	for _, f := range s.mainFolders {
+		if !isStandard(f) && !seenUser {
+			seenUser = true
+			if s.folders.GetItemCount() > 0 {
+				addSeparator()
+			}
+		}
 		add(f)
 	}
 	if len(s.techFolders) == 0 {
 		s.applyActiveFolderStyle()
 		return
 	}
+	if s.folders.GetItemCount() > 0 {
+		addSeparator()
+	}
 	mark := moreFoldersClosed
 	if s.techOpen {
 		mark = moreFoldersOpen
 	}
+	s.moreIdx = s.folders.GetItemCount()
 	s.folders.AddItem(mark, "", 0, s.toggleTech)
 	if s.techOpen {
 		for _, f := range s.techFolders {
@@ -303,19 +350,19 @@ func (s *mailScreen) isActiveFolder(f mail.Folder) bool {
 	return f.DisplayName == s.folderName
 }
 
-// applyActiveFolderStyle — вид строки открытой папки: accent + жирный, но
-// БЕЗ тегов, когда курсор стоит на ней самой.
+// applyActiveFolderStyle — вид строк: открытая папка accent + жирный, но
+// БЕЗ тегов, когда курсор стоит на ней самой; у строки под курсором счётчик
+// перекрашен в colorSelectedFg (П.2б), иначе серый tag не читается на фоне
+// выделения. Пересчитываются ВСЕ строки: курсор мог и въехать, и съехать.
 // WHY: выделенная строка красится инверсией (фон accent, инвариант RD-1),
 // и accent-текст на accent-фоне становится невидимым; у выделенной строки
 // остаётся штатный вид инверсии. SetItemText не будит SetChangedFunc —
 // рекурсии нет.
 func (s *mailScreen) applyActiveFolderStyle() {
 	cursor := s.folders.GetCurrentItem()
-	for i, f := range s.folderRows {
-		if !s.isActiveFolder(f) {
-			continue
-		}
-		s.folders.SetItemText(i, FormatFolder(f, i != cursor), "")
+	for i, f := range s.rowByItem {
+		cursorOnRow := i == cursor
+		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow), "")
 	}
 }
 
@@ -324,7 +371,21 @@ func (s *mailScreen) applyActiveFolderStyle() {
 func (s *mailScreen) toggleTech() {
 	s.techOpen = !s.techOpen
 	s.renderFolders()
-	s.folders.SetCurrentItem(len(s.mainFolders))
+	// WHY: индекс «Ещё» берём из moreIdx, а не len(mainFolders) —
+	// разделители групп сдвинули пункты списка (см. поле).
+	s.folders.SetCurrentItem(s.moreIdx)
+}
+
+// setConn — футер сайдбара (V-4): точка зелёная, если последняя EWS-операция
+// прошла, красная при ошибке. Текст на красной — «Нет связи»: «Connected» с
+// красной точкой врал бы.
+func (s *mailScreen) setConn(ok bool) {
+	dot, label := colorConnected, "Connected"
+	if !ok {
+		dot, label = colorError, "Нет связи"
+	}
+	user := tview.Escape(security.Sanitize(s.app.cfg.Username))
+	s.connFooter.SetText(fmt.Sprintf("[%s]●[-][%s] %s · %s[-]", hexTag(dot), hexTag(colorTextSecondary), label, user))
 }
 
 // selectFolder переключает текущую папку и перечитывает список. Старые строки
@@ -379,6 +440,7 @@ func (s *mailScreen) loadMessages() {
 		s.app.tapp.QueueUpdateDraw(func() {
 			s.loading = false
 			s.app.endLoad(id)
+			s.setConn(true)
 			if s.gen != gen {
 				return // папка уже сменилась — ответ устарел
 			}

@@ -87,30 +87,36 @@ func TestRenderFoldersToggle(t *testing.T) {
 	}
 
 	s.renderFolders()
-	if got := s.folders.GetItemCount(); got != 2 {
-		t.Fatalf("свернуто: пунктов %d, хочу 2 (Входящие + Ещё ▸)", got)
+	if got := s.folders.GetItemCount(); got != 3 {
+		t.Fatalf("свернуто: пунктов %d, хочу 3 (Входящие + разделитель + Ещё ▸)", got)
 	}
-	if main, _ := s.folders.GetItemText(1); main != "Ещё ▸" {
+	if main, _ := s.folders.GetItemText(2); main != "Ещё ▸" {
 		t.Errorf("маркер секции = %q, хочу «Ещё ▸»", main)
 	}
-	if main, _ := s.folders.GetItemText(0); !strings.Contains(main, "📥 Входящие") || !strings.HasSuffix(main, "](2)") {
-		t.Errorf("первый пункт = %q, хочу «📥 Входящие» со счётчиком 2", main)
+	if main, _ := s.folders.GetItemText(1); !strings.Contains(main, strings.Repeat("─", 13)) {
+		t.Errorf("второй пункт = %q, хочу линию-разделитель групп (V-4)", main)
+	}
+	if main, _ := s.folders.GetItemText(0); !strings.HasPrefix(main, "  Входящие") || !strings.HasSuffix(main, "](2)") {
+		t.Errorf("первый пункт = %q, хочу «  Входящие» со счётчиком 2 (без иконок, П.2а)", main)
+	}
+	if _, ok := s.rowByItem[1]; ok {
+		t.Errorf("разделитель попал в rowByItem: %v", s.rowByItem)
 	}
 
 	s.toggleTech()
-	if got := s.folders.GetItemCount(); got != 4 {
-		t.Fatalf("развернуто: пунктов %d, хочу 4 (Входящие, Ещё ▾, 2 техпапки)", got)
+	if got := s.folders.GetItemCount(); got != 5 {
+		t.Fatalf("развернуто: пунктов %d, хочу 5 (Входящие, разделитель, Ещё ▾, 2 техпапки)", got)
 	}
-	if main, _ := s.folders.GetItemText(1); main != "Ещё ▾" {
+	if main, _ := s.folders.GetItemText(2); main != "Ещё ▾" {
 		t.Errorf("маркер секции = %q, хочу «Ещё ▾»", main)
 	}
-	if got := s.folders.GetCurrentItem(); got != 1 {
-		t.Errorf("курсор = %d, хочу 1 (остаться на «Ещё»)", got)
+	if got := s.folders.GetCurrentItem(); got != 2 {
+		t.Errorf("курсор = %d, хочу 2 (остаться на «Ещё», moreIdx с учётом разделителя)", got)
 	}
 
 	s.toggleTech()
-	if got := s.folders.GetItemCount(); got != 2 {
-		t.Fatalf("после сворачивания: пунктов %d, хочу 2", got)
+	if got := s.folders.GetItemCount(); got != 3 {
+		t.Fatalf("после сворачивания: пунктов %d, хочу 3", got)
 	}
 }
 

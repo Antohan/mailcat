@@ -123,43 +123,11 @@ func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.
 	}
 }
 
-// folderIcons — unicode-иконки стандартных папок (RD-3); остальные папки —
-// без иконки, с отступом под иконку. Точный список, а не эвристика по
-// подстроке: «Архив Входящие» не должен получить иконку входящих.
-var folderIcons = map[string]string{
-	"Входящие":      "📥",
-	"Отправленные":  "📤",
-	"Черновики":     "📝",
-	"Удалённые":     "🗑",
-	"Нежелательная": "🚫",
-}
-
-// folderNameCol — ширина колонки имени (иконка/отступ + имя): 3 клетки на
-// иконку-эмодзи (двойная ширина) и 13 на «Нежелательная». Счётчик прижат
-// вправо выравниванием на эту колонку; у более длинных имён — минимальный
-// отступ в 1 клетку.
-const folderNameCol = 16
-
-// displayWidth — наивная ширина в клетках терминала: руны по одной, плюс
-// лишняя клетка на каждый эмодзи из folderIcons (в Terminal.app они двойной
-// ширины — это и проверяем). WHY: считаем только собственные иконки, а не
-// общий west-asian-алгоритм — зависимость uniseg не одобрена (AGENTS.md §6),
-// а имена с CJK дают заниженную ширину; выравнивание best effort.
-func displayWidth(s string) int {
-	w := utf8.RuneCountInString(s)
-	for _, icon := range folderIcons {
-		if strings.Contains(s, icon) {
-			w += utf8.RuneCountInString(icon)
-		}
-	}
-	return w
-}
-
 // truncateEllipsis — обрезка строки под max клеток с «…» в конце.
 // WHY: своё, а не встроенное многоточие tview.Table — tview сравнивает
 // байтовую длину напечатанного (end-start) с шириной в клетках, у кириллицы
 // байты вдвое больше клеток и условие «текст не влез» всегда ложно.
-// Порог по рунам, не по клеткам — same best effort, что и displayWidth.
+// Порог по рунам, не по клеткам — best effort, как и прочие ширины здесь.
 func truncateEllipsis(s string, max int) string {
 	if max < 1 {
 		return ""
@@ -205,18 +173,21 @@ func pluralUnread(n int) string {
 	}
 }
 
-// FormatFolder — пункт списка папок: иконка/отступ, имя, счётчик непрочитанных
+// folderNameCol — ширина колонки имени (отступ + имя): 2 клетки отступа
+// и 13 на «Нежелательная». Счётчик прижат вправо выравниванием на эту
+// колонку; у более длинных имён — минимальный зазор (pad < 1 → 1).
+const folderNameCol = 15
+
+// FormatFolder — пункт списка папок: отступ, имя, счётчик непрочитанных
 // цветом textSecondary (прижат вправо на folderNameCol). active — папка
-// открыта: текст accent + жирный. Sanitize + tview.Escape сохраняются (List
+// открыта: текст accent + жирный; selected — строка под курсором списка:
+// счётчик перекрашивается в colorSelectedFg, иначе серый tag не читается
+// на фоне выделения (П.2б). Sanitize + tview.Escape сохраняются (List
 // интерпретирует теги безусловно — данные экранируются, теги наши).
-func FormatFolder(f mail.Folder, active bool) string {
-	indent, hasIcon := folderIcons[f.DisplayName]
-	if !hasIcon {
-		indent = "   "
-	} else {
-		indent += " "
-	}
-	pad := folderNameCol - displayWidth(indent) - utf8.RuneCountInString(f.DisplayName)
+// WHY (П.2а): без иконок — все строки с одинаковым отступом.
+func FormatFolder(f mail.Folder, active, selected bool) string {
+	indent := "  "
+	pad := folderNameCol - utf8.RuneCountInString(indent) - utf8.RuneCountInString(f.DisplayName)
 	if pad < 1 {
 		pad = 1
 	}
@@ -225,7 +196,11 @@ func FormatFolder(f mail.Folder, active bool) string {
 		row = fmt.Sprintf("[%s::b]%s[-::-]", hexTag(colorAccent), row)
 	}
 	if f.UnreadCount > 0 {
-		return fmt.Sprintf("%s[%s](%d)", row, hexTag(colorTextSecondary), f.UnreadCount)
+		counterColor := colorTextSecondary
+		if selected {
+			counterColor = colorSelectedFg
+		}
+		return fmt.Sprintf("%s[%s](%d)", row, hexTag(counterColor), f.UnreadCount)
 	}
 	return row
 }

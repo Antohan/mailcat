@@ -16,6 +16,7 @@ var (
 	colorHairline      = tcell.NewRGBColor(222, 226, 230) // тонкие разделители
 	colorError         = tcell.NewRGBColor(201, 64, 58)   // приглушённый красный
 	colorWeekend       = tcell.NewRGBColor(199, 115, 110) // Сб/Вс в календаре
+	colorConnected     = tcell.NewRGBColor(26, 127, 55)   // зелёная точка связи (V-4)
 
 	colorPanelBg  = tcell.ColorWhite
 	colorOnAccent = tcell.ColorWhite // текст на акцентной заливке
@@ -58,6 +59,7 @@ func applyLightTheme() {
 	colorHairline = tcell.NewRGBColor(222, 226, 230)
 	colorError = tcell.NewRGBColor(201, 64, 58)
 	colorWeekend = tcell.NewRGBColor(199, 115, 110)
+	colorConnected = tcell.NewRGBColor(26, 127, 55)
 	colorPanelBg = tcell.ColorWhite
 	colorOnAccent = tcell.ColorWhite
 	colorTodayBg = tcell.NewRGBColor(219, 234, 254) // светлый оттенок акцента
@@ -73,6 +75,7 @@ func applyDarkTheme() {
 	colorHairline = tcell.NewRGBColor(63, 63, 70)
 	colorError = tcell.NewRGBColor(248, 113, 113)
 	colorWeekend = tcell.NewRGBColor(252, 165, 165)
+	colorConnected = tcell.NewRGBColor(63, 185, 80)
 	colorPanelBg = tcell.NewRGBColor(24, 24, 27)
 	colorOnAccent = tcell.NewRGBColor(17, 24, 39)
 	colorTodayBg = tcell.NewRGBColor(30, 58, 138) // тёмный оттенок акцента

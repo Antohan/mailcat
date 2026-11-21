@@ -542,6 +542,9 @@ func (a *App) showError(err error) {
 	}
 	a.statusGen++
 	a.errorShown = true // спиннер не должен затирать ошибку своим кадром
+	if a.mail != nil {
+		a.mail.setConn(false) // красная точка в сайдбаре (V-4)
+	}
 	gen := a.statusGen
 	a.status.SetTextColor(colorError)
 	a.status.SetText("Ошибка: " + msg + "  ·  u — повторить")
