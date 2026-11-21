@@ -198,28 +198,43 @@ func SplitFolders(folders []mail.Folder, hidden []string) (main, technical []mai
 	return main, technical
 }
 
-// FormatMessageHeader — блок заголовков письма для панели просмотра:
-// От/Кому/Дата/Тема + 📎 N при вложениях (UI-3, метаданные GetItem).
+// FormatMessageHeader — блок заголовков письма (RD-5): Тема (жирный) → От →
+// Кому (если есть) → Дата → линия-разделитель; тело печатает вызывающий.
+// Служит и превью (MessageSummary без Кому/вложений), и деталям письма.
 // WHY: маркер — в строке темы, а не отдельной строкой: ниже в карточке
 // FormatAttachments уже печатает список с заголовком «Вложения:».
 // Важность (⚠) не показывается: item:Importance нет в EWS-REFERENCE, с
 // сервера не приходит (открытый вопрос в HANDOFF «Открыто»).
 // Реальный адрес отправителя показывается всегда (SECURITY.md §4.1).
+// Вывод содержит теги tview: получатели включают SetDynamicColors(true),
+// поэтому все данные из EWS проходят Sanitize + tview.Escape (инвариант escape).
 func FormatMessageHeader(m mail.Message) string {
 	var b strings.Builder
-	b.WriteString("От:    " + security.Sanitize(m.From.String()) + "\n")
+	topic := tview.Escape(security.Sanitize(m.Subject))
+	if n := len(m.Attachments); n > 0 {
+		topic += fmt.Sprintf("  📎 %d", n)
+	}
+	fmt.Fprintf(&b, "[::b]Тема:  %s[-::-]\n", topic)
+	b.WriteString("От:    " + tview.Escape(security.Sanitize(m.From.String())) + "\n")
 	if len(m.To) > 0 {
-		b.WriteString("Кому:  " + security.Sanitize(joinAddresses(m.To)) + "\n")
+		b.WriteString("Кому:  " + tview.Escape(security.Sanitize(joinAddresses(m.To))) + "\n")
 	}
 	if !m.Received.IsZero() {
 		b.WriteString("Дата:  " + m.Received.Local().Format("02.01.2006 15:04") + "\n")
 	}
-	topic := "Тема:  " + security.Sanitize(m.Subject)
-	if n := len(m.Attachments); n > 0 {
-		topic += fmt.Sprintf("  📎 %d", n)
-	}
-	b.WriteString(topic + "\n")
+	fmt.Fprintf(&b, "%s\n", mutedText(strings.Repeat("─", headerRuleWidth)))
 	return b.String()
+}
+
+// headerRuleWidth — длина линии-разделителя под заголовками письма (RD-5):
+// фикс, а не ширина панели — узкое окно TextView переносит сам.
+const headerRuleWidth = 32
+
+// mutedText красит статический текст интерфейса (не из EWS — escape не нужен)
+// в textSecondary. Заглушки и линия-разделитель письма (RD-2/RD-5):
+// линия — textSecondary, не hairline.
+func mutedText(s string) string {
+	return fmt.Sprintf("[%s]%s[-]", hexTag(colorTextSecondary), s)
 }
 
 // FormatAttachments — список вложений с человекочитаемыми размерами
@@ -230,7 +245,10 @@ func FormatAttachments(list []mail.Attachment) string {
 	}
 	lines := make([]string, 0, len(list))
 	for _, a := range list {
-		lines = append(lines, fmt.Sprintf("  • %s (%s)", security.Sanitize(a.Name), a.SizeLabel()))
+		// escapeForList (Sanitize + tview.Escape), не просто Sanitize: вывод
+		// печатается в TextView с dynamic colors (RD-5) — «[» в имени вложения
+		// иначе стал бы тегом (находка security-reviewer).
+		lines = append(lines, fmt.Sprintf("  • %s (%s)", escapeForList(a.Name), a.SizeLabel()))
 	}
 	return "Вложения:\n" + strings.Join(lines, "\n")
 }

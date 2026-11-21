@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -151,7 +152,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	details := tview.NewTextView().
 		SetWrap(true).
 		SetScrollable(true).
-		SetDynamicColors(false)
+		SetDynamicColors(true) // RD-5: жирная тема/линия; сторонний текст — только через tview.Escape в showDetails
 	details.SetBorder(true).SetTitle(" Письмо ")
 	details.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
@@ -340,9 +341,17 @@ func (a *App) showDetails(m mail.Message) {
 	a.currentLinks = reg.List()
 	a.currentAttachments = m.Attachments
 
-	text := FormatMessageHeader(m) + "\n" + security.Sanitize(body)
+	// RD-5: после линии-разделителя — тело; пустое тело — заглушка.
+	// Escape обязателен: TextView теперь с dynamic colors, сырой «[» из EWS
+	// стал бы тегом.
+	text := FormatMessageHeader(m) + "\n"
+	if strings.TrimSpace(body) == "" {
+		text += mutedText(noBodyPlaceholder)
+	} else {
+		text += tview.Escape(security.Sanitize(body))
+	}
 	if m.InternetMessageID != "" {
-		text += "\nMessage-ID: " + security.Sanitize(m.InternetMessageID) + "\n"
+		text += "\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID))
 	}
 	if atts := FormatAttachments(m.Attachments); atts != "" {
 		text += "\n" + atts + "\n\n(g — ссылки, v — вложения)"

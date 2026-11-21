@@ -184,6 +184,23 @@ func TestFormatMessageHeader(t *testing.T) {
 	if contains(bare, "📎") {
 		t.Errorf("маркер 📎 без вложений:\n%s", bare)
 	}
+	// RD-5: порядок Тема → От; тема жирная; линия-разделитель присутствует.
+	if i, j := strings.Index(h, "Тема:"), strings.Index(h, "От:"); i > j {
+		t.Errorf("Тема должна идти перед От:\n%s", h)
+	}
+	if !contains(h, "[::b]Тема:") {
+		t.Errorf("тема не жирная:\n%s", h)
+	}
+	if !contains(h, "──") {
+		t.Errorf("нет линии-разделителя:\n%s", h)
+	}
+	// Тема-обманка с тегом не рендерится как тег (Sanitize + tview.Escape).
+	evil := FormatMessageHeader(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "[red]скрыто", From: mail.Address{Email: "a@b.c"}},
+	})
+	if !contains(evil, "[red[]") {
+		t.Errorf("тег из темы не экранирован:\n%s", evil)
+	}
 }
 
 // TestFormatAttachments: имя + человекочитаемый размер.
@@ -198,6 +215,12 @@ func TestFormatAttachments(t *testing.T) {
 	}
 	if got := FormatAttachments(nil); got != "" {
 		t.Errorf("пустой список = %q, хочу пусто", got)
+	}
+	// Сторож (RD-5): имя вложения с тегом не должно пройти в dynamic-colors
+	// TextView сырым — только в экранированном виде.
+	evil := FormatAttachments([]mail.Attachment{{Name: "[red]x.pdf"}})
+	if !contains(evil, "[red[]") || contains(evil, "\x1b") {
+		t.Errorf("имя вложения не экранировано: %q", evil)
 	}
 }
 

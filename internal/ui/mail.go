@@ -12,7 +12,6 @@ import (
 
 	"mailcat/internal/ews"
 	"mailcat/internal/mail"
-	"mailcat/internal/security"
 )
 
 const pageSizeCap = 100 // защита от нулевого page_size в конфиге
@@ -93,11 +92,17 @@ func newMailScreen(a *App) *mailScreen {
 	// раскладки колонок, — переживают resize терминала.
 	s.messages.SetDrawFunc(s.clampMessageColumns)
 
+	// WHY (RD-5): dynamic colors включены — тема жирная, линия и заглушки
+	// muted. Весь текст из EWS попадает сюда через FormatMessageHeader
+	// (Sanitize + tview.Escape внутри); SetText руками — только литеральные
+	// строки интерфейса ниже. Не упрощать: «просто SetText» с данными EWS
+	// без Escape даст тег-инъекцию в отрисованную панель.
 	s.preview = tview.NewTextView().
 		SetWrap(true).
 		SetScrollable(true).
-		SetDynamicColors(false) // dynamic colors — этап 3 (с tview.Escape)
+		SetDynamicColors(true)
 	s.preview.SetBorder(true)
+	s.preview.SetText(mutedText(previewEmptyHint))
 
 	// WHY (RD-2): рамки у неактивных панелей нет — её роль играет строка
 	// заголовка с hairline-разделителем. Пропорции — константы pct*.
@@ -292,7 +297,7 @@ func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 	s.offset = 0
 	s.lastPage = false
 	s.messages.Clear()
-	s.preview.SetText("")
+	s.preview.SetText(mutedText(previewEmptyHint))
 	s.loadMessages()
 }
 
@@ -341,7 +346,8 @@ func (s *mailScreen) loadMessages() {
 			s.lastPage = page.IncludesLast
 			s.appendRows(added)
 			if len(s.items) == 0 {
-				s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)"))
+				// RD-5: пустая папка — muted-заглушка (colorTextSecondary).
+				s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)").SetTextColor(colorTextSecondary))
 			}
 		})
 	}()
@@ -424,15 +430,23 @@ func ewsAttachment(a mail.Attachment) ews.AttachmentMeta {
 	}
 }
 
+// Пустые состояния (RD-5): литеральные строки интерфейса (не из EWS),
+// красит mutedText — Sanitize/Escape не нужны.
+const (
+	previewEmptyHint  = "Выберите письмо — Enter"
+	noBodyPlaceholder = "(Письмо без текста)"
+)
+
 // showPreview показывает черновик письма в панели просмотра (без загрузки).
 func (s *mailScreen) showPreview(row int) {
 	if row < 0 || row >= len(s.items) {
 		return
 	}
 	m := s.items[row]
-	text := "Тема:  " + security.Sanitize(m.Subject) + "\n" +
-		"От:    " + security.Sanitize(m.From.String()) + "\n\n" +
-		"Enter — прочитать письмо…"
+	// RD-5: превью — тот же блок заголовков, что в деталях; в FindItem-сводке
+	// Кому/вложений нет — FormatMessageHeader на пустом Message их опускает.
+	text := FormatMessageHeader(mail.Message{MessageSummary: m}) + "\n" +
+		mutedText("Enter — прочитать письмо…")
 	s.preview.SetText(text)
 	s.preview.ScrollToBeginning()
 }

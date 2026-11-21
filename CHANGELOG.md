@@ -2,6 +2,11 @@
 
 > Формат записи — «Журнал решений» в docs/PLAN-ITER3.md. Новые записи — сверху.
 
+## 2026-11-21 · iter3:RD-5 · просмотр письма: структура и пустые состояния
+- Сделано: `FormatMessageHeader` — порядок Тема (жирная) → От → Кому (если есть) → Дата → линия-разделитель; превью строит тот же блок из MessageSummary (Message без Кому/вложений); preview и details переведены на SetDynamicColors(true) — весь текст из EWS через Sanitize + tview.Escape, включая имена вложений в `FormatAttachments` (escapeForList, находка security-reviewer); пустые состояния: «Выберите письмо — Enter» (создание/смена папки), «(Письмо без текста)» в деталях, «(писем нет)» — muted (textSecondary). Тесты: порядок/жирность/разделитель/escape-инъекция в TestFormatMessageHeader, сторож evil-name в TestFormatAttachments.
+- Решения: линия-разделитель — фикс 32 «─», не ширина панели (узкое окно переносит сам TextView); превью переиспользует FormatMessageHeader — структура превью и деталей не разойдётся; dynamic colors включены только у preview/details, TextView встречи (a.event) не тронут (showEventDetails пишет без Escape).
+- Отклонения от плана/золотых правил: нет
+
 ## 2026-11-21 · iter3:RD-4 · список писем: статус прочитанности
 - Сделано: непрочитанные — жирный accent (col 0–2), прочитанные — обычный textPrimary, дата (col 3) всегда textSecondary; тест-сторож TestMessageRowReadState + гвард colorUnread==colorAccent в theme_test.
 - Решения: непрочитанные — единственным акцентом темы (не отдельный цвет — см. RD-1 «один акцент»); прочитанные красятся явно, а не через умолчание tview. Обрезка длинных тем/адресов уже была корректной (SetMaxWidth + многоточие tview, UI-2) — не дублировалась.
