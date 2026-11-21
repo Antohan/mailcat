@@ -225,3 +225,25 @@ func TestFormatAttachments(t *testing.T) {
 }
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+func TestDayBucket(t *testing.T) {
+	now := time.Date(2026, 11, 21, 10, 0, 0, 0, time.Local)
+	cases := []struct {
+		t    time.Time
+		want int
+	}{
+		{time.Date(2026, 11, 21, 0, 1, 0, 0, time.Local), 0},
+		{time.Date(2026, 11, 21, 23, 59, 0, 0, time.Local), 0},
+		{time.Date(2026, 11, 20, 23, 59, 0, 0, time.Local), 1},
+		{time.Date(2026, 11, 19, 12, 0, 0, 0, time.Local), 2},
+		{time.Time{}, 2}, // Received неизвестен
+	}
+	for _, c := range cases {
+		if got := dayBucket(now, c.t); got != c.want {
+			t.Fatalf("dayBucket(%v) = %d, want %d", c.t, got, c.want)
+		}
+	}
+	if dayBuckets[0] != "Сегодня" || dayBuckets[1] != "Вчера" || dayBuckets[2] != "Ранее" {
+		t.Fatalf("dayBuckets = %v", dayBuckets)
+	}
+}

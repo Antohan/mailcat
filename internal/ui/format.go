@@ -31,6 +31,12 @@ func ExternalMark(fromEmail string, orgDomains []string) string {
 // индексация по time.Weekday() (воскресенье = 0).
 var shortDays = []string{"Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"}
 
+// sameLocalDay — те же локальные календарные сутки (граница — местная
+// полночь, не 24 часа назад).
+func sameLocalDay(a, b time.Time) bool {
+	return a.Year() == b.Year() && a.YearDay() == b.YearDay()
+}
+
 // FormatShortDate — компактная дата строки списка (UI-2): сегодня → HH:MM,
 // давность ≤ 7 дней → сокращённый день недели («Чт»), старше → ДД.ММ.
 // now передаётся явно — детерминизм в тестах.
@@ -39,13 +45,34 @@ func FormatShortDate(now, t time.Time) string {
 		return ""
 	}
 	tl, nl := t.Local(), now.Local()
-	if tl.Year() == nl.Year() && tl.YearDay() == nl.YearDay() {
+	if sameLocalDay(tl, nl) {
 		return tl.Format("15:04")
 	}
 	if tl.After(nl.AddDate(0, 0, -7)) {
 		return shortDays[tl.Weekday()]
 	}
 	return tl.Format("02.01")
+}
+
+// dayBuckets — заголовки разделителей дней в списке (О-1); индекс — группа
+// dayBucket (0 — сегодня).
+var dayBuckets = []string{"Сегодня", "Вчера", "Ранее"}
+
+// dayBucket — группа дня для разделителя списка (О-1): 0 — сегодня, 1 —
+// вчера, 2 — ранее; нулевая дата (Received неизвестен) — «Ранее».
+// now передаётся явно — детерминизм в тестах.
+func dayBucket(now, t time.Time) int {
+	if t.IsZero() {
+		return 2
+	}
+	tl, nl := t.Local(), now.Local()
+	if sameLocalDay(tl, nl) {
+		return 0
+	}
+	if sameLocalDay(tl, nl.AddDate(0, 0, -1)) {
+		return 1
+	}
+	return 2
 }
 
 // senderLabel — колонка отправителя (UI-2): имя из t:Name, при отсутствии —

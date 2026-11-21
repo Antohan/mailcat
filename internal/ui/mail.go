@@ -48,9 +48,13 @@ type mailScreen struct {
 	folder     ews.FolderID // выбранная папка (пустая = distinguished inbox)
 	folderName string
 	items      []mail.MessageSummary
-	offset     int  // Offset следующей страницы FindItem
-	lastPage   bool // IncludesLastItemInRange последней страницы
-	loading    bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
+	// itemRows — строка таблицы для каждого элемента items (О-1): строки-
+	// разделители дней сдвигают нумерацию, сырой row колбэков в items писать
+	// нельзя. Заполняется только в appendRows.
+	itemRows []int
+	offset   int  // Offset следующей страницы FindItem
+	lastPage bool // IncludesLastItemInRange последней страницы
+	loading  bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
 
 	// RD-7: пересборка списка после перечитывания/смены папки. Старые строки
 	// остаются на экране до прихода свежих (без мерцания); выделение
@@ -181,10 +185,11 @@ func newMailScreen(a *App) *mailScreen {
 // openDetails открывает полноэкранный экран деталей письма (Enter): все
 // заголовки, полный текст, список вложений (PLAN.md этап 2); Esc — назад.
 func (s *mailScreen) openDetails(row int) {
-	if row < 0 || row >= len(s.items) {
+	idx := s.itemIndex(row)
+	if idx < 0 || idx >= len(s.items) {
 		return
 	}
-	ref := s.items[row]
+	ref := s.items[idx]
 	id := s.app.beginLoad("Загрузка письма…")
 	go func() {
 		detail, err := s.app.client.GetMessage(s.app.ctx, ref.ItemID, ref.ChangeKey)
@@ -373,6 +378,7 @@ func (s *mailScreen) loadMessages() {
 func (s *mailScreen) keepSelection() {
 	s.restoreRow, _ = s.messages.GetSelection()
 	s.restoreScroll, _ = s.messages.GetOffset()
+	s.restoreRow = s.itemIndex(s.restoreRow) // restoreRow — индекс в items (О-1)
 	if s.restoreRow >= 0 && s.restoreRow < len(s.items) {
 		s.restoreID = s.items[s.restoreRow].ItemID
 	} else {
@@ -385,6 +391,7 @@ func (s *mailScreen) keepSelection() {
 // же папки) либо по прежней позиции (новая папка), скролл — как был.
 func (s *mailScreen) rebuildRows(added []mail.MessageSummary) {
 	s.items = added
+	s.itemRows = nil
 	s.messages.Clear()
 	s.appendRows(added)
 	if len(s.items) == 0 {
@@ -392,11 +399,26 @@ func (s *mailScreen) rebuildRows(added []mail.MessageSummary) {
 		s.messages.Select(0, 0)
 		return
 	}
-	row := rowAfterReload(s.items, s.restoreID, s.restoreRow)
+	row := s.itemRow(rowAfterReload(s.items, s.restoreID, s.restoreRow))
 	s.messages.Select(row, 0)
 	if s.restoreScroll < row {
 		s.messages.SetOffset(s.restoreScroll, 0)
 	} // иначе Select уже показал выделенную строку — offset не откатываем
+}
+
+// itemRow / itemIndex — перевод «индекс в s.items ↔ строка таблицы» (О-1):
+// строки-разделители дней сдвигают нумерацию строк, поэтому сырой row из
+// колбэков tview в s.items[...] подставлять нельзя. -1 — строка не письмо
+// (tview разделители не выделяет: NotSelectable); защита на будущее.
+func (s *mailScreen) itemRow(i int) int { return s.itemRows[i] }
+
+func (s *mailScreen) itemIndex(row int) int {
+	for i, r := range s.itemRows {
+		if r == row {
+			return i
+		}
+	}
+	return -1
 }
 
 // rowAfterReload решает, где встанет курсор после пересборки списка (RD-7):
@@ -451,11 +473,26 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 // accent (колонки 0–2), прочитанные — обычный textPrimary; дата (колонка 3)
 // всегда textSecondary — приглушена в обеих группах. [ВНЕШН] отдельного
 // цвета не получает (SECURITY §4) — красится цветом своей группы.
+// О-1: перед первой строкой каждой группы дня — разделитель «Сегодня /
+// Вчера / Ранее» (не выделяемая строка colorTextSecondary).
 func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
-	for i, m := range added {
-		row := base + i
-		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains(), time.Now()) {
+	now := time.Now()
+	prevBucket := -1
+	if base > 0 {
+		prevBucket = dayBucket(now, s.items[base-1].Received)
+	}
+	for _, m := range added {
+		if b := dayBucket(now, m.Received); b != prevBucket {
+			prevBucket = b
+			s.messages.SetCell(s.messages.GetRowCount(), 0,
+				tview.NewTableCell(dayBuckets[b]).
+					SetTextColor(colorTextSecondary).
+					SetSelectable(false)) // без Expansion: расширил бы колонку 0
+		}
+		row := s.messages.GetRowCount()
+		s.itemRows = append(s.itemRows, row)
+		for col, text := range FormatMessageRow(m, s.app.cfg.InternalDomains(), now) {
 			expansion := 0
 			if col == 2 {
 				expansion = 1 // тема забирает свободную ширину
@@ -476,7 +513,8 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 // maybeLoadNextPage подгружает следующую страницу при достижении конца списка;
 // повторный запуск при загрузке в полёте игнорируется.
 func (s *mailScreen) maybeLoadNextPage(row int) {
-	if s.loading || s.lastPage || row < len(s.items)-2 {
+	idx := s.itemIndex(row)
+	if s.loading || s.lastPage || idx < 0 || idx < len(s.items)-2 {
 		return
 	}
 	if _, more := ews.NextOffset(ews.Page{NextOffset: s.offset, IncludesLast: s.lastPage}); more {
@@ -503,10 +541,11 @@ const (
 
 // showPreview показывает черновик письма в панели просмотра (без загрузки).
 func (s *mailScreen) showPreview(row int) {
-	if row < 0 || row >= len(s.items) {
+	idx := s.itemIndex(row)
+	if idx < 0 || idx >= len(s.items) {
 		return
 	}
-	m := s.items[row]
+	m := s.items[idx]
 	// RD-5: превью — тот же блок заголовков, что в деталях; в FindItem-сводке
 	// Кому/вложений нет — FormatMessageHeader на пустом Message их опускает.
 	text := FormatMessageHeader(mail.Message{MessageSummary: m}) + "\n" +

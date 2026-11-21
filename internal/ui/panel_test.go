@@ -97,17 +97,17 @@ func TestMessageRowReadState(t *testing.T) {
 		return fg, attr
 	}
 
-	fg, attr := rowStyle(0, 2)
+	fg, attr := rowStyle(a.mail.itemRows[0], 2)
 	if fg != colorUnread || attr&tcell.AttrBold == 0 {
 		t.Errorf("тема непрочитанного: цвет %v, атрибуты %v; хочу %v + жирный", fg, attr, colorUnread)
 	}
-	fg, attr = rowStyle(1, 2)
+	fg, attr = rowStyle(a.mail.itemRows[1], 2)
 	if fg != colorTextPrimary || attr&tcell.AttrBold != 0 {
 		t.Errorf("тема прочитанного: цвет %v, атрибуты %v; хочу %v без жирного", fg, attr, colorTextPrimary)
 	}
-	for row := range rows {
-		if fg, _ = rowStyle(row, 3); fg != colorRead {
-			t.Errorf("дата строки %d: цвет %v, хочу textSecondary %v", row, fg, colorRead)
+	for i := range rows {
+		if fg, _ = rowStyle(a.mail.itemRows[i], 3); fg != colorRead {
+			t.Errorf("дата строки %d: цвет %v, хочу textSecondary %v", i, fg, colorRead)
 		}
 	}
 }
