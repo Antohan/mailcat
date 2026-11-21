@@ -84,8 +84,13 @@ type mailScreen struct {
 	// moreIdx — индекс пункта «Ещё ▸/▾»; len(mainFolders) больше не равен ему:
 	// разделители групп стоят в списке тоже. Ставится в renderFolders.
 	moreIdx int
-	// connFooter — нижняя строка сайдбара «● Connected · user» (V-4).
-	connFooter *tview.TextView
+	// conn — футер сайдбара (V-12, по референсу): две строки — «● Connected»
+	// и username под ним. Текст собирает connText, ставит setConn или DrawFunc
+	// (ширина панели известна только при отрисовке — обрезка «…» по ней).
+	conn *tview.TextView
+	// connLabel/connColor — состояние связи для connText: пишет setConn.
+	connLabel string
+	connColor tcell.Color
 	// WHY: поколение выбора папки — ответ, пришедший после переключения,
 	// относится к прежней папке и не должен стирать уже загруженный список.
 	// Не делать: сравнивать имя папки вместо поколения — при возврате A→B→A
@@ -140,17 +145,20 @@ func newMailScreen(a *App) *mailScreen {
 	s.foldersHeader = newPanelHeader("Папки")
 	s.messagesHeader = newPanelHeader("Письма")
 	s.previewHeader = newPanelHeader("Просмотр")
-	// WHY (V-4): футер сайдбара — отдельная строка под списком: «● Connected»
-	// + username; точка зелёная/красная по последней EWS-проверке (setConn).
-	// shortcut: длинный username обрезается по ширине панели (SetWrap(false),
-	// как у баннера О-3) — перенос на вторую строку невидим: высота футера 1.
-	// Поднимать: если юзер попросит полный логин на узком терминале.
-	s.connFooter = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
-	s.connFooter.SetText(fmt.Sprintf("[%s]●[-][%s] подключение…[-]", hexTag(colorTextSecondary), hexTag(colorTextSecondary)))
+	// WHY (V-12): футер сайдбара — две строки: «● Connected» и username под
+	// ним; длинный username обрезается «…» по ширине панели. Обрезка — в
+	// DrawFunc, а не при setConn: ширина панели меняется при resize, а
+	// SetWrap(false) перенос не сделает — вторая строка просто не влезла бы.
+	s.connLabel, s.connColor = "подключение…", colorTextSecondary
+	s.conn = tview.NewTextView().SetDynamicColors(true).SetWrap(false)
+	s.conn.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		s.conn.SetText(s.connText(w))
+		return x, y, w, h
+	})
 	foldersCol := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(s.foldersHeader, 1, 0, false).
 		AddItem(s.folders, 0, 1, true).
-		AddItem(s.connFooter, 1, 0, false)
+		AddItem(s.conn, 2, 0, false)
 	// WHY (V-3, П.4б): разделители между колонками — по одной тонкой линии,
 	// той же толщины и цвета, что линии заголовков (ПАПКИ ↔ ПИСЬМА и
 	// ПИСЬМА ↔ ПРОСМОТР согласованы). Рамки панелей при этом остаются
@@ -376,16 +384,34 @@ func (s *mailScreen) toggleTech() {
 	s.folders.SetCurrentItem(s.moreIdx)
 }
 
-// setConn — футер сайдбара (V-4): точка зелёная, если последняя EWS-операция
+// setConn — футер сайдбара (V-12): точка зелёная, если последняя EWS-операция
 // прошла, красная при ошибке. Текст на красной — «Нет связи»: «Connected» с
 // красной точкой врал бы.
 func (s *mailScreen) setConn(ok bool) {
-	dot, label := colorConnected, "Connected"
+	s.connColor, s.connLabel = colorConnected, "Connected"
 	if !ok {
-		dot, label = colorError, "Нет связи"
+		s.connColor, s.connLabel = colorError, "Нет связи"
 	}
-	user := tview.Escape(security.Sanitize(s.app.cfg.Username))
-	s.connFooter.SetText(fmt.Sprintf("[%s]●[-][%s] %s · %s[-]", hexTag(dot), hexTag(colorTextSecondary), label, user))
+	s.conn.SetText(s.connText(s.connWidth()))
+}
+
+// connWidth — текущая ширина футера; 0 до первой раскладки.
+func (s *mailScreen) connWidth() int {
+	_, _, w, _ := s.conn.GetRect()
+	return w
+}
+
+// connText — текст футера: «● <состояние>» и username под ним, обрезанный
+// «…» по ширине панели (w ≤ 0 — ширина ещё неизвестна, не режем).
+// Обрезаем ДО tview.Escape: усечение escaped-строки разрезало бы тег.
+func (s *mailScreen) connText(w int) string {
+	user := security.Sanitize(s.app.cfg.Username)
+	if w > 0 {
+		user = truncateEllipsis(user, w)
+	}
+	return fmt.Sprintf("[%s]●[-][%s] %s[-]\n[%s]%s[-]",
+		hexTag(s.connColor), hexTag(colorTextSecondary), s.connLabel,
+		hexTag(colorTextSecondary), tview.Escape(user))
 }
 
 // selectFolder переключает текущую папку и перечитывает список. Старые строки

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 )
 
 // TestTopBar: одна строка над pages — только «mailcat · <папка>» (имя из EWS
@@ -40,4 +41,23 @@ func TestTopBar(t *testing.T) {
 	}
 	a.tapp.Stop()
 	<-done
+}
+
+// TestConnFooter: футер сайдбара в две строки (V-12) — «● Connected» и
+// username под ним; длинный логин обрезан «…» по ширине панели.
+func TestConnFooter(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.Username = strings.Repeat("u", 40)
+	a.mail.setConn(true)
+	lines := strings.Split(a.mail.connText(12), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], "●") || !strings.Contains(lines[0], "Connected") {
+		t.Fatalf("состояние связи = %q", lines)
+	}
+	if !strings.HasSuffix(lines[1], "…[-]") || tview.TaggedStringWidth(lines[1]) != 12 {
+		t.Errorf("username не обрезан по ширине: %q", lines[1])
+	}
+	a.mail.setConn(false)
+	if !strings.Contains(a.mail.connText(12), "Нет связи") {
+		t.Errorf("ошибка связи не показана: %q", a.mail.connText(12))
+	}
 }
