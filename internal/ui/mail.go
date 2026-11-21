@@ -405,6 +405,15 @@ func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 
 // refreshFolder перечитывает текущую папку (клавиша u).
 func (s *mailScreen) refreshFolder() {
+	// WHY: если FindFolders упал при старте (VPN не поднят), сайдбар пуст;
+	// прежний «u» перегружал только письма через selectFolder с пустым
+	// folderName — письма появлялись, заголовок списка и сайдбар оставались
+	// сломанными до перезапуска (живой кейс 21.11.2026). Пустой сайдбар —
+	// грузим всё: loadFolders сам завершается selectFolder («Входящие»).
+	if len(s.mainFolders) == 0 && len(s.techFolders) == 0 {
+		s.loadFolders()
+		return
+	}
 	s.selectFolder(s.folder, s.folderName)
 }
 

@@ -4,14 +4,48 @@ package ui
 // фиксированный порядок, остальные — алфавит, техпапки — секция «Ещё ▸».
 
 import (
+	"encoding/pem"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"mailcat/internal/config"
+	"mailcat/internal/ews"
 	"mailcat/internal/mail"
 )
+
+// mockFixture выбирает фикстуру EWS по операции в запросе (мок для
+// full-path тестов UI; файлы — ../ews/testdata).
+func mockFixture(t *testing.T, reqBody string) []byte {
+	t.Helper()
+	var file string
+	switch {
+	case strings.Contains(reqBody, "FindFolder"):
+		file = "findfolder_response.xml"
+	case strings.Contains(reqBody, "GetItem"):
+		file = "getitem_response.xml"
+	case strings.Contains(reqBody, "CalendarView"):
+		file = "calendar_response.xml"
+	case strings.Contains(reqBody, `Offset="0"`), !strings.Contains(reqBody, "Offset="):
+		file = "finditem_response_p1.xml"
+	default:
+		file = "finditem_response_p2.xml"
+	}
+	b, err := os.ReadFile(filepath.Join("..", "ews", "testdata", file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
 
 func names(folders []mail.Folder) []string {
 	out := make([]string, 0, len(folders))
@@ -132,4 +166,60 @@ func TestRenderFoldersNoTech(t *testing.T) {
 	if got := s.folders.GetItemCount(); got != 1 {
 		t.Fatalf("пунктов %d, хочу 1 (без «Ещё ▸»)", got)
 	}
+}
+
+// TestRefreshRestoresEmptySidebar: «u» (refreshFolder) при пустом сайдбаре —
+// состояние после ошибки FindFolders при старте — восстанавливает и папки, а
+// не только письма: loadFolders завершается selectFolder («Входящие»).
+// До фикса «u» перегружал письма с folderName=="" — заголовок списка
+// оставался сброшенным, сайдбар пустым до перезапуска (живой кейс 21.11).
+func TestRefreshRestoresEmptySidebar(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_, _ = w.Write(mockFixture(t, string(b)))
+	}))
+	defer srv.Close()
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caPath, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := ews.NewClient(srv.URL, ews.Credentials{Username: "u", Password: "p"}, caPath,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Defaults()
+	cfg.Server = srv.URL
+	a := New(cfg, client, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Состояние «FindFolders при старте упал»: сайдбар пуст, папка не выбрана.
+	a.mail.folderName, a.mail.folder = "", ews.FolderID{}
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(110, 28)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+
+	a.mail.refreshFolder() // «u»
+
+	var items, mains int
+	var title string
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = a.tapp.QueueUpdateDraw(func() {
+			items = a.mail.folders.GetItemCount()
+			mains = len(a.mail.mainFolders)
+			title = a.mail.messagesHeader.title
+		})
+		if items > 0 && mains > 0 && title != "" {
+			return // восстановилось
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("«u» не восстановил сайдбар: items=%d mainFolders=%d title=%q", items, mains, title)
 }
