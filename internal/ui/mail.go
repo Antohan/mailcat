@@ -798,6 +798,7 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 	if inner := w - 2 - 2*padX; inner > timeW+1+listPadLeft {
 		// Меньше maxW — на левое поле ячейки: ширина колонки = maxW+listPadLeft.
 		maxW := inner - timeW - 1 - listPadLeft
+		now := time.Now()
 		for row := 0; row < s.messages.GetRowCount(); row++ {
 			if c := s.messages.GetCell(row, 0); c != nil {
 				c.SetMaxWidth(maxW + listPadLeft)
@@ -807,7 +808,10 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 			if i >= len(s.items) {
 				break
 			}
-			parts := FormatMessageListItem(s.items[i], s.app.cfg.InternalDomains(), time.Now())
+			// V-25: серия отправителя считается здесь заново — текст ячейки
+			// хранить нельзя, при resize он пересобирается (WHY выше).
+			repeat := i > 0 && sameSenderRun(s.items[i-1], s.items[i], now)
+			parts := FormatMessageListItem(s.items[i], s.app.cfg.InternalDomains(), now, repeat)
 			if c := s.messages.GetCell(row, 0); c != nil {
 				c.SetText(strings.Repeat(" ", listPadLeft) +
 					dotLine(truncateEllipsis(parts[0], maxW), !s.items[i].IsRead))
@@ -855,6 +859,9 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 	base := len(s.items) - len(added)
 	now := time.Now()
 	prevBucket := -1
+	// prev — индекс предыдущего пункта в s.items: серия отправителя (V-25)
+	// продолжается и через границу страницы (base-1).
+	prev := base - 1
 	if base > 0 {
 		prevBucket = dayBucket(now, s.items[base-1].Received)
 	}
@@ -866,7 +873,8 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 					SetTextColor(colorTextSecondary).
 					SetSelectable(false)) // без Expansion: расширил бы колонку 0
 		}
-		parts := FormatMessageListItem(m, s.app.cfg.InternalDomains(), now)
+		repeat := prev >= 0 && sameSenderRun(s.items[prev], m, now)
+		parts := FormatMessageListItem(m, s.app.cfg.InternalDomains(), now, repeat)
 		row := s.messages.GetRowCount()
 		s.itemRows = append(s.itemRows, row)
 		// dotLine: точка своим цветом тегом (muted у прочитанных, П.1);
@@ -888,6 +896,7 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 		s.messages.SetCell(row+1, 0, tview.NewTableCell(strings.Repeat(" ", listPadLeft)+parts[2]).
 			SetExpansion(1).SetTextColor(colorTextSecondary).SetSelectable(false))
 		s.messages.SetCell(row+1, 1, tview.NewTableCell("").SetSelectable(false))
+		prev++
 	}
 }
 

@@ -65,7 +65,7 @@ func TestFormatMessageListItemEscaped(t *testing.T) {
 		Subject: "[red]СРОЧНО[-] проверка",
 		From:    mail.Address{Email: `["evil"]@x.example`},
 	}
-	row := FormatMessageListItem(m, []string{"company.example"}, time.Now())
+	row := FormatMessageListItem(m, []string{"company.example"}, time.Now(), false)
 	if !strings.Contains(row[2], "[red[]") {
 		t.Errorf("тег [red] в теме не экранирован: %q", row[2])
 	}

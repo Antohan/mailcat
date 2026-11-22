@@ -113,6 +113,19 @@ const externalMarkCol = 8
 // subjectIndent — отступ строки 2 (темы): «● » (2) + externalMarkCol.
 var subjectIndent = strings.Repeat(" ", 2+externalMarkCol)
 
+// sameSenderRun — письмо cur продолжает серию отправителя prev (V-25): тот же
+// ящик и та же группа дня. WHY: имя печатает только первое письмо серии,
+// остальным — точка и [ВНЕШН]; сравниваем адрес, а не имя — однофамильцы из
+// разных ящиков не должны слипнуться. Пустой адрес серию не продолжает, иначе
+// пачка писем без From осталась бы вовсе без имён.
+func sameSenderRun(prev, cur mail.MessageSummary, now time.Time) bool {
+	if prev.From.Email == "" {
+		return false
+	}
+	return strings.EqualFold(prev.From.Email, cur.From.Email) &&
+		dayBucket(now, prev.Received) == dayBucket(now, cur.Received)
+}
+
 // FormatMessageListItem — контент двухстрочного пункта списка писем (V-1):
 // [строка 1, время, строка 2]. Строка 1 — точка статуса + [ВНЕШН]
 // фиксированной ширины + отправитель (t:Name, fallback — локальная часть
@@ -124,10 +137,16 @@ var subjectIndent = strings.Repeat(" ", 2+externalMarkCol)
 // пробивались (исключение — точка статуса, WHY у dotLine). Текст из EWS
 // проходит Sanitize (§3) и tview.Escape — Table интерпретирует
 // теги цветов/регионов безусловно (ревью этапа 2).
-func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.Time) []string {
+// repeat (V-25) — письмо продолжает серию отправителя (sameSenderRun): имя
+// не печатается, но точка и [ВНЕШН] остаются у каждой строки (SECURITY §4).
+func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.Time, repeat bool) []string {
 	mark := fmt.Sprintf("%-*s", externalMarkCol, ExternalMark(m.From.Email, orgDomains))
+	name := senderLabel(m.From)
+	if repeat {
+		name = ""
+	}
 	return []string{
-		messageDot + " " + mark + senderLabel(m.From),
+		messageDot + " " + mark + name,
 		FormatShortDate(now, m.Received),
 		subjectIndent + tview.Escape(security.Sanitize(m.Subject)),
 	}

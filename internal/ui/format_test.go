@@ -46,7 +46,7 @@ func TestFormatMessageListItem(t *testing.T) {
 		Received: recv,
 		From:     mail.Address{Name: "Иванов И.", Email: "ivanov@partner.tld"},
 	}
-	row := FormatMessageListItem(m, orgDomains, now)
+	row := FormatMessageListItem(m, orgDomains, now, false)
 	if len(row) != 3 {
 		t.Fatalf("частей %d, хочу 3: %v", len(row), row)
 	}
@@ -74,7 +74,7 @@ func TestFormatMessageListItemFallback(t *testing.T) {
 		{mail.Address{Email: "@host"}, "@host"}, // пустая локальная часть — адрес целиком
 	}
 	for _, tc := range cases {
-		row := FormatMessageListItem(mail.MessageSummary{From: tc.from}, orgDomains, now)
+		row := FormatMessageListItem(mail.MessageSummary{From: tc.from}, orgDomains, now, false)
 		if !strings.HasSuffix(row[0], tc.want) {
 			t.Errorf("отправитель %v = %q, хочу суффикс %q", tc.from, row[0], tc.want)
 		}
@@ -113,7 +113,7 @@ func TestFormatMessageListItemSanitized(t *testing.T) {
 		Subject: "плохая\x1b]8;;http://evil\x1b\\тема",
 		From:    mail.Address{Email: "a@b.c"},
 	}
-	row := FormatMessageListItem(m, orgDomains, now)
+	row := FormatMessageListItem(m, orgDomains, now, false)
 	if !strings.HasSuffix(row[2], "плохаятема") {
 		t.Errorf("тема не санитизирована: %q", row[2])
 	}
@@ -369,5 +369,73 @@ func TestDayBucket(t *testing.T) {
 	}
 	if dayBuckets[0] != "Сегодня" || dayBuckets[1] != "Вчера" || dayBuckets[2] != "Ранее" {
 		t.Fatalf("dayBuckets = %v", dayBuckets)
+	}
+}
+
+// TestSameSenderRun (V-25): серия — тот же ящик и та же группа дня; смена
+// отправителя или дня начинает новую серию (имя печатается снова).
+func TestSameSenderRun(t *testing.T) {
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
+	mk := func(email string, at time.Time) mail.MessageSummary {
+		return mail.MessageSummary{From: mail.Address{Email: email}, Received: at}
+	}
+	today1 := time.Date(2026, 11, 20, 9, 0, 0, 0, time.Local)
+	today2 := time.Date(2026, 11, 20, 10, 0, 0, 0, time.Local)
+	yesterday := time.Date(2026, 11, 19, 10, 0, 0, 0, time.Local)
+	cases := []struct {
+		name      string
+		prev, cur mail.MessageSummary
+		want      bool
+	}{
+		{"серия", mk("ivanov@company.example", today1), mk("IVANOV@company.example", today2), true},
+		{"другой отправитель", mk("ivanov@company.example", today1), mk("petrov@company.example", today2), false},
+		{"другой день", mk("ivanov@company.example", today1), mk("ivanov@company.example", yesterday), false},
+		{"пустой адрес", mk("", today1), mk("", today2), false},
+	}
+	for _, tc := range cases {
+		if got := sameSenderRun(tc.prev, tc.cur, now); got != tc.want {
+			t.Errorf("%s: sameSenderRun = %v, хочу %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestFormatMessageListItemRepeat (V-25): у повторного письма серии имени нет,
+// но точка и [ВНЕШН] на месте (SECURITY §4).
+func TestFormatMessageListItemRepeat(t *testing.T) {
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
+	m := mail.MessageSummary{
+		Subject:  "Re: Счёт",
+		Received: time.Date(2026, 11, 20, 10, 0, 0, 0, time.Local),
+		From:     mail.Address{Name: "Петров П.", Email: "petrov@partner.tld"},
+	}
+	first := FormatMessageListItem(m, orgDomains, now, false)
+	again := FormatMessageListItem(m, orgDomains, now, true)
+	if !strings.HasSuffix(first[0], "Петров П.") {
+		t.Errorf("первое письмо серии без имени: %q", first[0])
+	}
+	if got := strings.TrimRight(again[0], " "); got != messageDot+" [ВНЕШН]" {
+		t.Errorf("повтор = %q, хочу точку и [ВНЕШН] без имени", again[0])
+	}
+}
+
+// TestClampKeepsSenderRuns (V-25): resize пересобирает текст ячейки — правило
+// серии сохраняется, имя не возвращается.
+func TestClampKeepsSenderRuns(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.OrgDomains = []string{"company.example"}
+	s := a.mail
+	s.items = []mail.MessageSummary{
+		{Subject: "Первое", Received: time.Now(), From: mail.Address{Name: "Иванов И.", Email: "ivanov@company.example"}},
+		{Subject: "Второе", Received: time.Now(), From: mail.Address{Name: "Иванов И.", Email: "ivanov@company.example"}},
+	}
+	s.appendRows(s.items)
+	s.clampMessageColumns(nil, 0, 0, 60, 10)
+	first := s.messages.GetCell(s.itemRows[0], 0).Text
+	second := s.messages.GetCell(s.itemRows[1], 0).Text
+	if !strings.Contains(first, "Иванов И.") {
+		t.Errorf("первое письмо без имени после clamp: %q", first)
+	}
+	if strings.Contains(second, "Иванов") || !strings.Contains(second, messageDot) {
+		t.Errorf("повтор после clamp = %q, хочу точку без имени", second)
 	}
 }
