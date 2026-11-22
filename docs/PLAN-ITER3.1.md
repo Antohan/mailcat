@@ -170,7 +170,7 @@
       Тест: `folders_test.go` — после `updateInboxUnread(7)` курсор не
       изменился, строка содержит `(7)`.
 
-- [ ] **V-19. renderFolders сохраняет курсор**
+- [x] **V-19. renderFolders сохраняет курсор**
       Что делает: пересборка списка папок возвращает курсор на прежнюю папку
       (или «Ещё»).
       Затронуто: `mail.go`: `renderFolders`, новый `restoreFolderCursor`;

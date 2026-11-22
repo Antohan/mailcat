@@ -1,12 +1,12 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 3.1 — `docs/PLAN-ITER3.1.md`: V-18 закрыт → следующий **V-19**
-(`renderFolders` сохраняет курсор, `restoreFolderCursor`, moreIdx). Старт: `/stage V-19`.
+Итерация 3.1 — `docs/PLAN-ITER3.1.md`: V-19 закрыт → следующий **V-20**
+(курсор не переименовывает открытую папку). Старт: `/stage V-20`.
 
 ## Сделано
+- iter31 V-19 (8539aa4): renderFolders сохраняет курсор через restoreFolderCursor.
 - iter31 V-18 (6b21b29): watcher обновляет строку «Входящих» через refreshFolderRow.
-- iter31 V-17 (2430932 … 8ab12a0, 0a15523): поля, папки, шапка, подсказки, полосы.
 
 ## Открыто
 - TODO юзера (TESTING.md §5): smoke S3–S7 после 3.1; О-3 в Terminal.app/VS Code;
@@ -15,8 +15,8 @@
   item:Importance, write, Catppuccin, item:Preview; скругления — tview только прямоугольник.
 
 ## Не трогать
-- V-18: счётчик watcher'а — только refreshFolderRow (SetItemText по строке,
-  формула FormatFolder; без renderFolders/Clear — они сбрасывают курсор).
+- V-19: renderFolders до Clear помнит папку/«Ещё», после — restoreFolderCursor (ID, при пустом — имя).
+- V-18: счётчик watcher'а — только refreshFolderRow (SetItemText, без renderFolders/Clear).
 - V-17: пункт — две строки; вторая красится paintItemTail; scrollItemIntoView
   двигает offset у нижнего края; поля — listPadLeft/Right в appendRows И
   clampMessageColumns; папки — по одной; шапка — FormatMessageHeader; в Table
