@@ -89,6 +89,10 @@ type App struct {
 	pages  *tview.Pages
 	status *tview.TextView // строка сообщений (UI-9): «Загрузка…», ошибки, результаты
 	hint   *tview.TextView // строка подсказок (UI-9): видна всегда, ниже строки сообщений
+	// hintSegs — набор подсказок текущей страницы для DrawFunc: в отрисовке
+	// нельзя звать pageHintSegs, она читает GetFocus под блокировкой приложения
+	// (V-17: deadlock при открытом письме). Обновляет только showHint.
+	hintSegs []hintSeg
 	// Верхний бар (V-6, V-11): одна строка — только «mailcat · <папка>» слева;
 	// дата/время и точка связи убраны (статус связи — футер сайдбара, V-4).
 	topLeft *tview.TextView
@@ -169,8 +173,9 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 		SetText(formatHint(hintMail))
 	// V-17: подсказка подстраивается под ширину — необязательные сегменты
 	// (opt) снимаются на узком экране, иначе строка обрезалась бы по краю.
+	a.hintSegs = hintMail
 	a.hint.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		a.hint.SetText(formatHintFit(a.pageHintSegs(), w))
+		a.hint.SetText(formatHintFit(a.hintSegs, w))
 		return x, y, w, h
 	})
 
@@ -501,7 +506,8 @@ func (a *App) setStatus(text string) {
 // у каждого экрана свой набор клавиш, и подсказки видны ВСЕГДА — сообщения,
 // ошибки и загрузки живут строкой выше и эту строку не трогают.
 func (a *App) showHint() {
-	a.hint.SetText(a.pageHint())
+	a.hintSegs = a.pageHintSegs()
+	a.hint.SetText(formatHint(a.hintSegs))
 }
 
 // beginLoad показывает индикатор загрузки на время GetItem/FindItem (UI-8)
