@@ -6,7 +6,7 @@
 через `ews-specialist`, потом код). Старт: `/stage V-8`.
 
 ## Сделано
-- iter31 V-17 (2430932, dc211b6, 05326c7, 8433ad5, 64fdd77): поля, папки, шапка.
+- iter31 V-17 (2430932, dc211b6, 05326c7, 8433ad5, 64fdd77, e1b83e7): поля, папки, шапка, подсказки.
 - iter31 V-16 (6275d36): подписи ПАПКИ/ПРОСМОТР убраны, фикс линии заголовка.
 
 ## Открыто
@@ -20,6 +20,6 @@
   scrollItemIntoView двигает offset у нижнего края (иначе тема обрезается);
   поля — listPadLeft/Right в appendRows И clampMessageColumns; папки — по
   одной; шапка — FormatMessageHeader; в Table нет «│»; смена папки сбрасывает
-  restoreID/row (switched); connText: ● отступ 1, текст/адрес — 3.
+  restoreID/row (switched); connText: ● =1, текст/адрес =3; подсказки — opt
+  снимает formatHintFit; на 100 колонках обязательные клавиши не обрезаются.
 - V-16/V-15: header: nil; end линии — относительный; Enter — readMessage; messageView/reading — как было.
-- V-7…V-1/UI-9: кейкап — Escape целиком; [ВНЕШН]=8; цвета — theme.go; g — список.
