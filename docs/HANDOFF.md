@@ -6,7 +6,7 @@
 через `ews-specialist`, потом код). Старт: `/stage V-8`.
 
 ## Сделано
-- iter31 V-17 (2430932): плотность списков, заливка папок, подробная шапка.
+- iter31 V-17 (2430932, dc211b6): плотность списков, заливка папок, шапка.
 - iter31 V-16 (6275d36): подписи ПАПКИ/ПРОСМОТР убраны, фикс линии заголовка.
 - iter31 V-13…V-15, V-11…V-12; V-10…V-1, UI-9 — git log.
 
@@ -18,7 +18,8 @@
   item:Importance (нет в EWS-REFERENCE), write-операции, Catppuccin, item:Preview.
 
 ## Не трогать
-- V-17: прокладка — NotSelectable и не в itemRows; папки двухстрочные только при
+- V-17: «подушка» — NotSelectable и не в itemRows; заливку выделения красят
+  3 строки и оба столбца (paintItemTail); папки двухстрочные только при
   foldersTwoLine (DrawFunc); шапка чтения — FormatMessageHeader; в Table нет «│».
 - V-16/V-15: header: nil у папок/просмотра; end линии — относительный; Enter —
   readMessage; messageView общий; reading — сброс в showPreview/selectFolder.
