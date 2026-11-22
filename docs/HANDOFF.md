@@ -6,9 +6,8 @@
 через `ews-specialist`, потом код). Старт: `/stage V-8`.
 
 ## Сделано
-- iter31 V-17 (2430932, dc211b6, 05326c7, 8433ad5): поля, папки, шапка.
+- iter31 V-17 (2430932, dc211b6, 05326c7, 8433ad5, 64fdd77): поля, папки, шапка.
 - iter31 V-16 (6275d36): подписи ПАПКИ/ПРОСМОТР убраны, фикс линии заголовка.
-- iter31 V-13…V-15, V-11…V-12; V-10…V-1, UI-9 — git log.
 
 ## Открыто
 - TODO юзера (TESTING.md §5): smoke S3–S7 после 3.1; О-3 в Terminal.app/VS Code.
@@ -20,6 +19,7 @@
 - V-17: пункт — две строки; вторая красится paintItemTail (оба столбца);
   scrollItemIntoView двигает offset у нижнего края (иначе тема обрезается);
   поля — listPadLeft/Right в appendRows И clampMessageColumns; папки — по
-  одной; шапка — FormatMessageHeader; в Table нет «│».
+  одной; шапка — FormatMessageHeader; в Table нет «│»; смена папки сбрасывает
+  restoreID/row (switched); connText: ● отступ 1, текст/адрес — 3.
 - V-16/V-15: header: nil; end линии — относительный; Enter — readMessage; messageView/reading — как было.
 - V-7…V-1/UI-9: кейкап — Escape целиком; [ВНЕШН]=8; цвета — theme.go; g — список.
