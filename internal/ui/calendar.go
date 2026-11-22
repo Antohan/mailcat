@@ -18,7 +18,7 @@ import (
 type calendarScreen struct {
 	app    *App
 	root   *tview.Flex
-	grid   *tview.Table
+	grid   *monthGrid
 	agenda *tview.List
 
 	// Строки-заголовки панелей (RD-2): месяц и повестка дня.
@@ -39,7 +39,7 @@ func newCalendarScreen(a *App) *calendarScreen {
 	now := time.Now()
 	s.year, s.month = now.Year(), now.Month()
 
-	s.grid = tview.NewTable().SetSelectable(true, true).SetSeparator(' ')
+	s.grid = newMonthGrid()
 	s.grid.SetBorder(true)
 	s.agenda = tview.NewList().ShowSecondaryText(false)
 	s.agenda.SetBorder(true)
@@ -57,7 +57,7 @@ func newCalendarScreen(a *App) *calendarScreen {
 		AddItem(newDivider(), 1, 0, false).
 		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 45, false)
 
-	s.grid.SetSelectionChangedFunc(func(row, col int) {
+	s.grid.SetSelectFunc(func(row, col int) {
 		s.onDaySelected(row, col)
 	})
 	s.agenda.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
@@ -99,7 +99,28 @@ func newCalendarScreen(a *App) *calendarScreen {
 		}
 		return event
 	}
-	s.grid.SetInputCapture(monthHook)
+	// V-32: стрелки на сетке двигают выбор на день/неделю с зажимом в месяце;
+	// на повестке те же клавиши остаются списку (hook туда не вешаем).
+	gridHook := func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Modifiers() == tcell.ModNone {
+			switch event.Key() {
+			case tcell.KeyLeft:
+				s.grid.Move(-1)
+				return nil
+			case tcell.KeyRight:
+				s.grid.Move(1)
+				return nil
+			case tcell.KeyUp:
+				s.grid.Move(-7)
+				return nil
+			case tcell.KeyDown:
+				s.grid.Move(7)
+				return nil
+			}
+		}
+		return monthHook(event)
+	}
+	s.grid.SetInputCapture(gridHook)
 	s.agenda.SetInputCapture(monthHook)
 	return s
 }
@@ -157,64 +178,35 @@ func (s *calendarScreen) loadMonth() {
 }
 
 // render перерисовывает сетку и выбирает текущий день (или 1-е число).
-// UI-5: заголовок «Ноябрь 2026»; «сегодня» — скобки и жирный, выбранный
-// день — инверсия выделения таблицы (разные маркеры).
+// V-32: tview.Table заменён monthGrid — ячейки заполняют панель по высоте.
 func (s *calendarScreen) render() {
-	s.grid.Clear()
 	s.gridHeader.SetListTitle(MonthTitle(s.year, s.month), meetingsCount(len(s.events)))
-	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
-	for col, name := range weekdays {
-		s.grid.SetCell(0, col, tview.NewTableCell(name).
-			SetTextColor(colorOtherMonth).SetSelectable(false))
-	}
 	grid := MonthGrid(s.year, s.month, s.events)
 	now := time.Now()
 	inMonth := now.Year() == s.year && now.Month() == s.month
-	for row := 0; row < 6; row++ {
-		for col := 0; col < 7; col++ {
-			cell := grid[row][col]
-			if cell.Day == 0 {
-				s.grid.SetCell(row+1, col, tview.NewTableCell("").SetSelectable(false))
-				continue
-			}
-			today := inMonth && cell.Day == now.Day()
-			tc := tview.NewTableCell(FormatDayCell(cell, today))
-			if col >= 5 {
-				tc.SetTextColor(colorWeekend) // Сб/Вс
-			}
-			if today {
-				tc.SetAttributes(tcell.AttrBold) // «сегодня» — скобки + жирный
-				// О-3: заливка — светлый оттенок акцента (colorTodayBg):
-				// выделение таблицы — сплошной акцент, его не дублируем.
-				tc.SetBackgroundColor(colorTodayBg)
-			}
-			if !cell.InMonth {
-				tc.SetTextColor(colorOtherMonth)
-			}
-			s.grid.SetCell(row+1, col, tc)
-		}
+	today := 0
+	if inMonth {
+		today = now.Day()
 	}
-	// Выбор: сегодняшний дню месяца, иначе 1-е.
+	s.grid.SetCells(grid, today)
+	// Выбор: сегодняшний день месяца, иначе 1-е — onSelect сам обновит повестку.
 	pick := 1
 	if inMonth {
 		pick = now.Day()
 	}
-	if row, col := cellOf(grid, pick); row >= 0 {
-		s.grid.Select(row+1, col)
-	}
+	s.grid.SelectDay(pick)
 }
 
 // onDaySelected обновляет повестку при движении по сетке (UI-4: строки
 // собирает FormatAgenda — маркеры статуса + реестр ссылок из «Места»).
 func (s *calendarScreen) onDaySelected(row, col int) {
-	if row < 1 {
+	if row < 0 || row >= len(s.grid.cells) || col < 0 || col >= 7 {
 		return
 	}
-	grid := MonthGrid(s.year, s.month, s.events)
-	if row-1 >= len(grid) || col >= 7 || grid[row-1][col].Day == 0 {
+	if s.grid.cells[row][col].Day == 0 {
 		return
 	}
-	day := time.Date(s.year, s.month, grid[row-1][col].Day, 0, 0, 0, 0, time.Local)
+	day := time.Date(s.year, s.month, s.grid.cells[row][col].Day, 0, 0, 0, 0, time.Local)
 	s.dayEvents = DayEvents(s.events, day)
 	reg := mail.NewLinkRegistry()
 	lines := FormatAgenda(s.dayEvents, reg)

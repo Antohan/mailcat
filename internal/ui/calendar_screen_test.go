@@ -49,7 +49,7 @@ func TestCalendarWithoutBanner(t *testing.T) {
 	if r, _, _, _ := sim.GetContent(0, 2); r != '┌' {
 		t.Errorf("рамка сетки не под шапкой: (%d, 2) = %q", 0, r)
 	}
-	if row := simRow(sim, 3); runeIndex(row, "Пн Вт Ср") < 0 {
+	if row := simRow(sim, 3); runeIndex(row, "Пн") < 0 || runeIndex(row, "Вс") < runeIndex(row, "Пт") {
 		t.Errorf("дни недели не в первой строке сетки: %q", string(row))
 	}
 	// Сетка тянется до низа страницы (над строкой сообщений).

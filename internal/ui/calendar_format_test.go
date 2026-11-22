@@ -237,8 +237,9 @@ func TestOnDaySelectedAgenda(t *testing.T) {
 			Location: "https://meet.example/x", MyResponseType: "Accept"},
 	}
 	grid := MonthGrid(2026, time.November, s.events)
+	s.grid.SetCells(grid, 0) // V-32: onDaySelected читает выбранную ячейку из сетки
 	row, col := cellOf(grid, 17)
-	s.onDaySelected(row+1, col)
+	s.onDaySelected(row, col)
 	if got := s.agenda.GetItemCount(); got != 1 {
 		t.Fatalf("элементов повестки = %d, хочу 1", got)
 	}
