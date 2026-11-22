@@ -154,6 +154,36 @@ func TestRenderFoldersToggle(t *testing.T) {
 	}
 }
 
+// TestRenderFoldersKeepsCursor (V-19): пересборка списка возвращает курсор
+// на ту же папку — по ID, а без ID — по имени; на «Ещё» тоже стоит на месте.
+func TestRenderFoldersKeepsCursor(t *testing.T) {
+	s := &mailScreen{
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{ID: "a", DisplayName: "Входящие"}, {DisplayName: "Черновики"}},
+		techFolders:    []mail.Folder{{DisplayName: "Опции"}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	s.renderFolders()
+	s.folders.SetCurrentItem(1)
+	s.renderFolders()
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Errorf("курсор = %d, хочу 1 (папка без ID ищется по имени)", got)
+	}
+
+	s.folders.SetCurrentItem(s.moreIdx)
+	s.renderFolders()
+	if got := s.folders.GetCurrentItem(); got != s.moreIdx {
+		t.Errorf("курсор = %d, хочу moreIdx %d (пункт «Ещё»)", got, s.moreIdx)
+	}
+
+	empty := &mailScreen{app: &App{cfg: &config.Config{}}, folders: tview.NewList(), messagesHeader: newPanelHeader("Письма")}
+	empty.renderFolders()
+	if got := empty.folders.GetCurrentItem(); got != 0 {
+		t.Errorf("пустой список: курсор = %d, хочу 0", got)
+	}
+}
+
 // TestUpdateInboxUnreadKeepsCursor (V-18): тик watcher'а меняет только
 // счётчик строки «Входящих» — курсор и состав списка остаются на месте.
 func TestUpdateInboxUnreadKeepsCursor(t *testing.T) {

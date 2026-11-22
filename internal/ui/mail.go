@@ -439,6 +439,14 @@ func (s *mailScreen) loadFolders() {
 // техпапки (V-4, UI-1). Целиком — потому что сворачивание/разворачивание
 // меняет хвост списка одним махом.
 func (s *mailScreen) renderFolders() {
+	prev := s.folders.GetCurrentItem()
+	wasFolder, isFolder := s.rowByItem[prev]
+	onMore := false
+	if !isFolder && prev < s.folders.GetItemCount() {
+		if text, _ := s.folders.GetItemText(prev); text == moreFoldersClosed || text == moreFoldersOpen {
+			onMore = true
+		}
+	}
 	s.folders.Clear()
 	s.rowByItem = make(map[int]mail.Folder)
 	add := func(f mail.Folder) {
@@ -478,6 +486,7 @@ func (s *mailScreen) renderFolders() {
 	}
 	if len(s.techFolders) == 0 {
 		s.applyActiveFolderStyle()
+		s.restoreFolderCursor(wasFolder, onMore)
 		return
 	}
 	if s.folders.GetItemCount() > 0 {
@@ -496,6 +505,31 @@ func (s *mailScreen) renderFolders() {
 	}
 	s.applyActiveFolderStyle()
 	s.updateListTitle()
+	s.restoreFolderCursor(wasFolder, onMore)
+}
+
+// restoreFolderCursor возвращает курсор на прежнюю папку после пересборки
+// (V-19): Clear сбрасывает выделение на первую строку. onMore — курсор стоял
+// на «Ещё ▸/▾». Папка ищется по ID, при пустом ID — по имени (distinguished
+// inbox до первого переключения). Не нашли (старт, нет папок, разделитель) —
+// первая строка.
+func (s *mailScreen) restoreFolderCursor(prev mail.Folder, onMore bool) {
+	if onMore && s.moreIdx < s.folders.GetItemCount() {
+		s.folders.SetCurrentItem(s.moreIdx)
+		return
+	}
+	for i, f := range s.rowByItem {
+		if prev.ID != "" {
+			if f.ID != prev.ID {
+				continue
+			}
+		} else if prev.DisplayName == "" || f.DisplayName != prev.DisplayName {
+			continue
+		}
+		s.folders.SetCurrentItem(i)
+		return
+	}
+	s.folders.SetCurrentItem(0)
 }
 
 // isActiveFolder — строка соответствует открытой папке. ID пуст только у
