@@ -7,7 +7,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/gdamore/tcell/v2"
@@ -25,9 +24,6 @@ type calendarScreen struct {
 	// Строки-заголовки панелей (RD-2): месяц и повестка дня.
 	gridHeader   *panelHeader
 	agendaHeader *panelHeader
-
-	// О-3: ASCII-баннер месяца над сеткой.
-	banner *tview.TextView
 
 	year      int
 	month     time.Month
@@ -51,17 +47,10 @@ func newCalendarScreen(a *App) *calendarScreen {
 	// RD-2: заголовки — отдельные строки над панелями (см. panel.go).
 	s.gridHeader = newPanelHeader("Календарь")
 	s.agendaHeader = newPanelHeader("Повестка дня")
-	// О-3: баннер — свой текст (имена месяцев из bannerGlyphs), не из EWS;
-	// цвет — акцент из theme.go (инвариант RD-1).
-	s.banner = tview.NewTextView().
-		SetWrap(false).
-		SetTextAlign(tview.AlignCenter).
-		SetTextColor(colorAccent)
-	body := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(s.banner, 5, 0, false).
-		AddItem(s.grid, 0, 1, true)
+	// V-30: баннера месяца нет — месяц показывает шапка панели (RD-2), сетка
+	// начинается сразу под ней.
 	s.root = tview.NewFlex().
-		AddItem(panelColumn(s.gridHeader, body), 0, 55, true).
+		AddItem(panelColumn(s.gridHeader, s.grid), 0, 55, true).
 		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 45, false)
 
 	s.grid.SetSelectionChangedFunc(func(row, col int) {
@@ -168,7 +157,6 @@ func (s *calendarScreen) loadMonth() {
 func (s *calendarScreen) render() {
 	s.grid.Clear()
 	s.gridHeader.SetTitle(MonthTitle(s.year, s.month))
-	s.banner.SetText(strings.Join(MonthBanner(s.month), "\n"))
 	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 	for col, name := range weekdays {
 		s.grid.SetCell(0, col, tview.NewTableCell(name).
