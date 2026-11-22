@@ -184,6 +184,31 @@ func TestRenderFoldersKeepsCursor(t *testing.T) {
 	}
 }
 
+// TestCursorDoesNotRenameFolder (V-20): движение курсора по сайдбару меняет
+// только вид строк — folderName и accent открытой папки остаются прежними;
+// имя меняет лишь selectFolder. Distinguished inbox на старте — ID пуст.
+func TestCursorDoesNotRenameFolder(t *testing.T) {
+	a := New(config.Defaults(), nil, nil)
+	s := a.mail
+	s.folderName, s.folder = "Входящие", ews.FolderID{}
+	s.mainFolders = []mail.Folder{{DisplayName: "Входящие"}, {DisplayName: "Черновики"}}
+	s.renderFolders()
+
+	// Настоящий путь ввода: Up/Down обновляет currentItem ДО SetChangedFunc
+	// (в отличие от SetCurrentItem) — как у пользователя.
+	s.folders.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Fatalf("курсор = %d, хочу 1 (Черновики)", got)
+	}
+	if s.folderName != "Входящие" {
+		t.Errorf("folderName = %q, хочу «Входящие» (курсор не открывает папку)", s.folderName)
+	}
+	got, _ := s.folders.GetItemText(0)
+	if want := FormatFolder(s.mainFolders[0], true, false); got != want {
+		t.Errorf("строка «Входящих» = %q, хочу accent открытой папки %q", got, want)
+	}
+}
+
 // TestUpdateInboxUnreadKeepsCursor (V-18): тик watcher'а меняет только
 // счётчик строки «Входящих» — курсор и состав списка остаются на месте.
 func TestUpdateInboxUnreadKeepsCursor(t *testing.T) {

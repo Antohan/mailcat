@@ -220,13 +220,14 @@ func newMailScreen(a *App) *mailScreen {
 		AddItem(d2, 1, 0, false).
 		AddItem(previewCol, 0, pctPreview, true)
 
-	s.folders.SetChangedFunc(func(i int, _, _ string, _ rune) {
-		// «Ещё ▸/▾» и разделители — не папки: их нет в rowByItem, имя текущей
-		// папки не подменяется; вид строк при этом пересчитывается — курсор
-		// мог съехать с открытой папки.
-		if f, ok := s.rowByItem[i]; ok {
-			s.folderName = f.DisplayName
-		}
+	s.folders.SetChangedFunc(func(_ int, _, _ string, _ rune) {
+		// V-20: курсор меняет только вид строк — открытую папку (folderName и
+		// accent) задаёт selectFolder. Пересчитываются все строки: курсор мог
+		// и въехать, и съехать.
+		// WHY: запись folderName здесь переименовывала открытую папку вслед за
+		// курсором — accent и заголовок списка переезжали на неоткрытую строку.
+		// Не делать: выводить имя открытой папки из курсора — «Входящие»
+		// (distinguished inbox с пустым ID) тогда не отличить от выбора.
 		s.applyActiveFolderStyle()
 	})
 	s.folders.SetSelectedFunc(func(_ int, _ string, _ string, _ rune) {
