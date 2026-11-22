@@ -283,3 +283,24 @@ func TestInitialFocusMessages(t *testing.T) {
 		t.Errorf("стартовый фокус не в списке писем: %T", got)
 	}
 }
+
+// TestCycleFocusUpdatesHint (V-23): Tab/Shift-Tab вместе с фокусом меняет и
+// строку подсказок — она не остаётся от прежней панели.
+func TestCycleFocusUpdatesHint(t *testing.T) {
+	a := newTestApp(t)
+	a.mail.showReading(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "Тема"},
+	})
+	if got := a.hint.GetText(false); got != formatHint(hintReading) {
+		t.Fatalf("после открытия письма подсказки панели чтения: %q", got)
+	}
+	a.mail.cycleFocus() // просмотр → папки
+	if a.tapp.GetFocus() != a.mail.folders || a.hint.GetText(false) != formatHint(hintMail) {
+		t.Errorf("Tab из просмотра не обновил подсказку: %q", a.hint.GetText(false))
+	}
+	a.mail.cycleFocus() // папки → письма
+	a.mail.cycleFocus() // письма → просмотр
+	if a.tapp.GetFocus() != a.mail.preview || a.hint.GetText(false) != formatHint(hintReading) {
+		t.Errorf("возврат в просмотр не вернул подсказки панели: %q", a.hint.GetText(false))
+	}
+}

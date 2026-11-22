@@ -1052,11 +1052,15 @@ func (s *mailScreen) currentFolderUnread() (int, bool) {
 // cycleFocus перебирает панели почты по кругу (Tab).
 func (s *mailScreen) cycleFocus() {
 	focus := []tview.Primitive{s.folders, s.messages, s.preview}
+	next := tview.Primitive(s.messages)
 	for i, p := range focus {
 		if s.app.tapp.GetFocus() == p {
-			s.app.tapp.SetFocus(focus[(i+1)%len(focus)])
-			return
+			next = focus[(i+1)%len(focus)]
+			break
 		}
 	}
-	s.app.tapp.SetFocus(s.messages)
+	s.app.tapp.SetFocus(next)
+	// V-23: набор подсказок зависит от фокуса (V-17) — после SetFocus его
+	// пересобирает только showHint; DrawFunc кэш a.hintSegs сам не обновляет.
+	s.app.showHint()
 }
