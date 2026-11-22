@@ -295,12 +295,30 @@ func TestCycleFocusUpdatesHint(t *testing.T) {
 		t.Fatalf("после открытия письма подсказки панели чтения: %q", got)
 	}
 	a.mail.cycleFocus() // просмотр → папки
-	if a.tapp.GetFocus() != a.mail.folders || a.hint.GetText(false) != formatHint(hintMail) {
+	if a.tapp.GetFocus() != a.mail.folders || a.hint.GetText(false) != formatHint(hintFolders) {
 		t.Errorf("Tab из просмотра не обновил подсказку: %q", a.hint.GetText(false))
 	}
 	a.mail.cycleFocus() // папки → письма
 	a.mail.cycleFocus() // письма → просмотр
 	if a.tapp.GetFocus() != a.mail.preview || a.hint.GetText(false) != formatHint(hintReading) {
 		t.Errorf("возврат в просмотр не вернул подсказки панели: %q", a.hint.GetText(false))
+	}
+}
+
+// TestFoldersHint (V-24): фокус на папках даёт набор панели папок, и он
+// укладывается в 100 колонок без opt-сегментов.
+func TestFoldersHint(t *testing.T) {
+	a := newTestApp(t)
+	a.tapp.SetFocus(a.mail.folders)
+	if got := formatHint(a.pageHintSegs()); got != formatHint(hintFolders) {
+		t.Errorf("подсказки фокуса на папках: %q", got)
+	}
+	if w := tview.TaggedStringWidth(formatHint(hintFolders)); w > 100 {
+		t.Errorf("подсказки папок шире 100 колонок: %d", w)
+	}
+	for _, s := range hintFolders {
+		if s.opt {
+			t.Errorf("сегмент %q помечен opt — на 100 колонках обязательная клавиша пропадёт", s.key)
+		}
 	}
 }

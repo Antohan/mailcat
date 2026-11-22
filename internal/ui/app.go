@@ -54,7 +54,11 @@ type hintSeg struct {
 var (
 	// V-17: «←/→ панели» — стрелки переключают панели; сегмент opt: на 100
 	// колонках подсказка иначе не влезает и обрезала бы «q».
-	hintMail     = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "читать", false}, {"u", "обновить", false}, {"v", "вложения", false}, {"g", "ссылки", false}, {"←/→", "панели", true}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintMail = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "читать", false}, {"u", "обновить", false}, {"v", "вложения", false}, {"g", "ссылки", false}, {"←/→", "панели", true}, {"1/2", "экран", false}, {"q", "выход", false}}
+	// V-24: у панели папок свой набор — из папок можно только → в письма,
+	// v/g там не работают. Все сегменты обязательные: набор укладывается в
+	// 100 колонок без opt (проверяет тест), иначе терялась бы «q».
+	hintFolders  = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "открыть", false}, {"→", "панели", false}, {"u", "обновить", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	hintCalendar = []hintSeg{{"←→↑↓", "день", false}, {"n/p", "месяц", false}, {"Enter", "детали", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	hintDetails  = []hintSeg{{"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	// V-15: панель чтения — стрелки листают тело, v/g работают без ухода
@@ -665,6 +669,10 @@ func (a *App) pageHintSegs() []hintSeg {
 		// а не списка (там Enter «читать», здесь Esc «к списку»).
 		if a.mail.reading && a.tapp.GetFocus() == a.mail.preview {
 			return hintReading
+		}
+		// V-24: фокус на папках — свой набор клавиш (Enter «открыть», → в письма).
+		if a.tapp.GetFocus() == a.mail.folders {
+			return hintFolders
 		}
 		return hintMail
 	}
