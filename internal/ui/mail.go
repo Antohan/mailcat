@@ -500,26 +500,40 @@ func (s *mailScreen) connWidth() int {
 // «…» по ширине панели (w ≤ 0 — ширина ещё неизвестна, не режем).
 // Обрезаем ДО tview.Escape: усечение escaped-строки разрезало бы тег.
 func (s *mailScreen) connText(w int) string {
+	// V-17: выравнивание как у папок — точка в колонке левого поля (1 клетка,
+	// как рамка списка), «Connected» и адрес — в колонке имён (рамка 1 + отступ
+	// FormatFolder 2), иначе футер выбивался из общей колонки.
+	const padText = 3
 	user := security.Sanitize(s.app.cfg.Username)
-	if w > 0 {
-		user = truncateEllipsis(user, w)
+	if w > padText {
+		user = truncateEllipsis(user, w-padText)
+	} else {
+		user = ""
 	}
-	return fmt.Sprintf("[%s]●[-][%s] %s[-]\n[%s]%s[-]",
+	return fmt.Sprintf(" [%s]●[-][%s] %s[-]\n%s[%s]%s[-]",
 		hexTag(s.connColor), hexTag(colorTextSecondary), s.connLabel,
-		hexTag(colorTextSecondary), tview.Escape(user))
+		strings.Repeat(" ", padText), hexTag(colorTextSecondary), tview.Escape(user))
 }
 
 // selectFolder переключает текущую папку и перечитывает список. Старые строки
 // остаются на экране до прихода свежих (RD-7, без мерцания): Clear делает
 // только rebuildRows по свежему ответу — устаревший отсечёт поколение gen.
 func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
+	// V-17: смена папки — выделение на первое письмо; прежнее место (RD-7)
+	// возвращаем только при перечитывании той же папки («u»): иначе курсор
+	// оставался на позиции из прошлой папки.
+	switched := id.ID != s.folder.ID || name != s.folderName
 	s.folder = id
 	s.folderName = name
 	s.app.updateTopBar() // «mailcat · <папка>» верхнего бара (V-6)
 	s.offset = 0
 	s.lastPage = false
 	s.totalInView = 0 // счётчики прежней папки не показываем — ждём ответ (WHY в updateListTitle)
-	s.keepSelection()
+	if switched {
+		s.restoreID, s.restoreRow, s.restoreScroll = "", 0, 0
+	} else {
+		s.keepSelection()
+	}
 	s.rebuildPending = true
 	s.reading = false // V-15: смена папки — панель снова пустая, не старое письмо
 	s.preview.SetText(mutedText(previewEmptyHint))

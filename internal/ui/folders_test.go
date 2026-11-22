@@ -168,6 +168,68 @@ func TestRenderFoldersNoTech(t *testing.T) {
 	}
 }
 
+// TestFolderSwitchSelectsFirst (V-17): при переключении папки выделение — на
+// первое письмо, а не на прежнюю позицию; восстановление места по ItemId
+// остаётся только для перечитывания той же папки («u»).
+func TestFolderSwitchSelectsFirst(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_, _ = w.Write(mockFixture(t, string(b)))
+	}))
+	defer srv.Close()
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caPath, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := ews.NewClient(srv.URL, ews.Credentials{Username: "u", Password: "p"}, caPath,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Defaults()
+	cfg.Server = srv.URL
+	a := New(cfg, client, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(120, 40)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+
+	a.mail.loadFolders() // старт с «Входящих»
+	waitFor := func(cond func() bool) bool {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			ok := false
+			_ = a.tapp.QueueUpdateDraw(func() { ok = cond() })
+			if ok {
+				return true
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return false
+	}
+	if !waitFor(func() bool { return len(a.mail.items) >= 2 }) {
+		t.Fatal("письма не загрузились")
+	}
+	_ = a.tapp.QueueUpdateDraw(func() {
+		a.mail.messages.Select(a.mail.itemRows[1], 0)
+	})
+	a.mail.selectFolder(ews.FolderID{ID: "other-folder"}, "Другая")
+	if !waitFor(func() bool {
+		row, _ := a.mail.messages.GetSelection()
+		return len(a.mail.items) > 0 && row == a.mail.itemRows[0]
+	}) {
+		row, _ := a.mail.messages.GetSelection()
+		t.Fatalf("после смены папки выделена строка %d, хочу первую (%d)", row, a.mail.itemRows[0])
+	}
+}
+
 // TestRefreshRestoresEmptySidebar: «u» (refreshFolder) при пустом сайдбаре —
 // состояние после ошибки FindFolders при старте — восстанавливает и папки, а
 // не только письма: loadFolders завершается selectFolder («Входящие»).

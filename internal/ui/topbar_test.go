@@ -56,6 +56,11 @@ func TestConnFooter(t *testing.T) {
 	if !strings.HasSuffix(lines[1], "…[-]") || tview.TaggedStringWidth(lines[1]) != 12 {
 		t.Errorf("username не обрезан по ширине: %q", lines[1])
 	}
+	// V-17: точка — в колонке левого поля, текст — в колонке имён папок.
+	if !strings.HasPrefix(lines[0], " [") || !strings.Contains(lines[0], " Connected") ||
+		!strings.HasPrefix(lines[1], "   ") {
+		t.Errorf("футер вне колонки папок: %q", lines)
+	}
 	a.mail.setConn(false)
 	if !strings.Contains(a.mail.connText(12), "Нет связи") {
 		t.Errorf("ошибка связи не показана: %q", a.mail.connText(12))
