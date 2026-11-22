@@ -67,12 +67,15 @@ func (sb *scrollbar) Draw(screen tcell.Screen) {
 	if thumb == 0 {
 		return
 	}
+	// Бегунок — заливка ячейки цветом, а не глиф «█»: у шрифтов с межстрочным
+	// интервалом блоки идут пунктиром, а фон заливает клетку целиком и стыкуется
+	// с соседней — полоса сплошная (V-17, фидбек).
 	trackStyle := tcell.StyleDefault.Foreground(colorHairline)
-	thumbStyle := tcell.StyleDefault.Foreground(colorTextSecondary)
+	thumbStyle := tcell.StyleDefault.Background(colorTextSecondary)
 	for i := 0; i < h; i++ {
 		r, style := '│', trackStyle
 		if i >= top && i < top+thumb {
-			r, style = '█', thumbStyle
+			r, style = ' ', thumbStyle
 		}
 		screen.SetContent(x, y+i, r, nil, style)
 	}
