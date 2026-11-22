@@ -55,7 +55,7 @@ type mailScreen struct {
 	// нельзя. Заполняется только в appendRows.
 	itemRows []int
 	// selRow — строка таблицы с выделенным пунктом (строка 1, V-1): строка
-	// темы ниже невыбираема, её выделение красит paintSubject вручную.
+	// темы и подушка ниже невыбираемы, их выделение красит paintItemTail вручную.
 	// -1 = выделения нет.
 	selRow      int
 	offset      int  // Offset следующей страницы FindItem
@@ -204,9 +204,9 @@ func newMailScreen(a *App) *mailScreen {
 	s.messages.SetSelectionChangedFunc(func(row, _ int) {
 		if row != s.selRow {
 			if s.selRow >= 0 {
-				s.paintSubject(s.selRow+1, false)
+				s.paintItemTail(s.selRow+1, false)
 			}
-			s.paintSubject(row+1, true)
+			s.paintItemTail(row+1, true)
 			s.selRow = row
 		}
 		s.showPreview(row)
@@ -632,7 +632,7 @@ func (s *mailScreen) rebuildRows(added []mail.MessageSummary) {
 	s.items = added
 	s.itemRows = nil
 	s.messages.Clear()
-	s.selRow = -1 // ячейки пересобраны: без сброса Select на ту же строку пропустил бы paintSubject (WHY у paintSubject)
+	s.selRow = -1 // ячейки пересобраны: без сброса Select на ту же строку пропустил бы paintItemTail (WHY у paintItemTail)
 	s.appendRows(added)
 	if len(s.items) == 0 {
 		s.messages.SetCell(0, 0, tview.NewTableCell("(писем нет)").SetTextColor(colorTextSecondary))
@@ -716,7 +716,7 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 // жирный accent (colorUnread), прочитанные — textPrimary; время — правая
 // колонка colorRead (приглушено в обеих группах). [ВНЕШН] отдельного цвета
 // не получает (SECURITY §4). Строка 2 (тема) — colorTextSecondary и
-// невыбираема: курсор прыгает пункт→пункт, а её выделение красит paintSubject
+// невыбираема: курсор прыгает пункт→пункт, а её выделение красит paintItemTail
 // вручную (tview красит только выбираемые строки). О-1: перед первой строкой
 // каждой группы дня — разделитель «Сегодня / Вчера / Ранее» (не выделяемая
 // строка colorTextSecondary).
@@ -728,14 +728,6 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 		prevBucket = dayBucket(now, s.items[base-1].Received)
 	}
 	for _, m := range added {
-		// V-17: воздух между письмами — пустая невыбираемая строка: tview не
-		// умеет межстрочный интервал, прокладка — единственный способ развести
-		// двухстрочные пункты (курсор её пропускает: NotSelectable). В
-		// itemRows не попадает — там только строки-отправители (О-1).
-		if s.messages.GetRowCount() > 0 {
-			s.messages.SetCell(s.messages.GetRowCount(), 0,
-				tview.NewTableCell("").SetSelectable(false))
-		}
 		if b := dayBucket(now, m.Received); b != prevBucket {
 			prevBucket = b
 			s.messages.SetCell(s.messages.GetRowCount(), 0,
@@ -757,28 +749,44 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 		s.messages.SetCell(row, 0, line1)
 		s.messages.SetCell(row, 1, tview.NewTableCell(parts[1]).
 			SetTextColor(colorRead).SetAlign(tview.AlignRight))
+		// V-17: низ пункта — тема и строка-«подушка»; обе невыбираемы и
+		// красятся только при выделении (paintItemTail). Пустая ячейка времени
+		// держит правый край заливки ровным на всех трёх строках: блок письма
+		// выше текста на строку («внутренний» отступ), а не дырка между
+		// пунктами. Курсор строки-подушки пропускает (NotSelectable).
 		s.messages.SetCell(row+1, 0, tview.NewTableCell(parts[2]).
 			SetExpansion(1).SetTextColor(colorTextSecondary).SetSelectable(false))
+		s.messages.SetCell(row+1, 1, tview.NewTableCell("").SetSelectable(false))
+		s.messages.SetCell(row+2, 0, tview.NewTableCell("").SetSelectable(false))
+		s.messages.SetCell(row+2, 1, tview.NewTableCell("").SetSelectable(false))
 	}
 }
 
-// paintSubject красит строку темы (row — строка 2) в состояние выделения
-// её пункта: строка невыбираема, tview сам её не красит. После пересборки
-// списка ячейки уже нет — nil пропускается.
-func (s *mailScreen) paintSubject(row int, selected bool) {
-	c := s.messages.GetCell(row, 0)
-	if c == nil {
-		return
+// paintItemTail красит невыбираемый низ пункта, начиная со строки темы
+// (row): тема и строка-подушка, оба столбца — tview сам их не красит. После
+// пересборки списка ячеек уже нет — невыставленные GetCell не хранит, краска
+// просто никуда не попадёт.
+func (s *mailScreen) paintItemTail(row int, selected bool) {
+	for r := row; r <= row+1; r++ {
+		for col := 0; col <= 1; col++ {
+			c := s.messages.GetCell(r, col)
+			if selected {
+				c.SetBackgroundColor(colorSelectedBg)
+			} else {
+				// WHY (V-13): SetBackgroundColor снимает прозрачность ячейки,
+				// поэтому ColorDefault оставлял на каждой посещённой строке
+				// тему полосу терминального фона. SetTransparency(true)
+				// возвращает поверхность панели — фон чистый.
+				// Не делать: ColorDefault/любой цвет вместо прозрачности.
+				c.SetTransparency(true)
+			}
+		}
 	}
+	c := s.messages.GetCell(row, 0)
 	if selected {
-		c.SetTextColor(colorSelectedFg).SetBackgroundColor(colorSelectedBg)
+		c.SetTextColor(colorSelectedFg)
 	} else {
-		// WHY (V-13): SetBackgroundColor снимает прозрачность ячейки, поэтому
-		// ColorDefault оставлял на каждой посещённой строке темы полосу
-		// терминального фона. SetTransparency(true) возвращает поверхность
-		// панели — фон чистый.
-		// Не делать: ColorDefault/любой цвет вместо прозрачности.
-		c.SetTextColor(colorTextSecondary).SetTransparency(true)
+		c.SetTextColor(colorTextSecondary)
 	}
 }
 

@@ -225,10 +225,12 @@ func TestMessageListDensity(t *testing.T) {
 	<-done
 }
 
-// TestMessageListGap (V-17): пункты разведены пустой невыбираемой строкой —
-// второй пункт начинается через три строки после первого; прокладка не
-// попадает в itemRows (О-1) и курсором пропускается (NotSelectable).
-func TestMessageListGap(t *testing.T) {
+// TestMessageListItemTail (V-17): пункт занимает три строки — отправитель,
+// тема и строка-«подушка»; подушка и её пустая ячейка времени невыбираемы
+// (курсор пропускает), в itemRows попадает только отправитель (О-1), а
+// заливка выделения тянется на обе нижние строки и оба столбца — правый край
+// блока ровный, дата не «ступенькой».
+func TestMessageListItemTail(t *testing.T) {
 	a := newTestApp(t)
 	now := time.Now()
 	rows := []mail.MessageSummary{
@@ -241,9 +243,17 @@ func TestMessageListGap(t *testing.T) {
 	if got := a.mail.itemRows[1] - a.mail.itemRows[0]; got != 3 {
 		t.Fatalf("между пунктами %d строк, хочу 3 (две строки пункта + прокладка)", got)
 	}
-	gap := a.mail.itemRows[0] + 2
-	if c := a.mail.messages.GetCell(gap, 0); c == nil || !c.NotSelectable {
-		t.Errorf("строка-прокладка %d должна быть невыбираемой: %+v", gap, c)
+	pad := a.mail.itemRows[0] + 2
+	if c := a.mail.messages.GetCell(pad, 0); c == nil || !c.NotSelectable {
+		t.Errorf("строка-подушка %d должна быть невыбираемой: %+v", pad, c)
+	}
+	if c := a.mail.messages.GetCell(pad, 1); c == nil || !c.NotSelectable {
+		t.Errorf("ячейка времени в подушке %d должна быть невыбираемой: %+v", pad, c)
+	}
+	// Выделение тянется на тему и подушку, включая пустую ячейку времени.
+	a.mail.paintItemTail(a.mail.itemRows[0]+1, true)
+	if _, bg, _ := a.mail.messages.GetCell(pad, 1).Style.Decompose(); bg != colorSelectedBg {
+		t.Errorf("правый край подушки не залит: %v, хочу %v", bg, colorSelectedBg)
 	}
 }
 
@@ -309,11 +319,11 @@ func TestPaintSubjectClearsHighlight(t *testing.T) {
 	a.mail.appendRows(rows)
 
 	subj := a.mail.itemRows[0] + 1
-	a.mail.paintSubject(subj, true)
+	a.mail.paintItemTail(subj, true)
 	if c := a.mail.messages.GetCell(subj, 0); c.Transparent {
 		t.Fatal("выделенная тема: ячейка прозрачна, заливки нет")
 	}
-	a.mail.paintSubject(subj, false)
+	a.mail.paintItemTail(subj, false)
 	if c := a.mail.messages.GetCell(subj, 0); !c.Transparent {
 		t.Errorf("снятая тема: ячейка не прозрачна (Transparent=false) — останется полоса")
 	}
