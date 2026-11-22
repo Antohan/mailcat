@@ -196,7 +196,7 @@
       Ограничения: `paintFocusFrames` по `HasFocus`; модалы не трогаем.
       Тест: после `New` `GetFocus() == a.mail.messages`.
 
-- [ ] **V-23. Tab обновляет подсказку**
+- [x] **V-23. Tab обновляет подсказку**
       Что делает: смена панели Tab/Shift-Tab обновляет строку подсказок.
       Затронуто: `mail.go`: `cycleFocus` — `s.app.showHint()` после `SetFocus`.
       Ограничения: `a.hintSegs` обновляет только `showHint` (V-17).
