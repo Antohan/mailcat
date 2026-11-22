@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gdamore/tcell/v2"
+
 	"mailcat/internal/mail"
 	"mailcat/internal/security"
 )
@@ -118,46 +120,50 @@ func DayEvents(events []mail.Event, day time.Time) []mail.Event {
 	return out
 }
 
-// responseMark — маркер статуса ответа в строке повестки (UI-4):
-// ✓ принят · ~ под вопросом · ? нет ответа · ★ организатор.
-// ✗ (отклонено) в плане не назван — добавлен по симметрии с ярлыками
-// ResponseTypeLabel; Unknown → пробел, чтобы тема стояла в ту же колонку.
-func responseMark(responseType string) string {
+// responseStatus — маркер статуса ответа и его роль в повестке (UI-4):
+// ✓ принят (connected) · ~ под вопросом (weekend) · ? нет ответа (secondary)
+// · ★ организатор (accent). ✗ (отклонено) в плане не назван — добавлен по
+// симметрии с ярлыками ResponseTypeLabel (error); Unknown → пробел, чтобы тема
+// стояла в ту же колонку.
+func responseStatus(responseType string) (mark string, color tcell.Color) {
 	switch strings.TrimSpace(responseType) {
 	case "Accept":
-		return "✓"
+		return "✓", colorConnected
 	case "Tentative":
-		return "~"
+		return "~", colorWeekend
 	case "Decline":
-		return "✗"
+		return "✗", colorError
 	case "NoResponseReceived":
-		return "?"
+		return "?", colorTextSecondary
 	case "Organizer":
-		return "★"
+		return "★", colorAccent
 	default:
-		return " "
+		return " ", colorTextSecondary
 	}
 }
 
-// FormatAgenda — строки повестки выбранного дня: «14:30–15:00 ✓ Тема [1] host».
+// FormatAgendaLine — строка повестки выбранного дня в стиле списка писем
+// (V-34): «14:30–15:00 ✓ Тема [1] host». Время и место — muted, статус — роль
+// (responseStatus), тема — primary. В выбранной строке всё onAccent: на
+// акцентной заливке primary тёмный, а ★ совпал бы с фоном.
 // Длинные URL из «Места» уходят в реестр reg (модал g), вместо них — маркер
 // [N] host; обычное место остаётся текстом в скобках. Строки идут в
 // tview.List — Sanitize + tview.Escape (escapeForList) обязательны.
-func FormatAgenda(events []mail.Event, reg *mail.LinkRegistry) []string {
-	if len(events) == 0 {
-		return nil
+func FormatAgendaLine(ev mail.Event, reg *mail.LinkRegistry, selected bool) string {
+	subject, muted := colorTextPrimary, colorTextSecondary
+	mark, status := responseStatus(ev.MyResponseType)
+	if selected {
+		subject, muted, status = colorOnAccent, colorOnAccent, colorOnAccent
 	}
-	lines := make([]string, 0, len(events))
-	for _, ev := range events {
-		line := fmt.Sprintf("%s–%s %s %s",
-			ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04"),
-			responseMark(ev.MyResponseType), escapeForList(ev.Subject))
-		if loc := reg.RenderBody(ev.Location); loc != "" {
-			line += " (" + escapeForList(loc) + ")"
-		}
-		lines = append(lines, line)
+	var b strings.Builder
+	fmt.Fprintf(&b, "[%s]%s–%s[-] ", hexTag(muted),
+		ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04"))
+	fmt.Fprintf(&b, "[%s]%s[-] ", hexTag(status), mark)
+	fmt.Fprintf(&b, "[%s]%s[-]", hexTag(subject), escapeForList(ev.Subject))
+	if loc := reg.RenderBody(ev.Location); loc != "" {
+		fmt.Fprintf(&b, " [%s](%s)[-]", hexTag(muted), escapeForList(loc))
 	}
-	return lines
+	return b.String()
 }
 
 // AgendaTitle — левая часть заголовка повестки: «Повестка · 18.11».

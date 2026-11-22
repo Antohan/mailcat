@@ -20,6 +20,8 @@ type calendarScreen struct {
 	root   *tview.Flex
 	grid   *monthGrid
 	agenda *tview.List
+	// V-34: полоса прокрутки повестки — колонка за рамкой панели (как на почте).
+	agendaBar *scrollbar
 
 	// Строки-заголовки панелей (RD-2): месяц и повестка дня.
 	gridHeader   *panelHeader
@@ -41,7 +43,14 @@ func newCalendarScreen(a *App) *calendarScreen {
 
 	s.grid = newMonthGrid()
 	s.grid.SetBorder(true)
-	s.agenda = tview.NewList().ShowSecondaryText(false)
+	// V-34: повестка — список в стиле писем: заливка на всю строку, тема
+	// primary, выбранная строка — акцент (цвета строк — из FormatAgendaLine).
+	s.agenda = tview.NewList().
+		ShowSecondaryText(false).
+		SetHighlightFullLine(true).
+		SetMainTextColor(colorTextPrimary).
+		SetSelectedBackgroundColor(colorSelectedBg).
+		SetSelectedTextColor(colorSelectedFg)
 	s.agenda.SetBorder(true)
 
 	// RD-2: заголовки — отдельные строки над панелями (см. panel.go).
@@ -52,16 +61,38 @@ func newCalendarScreen(a *App) *calendarScreen {
 	// WHY (V-31): разделитель между колонками — как на почте (V-3): правый
 	// счётчик шапки сетки иначе упирается в заголовок «Повестка» соседней
 	// панели. Не делать: отступ пустой колонкой — линия есть у почты.
+	// V-34: полоса прокрутки повестки — своя колонка справа, трек — строки
+	// списка (offset/total знает List, геометрию — свежий rect панели).
+	s.agendaBar = newScrollbar()
+	s.agendaBar.geom = func() (int, int, int) {
+		x, _, _, _ := s.agendaBar.GetRect()
+		_, y, _, h := s.agenda.GetInnerRect()
+		return x, y, h
+	}
+	s.agendaBar.track = func() (int, int) {
+		off, _ := s.agenda.GetOffset()
+		return off, s.agenda.GetItemCount()
+	}
+	agendaCol := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 1, false).
+		AddItem(s.agendaBar, 1, 0, false)
+
 	s.root = tview.NewFlex().
 		AddItem(panelColumn(s.gridHeader, s.grid), 0, 55, true).
 		AddItem(newDivider(), 1, 0, false).
-		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 45, false)
+		AddItem(agendaCol, 0, 45, false)
 
 	s.grid.SetSelectFunc(func(row, col int) {
 		s.onDaySelected(row, col)
 	})
 	s.agenda.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
 		s.openEventDetails(idx)
+	})
+	// V-34: при смене курсора строки пересобираются (время/место выбранной —
+	// onAccent), как applyActiveFolderStyle у папок. Индекс — из аргумента:
+	// changed приходит ДО записи currentItem в List.
+	s.agenda.SetChangedFunc(func(idx int, _ string, _ string, _ rune) {
+		s.restyleAgenda(idx)
 	})
 
 	// Смена месяца: Ctrl-←/→ или n/p (PLAN этап 4); g — модал ссылок
@@ -197,8 +228,9 @@ func (s *calendarScreen) render() {
 	s.grid.SelectDay(pick)
 }
 
-// onDaySelected обновляет повестку при движении по сетке (UI-4: строки
-// собирает FormatAgenda — маркеры статуса + реестр ссылок из «Места»).
+// onDaySelected обновляет повестку при движении по сетке (UI-4): строки
+// собирает FormatAgendaLine (маркеры статуса + реестр ссылок из «Места»),
+// пустой день — один muted-пункт без действия по Enter.
 func (s *calendarScreen) onDaySelected(row, col int) {
 	if row < 0 || row >= len(s.grid.cells) || col < 0 || col >= 7 {
 		return
@@ -208,18 +240,39 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 	}
 	day := time.Date(s.year, s.month, s.grid.cells[row][col].Day, 0, 0, 0, 0, time.Local)
 	s.dayEvents = DayEvents(s.events, day)
-	reg := mail.NewLinkRegistry()
-	lines := FormatAgenda(s.dayEvents, reg)
-	s.dayLinks = reg.List()
 	s.agenda.Clear()
-	if len(lines) == 0 {
-		s.agenda.AddItem("Встреч нет", "", 0, nil)
+	if len(s.dayEvents) == 0 {
+		s.dayLinks = nil
+		s.agenda.AddItem(mutedText("Встреч нет"), "", 0, nil)
 	} else {
-		for _, line := range lines {
-			s.agenda.AddItem(line, "", 0, nil)
+		for range s.dayEvents {
+			s.agenda.AddItem("", "", 0, nil)
 		}
+		s.restyleAgenda(0) // строки заполняет общая формула (курсор — первый)
 	}
 	s.agendaHeader.SetListTitle(AgendaTitle(day), meetingsCount(len(s.dayEvents)))
+}
+
+// restyleAgenda пересобирает строки повестки под курсор sel (V-34): только
+// SetItemText — курсор и прокрутка остаются на месте (как applyActiveFolderStyle,
+// V-26). Реестр ссылок новый, но порядок тот же — маркеры [N] не меняются.
+func (s *calendarScreen) restyleAgenda(sel int) {
+	// WHY: AddItem/InsertItem тоже дергает changed — при пересборке списка
+	// элементов ещё нет, SetItemText по ним паникует. Не убирать зажим по
+	// GetItemCount: он дешёвый и страхует весь цикл сборки (финал — вызов
+	// после AddItem в onDaySelected).
+	n := len(s.dayEvents)
+	if c := s.agenda.GetItemCount(); n > c {
+		n = c
+	}
+	if sel < 0 || sel >= n {
+		return
+	}
+	reg := mail.NewLinkRegistry()
+	for i, ev := range s.dayEvents[:n] {
+		s.agenda.SetItemText(i, FormatAgendaLine(ev, reg, i == sel), "")
+	}
+	s.dayLinks = reg.List()
 }
 
 // openEventDetails показывает детали выбранной встречи; ссылки на созвон
