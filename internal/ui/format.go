@@ -90,6 +90,15 @@ func senderLabel(a mail.Address) string {
 	return tview.Escape(security.Sanitize(email))
 }
 
+// listPadLeft/listPadRight — горизонтальные поля пункта списка (V-17): точка
+// и время не примыкают к краям заливки. Печатаются в текст ячейки, поэтому
+// их обязаны добавлять оба места, собирающие строки списка (appendRows и
+// clampMessageColumns), — иначе перерисовка на resize срежет поля.
+const (
+	listPadLeft  = 2
+	listPadRight = 2
+)
+
 // messageDot — точка статуса в строке 1 пункта списка (V-1). Цвет задаёт
 // ячейка в appendRows (colorUnread — непрочитан, colorTextPrimary —
 // прочитан; в тёмной теме colorUnread = accent), поэтому знак один для

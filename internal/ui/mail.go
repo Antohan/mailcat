@@ -111,10 +111,7 @@ func newMailScreen(a *App) *mailScreen {
 	}
 
 	s.folders = tview.NewList().
-		// V-17: воздух между папками — второй (пустой) строкой пункта; tview
-		// List не умеет межстрочный интервал, а пустые пункты-прокладки ставили
-		// бы курсор на пустую строку.
-		ShowSecondaryText(true).
+		ShowSecondaryText(false).
 		// V-17: заливка — на всю строку панели, как в референсе (было — только
 		// по ширине текста, «чип» с рваным правым краем).
 		SetHighlightFullLine(true).
@@ -122,14 +119,6 @@ func newMailScreen(a *App) *mailScreen {
 		SetSelectedBackgroundColor(colorSelectedBg).
 		SetSelectedTextColor(colorSelectedFg)
 	s.folders.SetBorder(true)
-	// WHY (V-17): в низком окне (100×30) двухстрочные папки не помещаются —
-	// часть уезжала бы под край без индикатора прокрутки. Флаг пересчитывается
-	// на кадр до отрисовки пунктов: высокое окно — с воздухом, низкое — по
-	// одной строке (tview List не умеет межстрочный интервал).
-	s.folders.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		s.folders.ShowSecondaryText(foldersTwoLine(h, s.folders.GetItemCount()))
-		return x + 1, y + 1, w - 2, h - 2
-	})
 
 	// V-17: разделитель колонок — пробел, а не «│»: вертикальная линия резала
 	// заливку выбранного пункта пополам (в референсе между текстом и временем
@@ -386,13 +375,6 @@ func (s *mailScreen) loadFolders() {
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})
 	}()
-}
-
-// foldersTwoLine — влезают ли двухстрочные пункты папок в высоту h списка
-// (внешнюю, с рамкой): запас — две строки рамки. В высоком окне пункты идут
-// через строку (воздух), в низком — по одной, иначе папки уезжают под край.
-func foldersTwoLine(h, items int) bool {
-	return h-2 >= 2*items
 }
 
 // renderFolders перестраивает панель целиком: блок стандартных папок, линия,
@@ -687,12 +669,18 @@ func rowAfterReload(items []mail.MessageSummary, id string, prev int) int {
 // для кириллицы — байты против клеток (WHY у truncateEllipsis). Возврат —
 // стандартный внутренний прямоугольник Box с рамкой.
 func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
-	const timeW = 5 // «15:04» / «02.01»
-	if inner := w - 2; inner > timeW+1 {
-		maxW := inner - timeW - 1
+	const (
+		// V-17: время + поле справа — ширина колонки времени в клетках.
+		timeW = 5 + listPadRight
+		// Отступ заливки от рамки панели: блок не примыкает к краям.
+		padX = 1
+	)
+	if inner := w - 2 - 2*padX; inner > timeW+1+listPadLeft {
+		// Меньше maxW — на левое поле ячейки: ширина колонки = maxW+listPadLeft.
+		maxW := inner - timeW - 1 - listPadLeft
 		for row := 0; row < s.messages.GetRowCount(); row++ {
 			if c := s.messages.GetCell(row, 0); c != nil {
-				c.SetMaxWidth(maxW)
+				c.SetMaxWidth(maxW + listPadLeft)
 			}
 		}
 		for i, row := range s.itemRows {
@@ -701,14 +689,15 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 			}
 			parts := FormatMessageListItem(s.items[i], s.app.cfg.InternalDomains(), time.Now())
 			if c := s.messages.GetCell(row, 0); c != nil {
-				c.SetText(dotLine(truncateEllipsis(parts[0], maxW), !s.items[i].IsRead))
+				c.SetText(strings.Repeat(" ", listPadLeft) +
+					dotLine(truncateEllipsis(parts[0], maxW), !s.items[i].IsRead))
 			}
 			if c := s.messages.GetCell(row+1, 0); c != nil {
-				c.SetText(truncateEllipsis(parts[2], maxW))
+				c.SetText(strings.Repeat(" ", listPadLeft) + truncateEllipsis(parts[2], maxW))
 			}
 		}
 	}
-	return x + 1, y + 1, w - 2, h - 2
+	return x + 1 + padX, y + 1, w - 2 - 2*padX, h - 2
 }
 
 // appendRows дописывает строки в таблицу (RD-4, V-1): пункт письма — две
@@ -740,21 +729,22 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 		s.itemRows = append(s.itemRows, row)
 		// dotLine: точка своим цветом тегом (muted у прочитанных, П.1);
 		// базовый цвет ячейки — отправитель (WHY у dotLine).
-		line1 := tview.NewTableCell(dotLine(parts[0], !m.IsRead)).SetExpansion(1)
+		line1 := tview.NewTableCell(strings.Repeat(" ", listPadLeft) +
+			dotLine(parts[0], !m.IsRead)).SetExpansion(1)
 		if !m.IsRead {
 			line1.SetTextColor(colorUnread).SetAttributes(tcell.AttrBold)
 		} else {
 			line1.SetTextColor(colorTextPrimary)
 		}
 		s.messages.SetCell(row, 0, line1)
-		s.messages.SetCell(row, 1, tview.NewTableCell(parts[1]).
+		s.messages.SetCell(row, 1, tview.NewTableCell(parts[1]+strings.Repeat(" ", listPadRight)).
 			SetTextColor(colorRead).SetAlign(tview.AlignRight))
 		// V-17: низ пункта — тема и строка-«подушка»; обе невыбираемы и
 		// красятся только при выделении (paintItemTail). Пустая ячейка времени
 		// держит правый край заливки ровным на всех трёх строках: блок письма
 		// выше текста на строку («внутренний» отступ), а не дырка между
 		// пунктами. Курсор строки-подушки пропускает (NotSelectable).
-		s.messages.SetCell(row+1, 0, tview.NewTableCell(parts[2]).
+		s.messages.SetCell(row+1, 0, tview.NewTableCell(strings.Repeat(" ", listPadLeft)+parts[2]).
 			SetExpansion(1).SetTextColor(colorTextSecondary).SetSelectable(false))
 		s.messages.SetCell(row+1, 1, tview.NewTableCell("").SetSelectable(false))
 		s.messages.SetCell(row+2, 0, tview.NewTableCell("").SetSelectable(false))
