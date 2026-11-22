@@ -199,6 +199,7 @@ func newMailScreen(a *App) *mailScreen {
 			s.selRow = row
 		}
 		s.showPreview(row)
+		s.scrollItemIntoView(row)
 		s.maybeLoadNextPage(row)
 	})
 	s.messages.SetSelectedFunc(func(row, _ int) {
@@ -700,6 +701,28 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 	return x + 1 + padX, y + 1, w - 2 - 2*padX, h - 2
 }
 
+// scrollOffsetForItem — offset списка, при котором пункт виден целиком:
+// tview держит выбранную строку у нижнего края, и вторая строка пункта
+// (тема) уезжала за границу. Возвращает текущий offset, если пункт уже
+// виден или выделение ушло выше видимой области (там tview сам ставит
+// строку к верхнему краю).
+func scrollOffsetForItem(off, h, row int) int {
+	if h <= 0 || row < off || row+1 < off+h {
+		return off
+	}
+	return row + 2 - h
+}
+
+// scrollItemIntoView двигает offset так, чтобы тема выделенного пункта не
+// обрезалась нижней границей списка (вызывается из SelectionChanged).
+func (s *mailScreen) scrollItemIntoView(row int) {
+	off, _ := s.messages.GetOffset()
+	_, _, _, h := s.messages.GetInnerRect()
+	if next := scrollOffsetForItem(off, h, row); next != off {
+		s.messages.SetOffset(next, 0)
+	}
+}
+
 // appendRows дописывает строки в таблицу (RD-4, V-1): пункт письма — две
 // строки таблицы. Строка 1 (точка + [ВНЕШН] + отправитель) — невычитанные
 // жирный accent (colorUnread), прочитанные — textPrimary; время — правая
@@ -739,37 +762,32 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 		s.messages.SetCell(row, 0, line1)
 		s.messages.SetCell(row, 1, tview.NewTableCell(parts[1]+strings.Repeat(" ", listPadRight)).
 			SetTextColor(colorRead).SetAlign(tview.AlignRight))
-		// V-17: низ пункта — тема и строка-«подушка»; обе невыбираемы и
-		// красятся только при выделении (paintItemTail). Пустая ячейка времени
-		// держит правый край заливки ровным на всех трёх строках: блок письма
-		// выше текста на строку («внутренний» отступ), а не дырка между
-		// пунктами. Курсор строки-подушки пропускает (NotSelectable).
+		// V-17: тема невыбираема (курсор идёт пункт→пункт), её выделение
+		// красит paintItemTail. Пустая ячейка времени во второй строке держит
+		// правый край заливки ровным: блок выбранного письма — два столбца на
+		// обеих строках, дата не «ступенькой».
 		s.messages.SetCell(row+1, 0, tview.NewTableCell(strings.Repeat(" ", listPadLeft)+parts[2]).
 			SetExpansion(1).SetTextColor(colorTextSecondary).SetSelectable(false))
 		s.messages.SetCell(row+1, 1, tview.NewTableCell("").SetSelectable(false))
-		s.messages.SetCell(row+2, 0, tview.NewTableCell("").SetSelectable(false))
-		s.messages.SetCell(row+2, 1, tview.NewTableCell("").SetSelectable(false))
 	}
 }
 
-// paintItemTail красит невыбираемый низ пункта, начиная со строки темы
-// (row): тема и строка-подушка, оба столбца — tview сам их не красит. После
-// пересборки списка ячеек уже нет — невыставленные GetCell не хранит, краска
-// просто никуда не попадёт.
+// paintItemTail красит невыбираемую строку темы (row) — тему и пустую
+// ячейку времени, оба столбца: tview сам её не красит. После пересборки
+// списка ячеек уже нет — невыставленные GetCell не хранит, краска просто
+// никуда не попадёт.
 func (s *mailScreen) paintItemTail(row int, selected bool) {
-	for r := row; r <= row+1; r++ {
-		for col := 0; col <= 1; col++ {
-			c := s.messages.GetCell(r, col)
-			if selected {
-				c.SetBackgroundColor(colorSelectedBg)
-			} else {
-				// WHY (V-13): SetBackgroundColor снимает прозрачность ячейки,
-				// поэтому ColorDefault оставлял на каждой посещённой строке
-				// тему полосу терминального фона. SetTransparency(true)
-				// возвращает поверхность панели — фон чистый.
-				// Не делать: ColorDefault/любой цвет вместо прозрачности.
-				c.SetTransparency(true)
-			}
+	for col := 0; col <= 1; col++ {
+		c := s.messages.GetCell(row, col)
+		if selected {
+			c.SetBackgroundColor(colorSelectedBg)
+		} else {
+			// WHY (V-13): SetBackgroundColor снимает прозрачность ячейки,
+			// поэтому ColorDefault оставлял на каждой посещённой строке
+			// тему полосу терминального фона. SetTransparency(true)
+			// возвращает поверхность панели — фон чистый.
+			// Не делать: ColorDefault/любой цвет вместо прозрачности.
+			c.SetTransparency(true)
 		}
 	}
 	c := s.messages.GetCell(row, 0)

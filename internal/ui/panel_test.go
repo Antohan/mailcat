@@ -225,10 +225,9 @@ func TestMessageListDensity(t *testing.T) {
 	<-done
 }
 
-// TestMessageListItemTail (V-17): пункт занимает три строки — отправитель,
-// тема и строка-«подушка»; подушка и её пустая ячейка времени невыбираемы
-// (курсор пропускает), в itemRows попадает только отправитель (О-1), а
-// заливка выделения тянется на обе нижние строки и оба столбца — правый край
+// TestMessageListItemTail (V-17): пункт — две строки (отправитель, тема);
+// тема невыбираема (курсор пропускает), в itemRows только отправитель (О-1),
+// а заливка выделения тянется на оба столбца второй строки — правый край
 // блока ровный, дата не «ступенькой».
 func TestMessageListItemTail(t *testing.T) {
 	a := newTestApp(t)
@@ -240,20 +239,34 @@ func TestMessageListItemTail(t *testing.T) {
 	a.mail.items = append(a.mail.items, rows...)
 	a.mail.appendRows(rows)
 
-	if got := a.mail.itemRows[1] - a.mail.itemRows[0]; got != 3 {
-		t.Fatalf("между пунктами %d строк, хочу 3 (две строки пункта + прокладка)", got)
+	if got := a.mail.itemRows[1] - a.mail.itemRows[0]; got != 2 {
+		t.Fatalf("между пунктами %d строк, хочу 2 (отправитель + тема)", got)
 	}
-	pad := a.mail.itemRows[0] + 2
-	if c := a.mail.messages.GetCell(pad, 0); c == nil || !c.NotSelectable {
-		t.Errorf("строка-подушка %d должна быть невыбираемой: %+v", pad, c)
+	subj := a.mail.itemRows[0] + 1
+	if c := a.mail.messages.GetCell(subj, 0); c == nil || !c.NotSelectable {
+		t.Errorf("строка темы %d должна быть невыбираемой: %+v", subj, c)
 	}
-	if c := a.mail.messages.GetCell(pad, 1); c == nil || !c.NotSelectable {
-		t.Errorf("ячейка времени в подушке %d должна быть невыбираемой: %+v", pad, c)
+	if c := a.mail.messages.GetCell(subj, 1); c == nil || !c.NotSelectable {
+		t.Errorf("ячейка времени в строке темы %d должна быть невыбираемой: %+v", subj, c)
 	}
-	// Выделение тянется на тему и подушку, включая пустую ячейку времени.
-	a.mail.paintItemTail(a.mail.itemRows[0]+1, true)
-	if _, bg, _ := a.mail.messages.GetCell(pad, 1).Style.Decompose(); bg != colorSelectedBg {
-		t.Errorf("правый край подушки не залит: %v, хочу %v", bg, colorSelectedBg)
+	a.mail.paintItemTail(subj, true)
+	if _, bg, _ := a.mail.messages.GetCell(subj, 1).Style.Decompose(); bg != colorSelectedBg {
+		t.Errorf("правый край темы не залит: %v, хочу %v", bg, colorSelectedBg)
+	}
+}
+
+// TestScrollOffsetForItem (V-17): при выделении у нижнего края offset
+// сдвигается, чтобы тема пункта не обрезалась; видимый пункт и уход выше
+// видимой области offset не трогают (там клампит tview).
+func TestScrollOffsetForItem(t *testing.T) {
+	if got := scrollOffsetForItem(0, 5, 4); got != 1 {
+		t.Errorf("у нижнего края offset = %d, хочу 1 (видна и тема)", got)
+	}
+	if got := scrollOffsetForItem(0, 5, 3); got != 0 {
+		t.Errorf("видимый пункт сдвинул offset на %d", got)
+	}
+	if got := scrollOffsetForItem(10, 5, 2); got != 10 {
+		t.Errorf("выделение выше области сдвинуло offset на %d", got)
 	}
 }
 
