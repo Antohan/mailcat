@@ -6,7 +6,7 @@
 через `ews-specialist`, потом код). Старт: `/stage V-8`.
 
 ## Сделано
-- iter31 V-17 (2430932 … e1b83e7, 8ab12a0): поля, папки, шапка, подсказки.
+- iter31 V-17 (2430932 … 8ab12a0, 0a15523): поля, папки, шапка, подсказки, полосы.
 - iter31 V-16 (6275d36): подписи ПАПКИ/ПРОСМОТР убраны, фикс линии заголовка.
 
 ## Открыто
@@ -20,6 +20,6 @@
   scrollItemIntoView двигает offset у нижнего края (иначе тема обрезается);
   поля — listPadLeft/Right в appendRows И clampMessageColumns; папки — по одной; шапка — FormatMessageHeader; в Table нет «│»; смена папки сбрасывает
   restoreID/row (switched); connText: ● =1, текст/адрес =3; подсказки — opt
-  снимает formatHintFit; в DrawFunc НЕ звать GetFocus (draw держит мьютекс) —
-  подсказки берут a.hintSegs (ставит showHint).
+  снимает formatHintFit, в DrawFunc НЕ звать GetFocus (a.hintSegs) — мьютекс;
+  полосы — scrollbar.go (Draw после панели), wrappedLines кэш.
 - V-16/V-15: header: nil; end линии — относительный; Enter — readMessage; messageView/reading — как было.
