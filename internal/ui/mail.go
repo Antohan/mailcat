@@ -97,6 +97,15 @@ type mailScreen struct {
 	// старый ответ A снова станет «свежим».
 	gen int
 
+	// V-15: письмо, прочитанное в панели просмотра (Enter). tail — тело и
+	// вложения; шапку-карточку пересобирает DrawFunc при resize (fullW), так
+	// что реестр ссылок на кадр не перегенерируется. reading=false — в
+	// панели черновик выбранной строки.
+	fullMsg  mail.Message
+	fullTail string
+	fullW    int
+	reading  bool
+
 	pageSize int
 }
 
@@ -137,6 +146,17 @@ func newMailScreen(a *App) *mailScreen {
 		SetDynamicColors(true)
 	s.preview.SetBorder(true)
 	s.preview.SetText(mutedText(previewEmptyHint))
+	// WHY (V-15): шапка-карточка паддингом под ширину панели — тот же приём,
+	// что на странице деталей (V-5): пересборка только при смене ширины
+	// (гард fullW), тело из кэша fullTail. Не делать: собирать текст на
+	// каждый кадр — реестр ссылок и санитайзер тела поедут в цикле отрисовки.
+	s.preview.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		if inner := w - 2; s.reading && inner > 2 && inner != s.fullW {
+			s.fullW = inner
+			s.preview.SetText(FormatMessageCard(s.fullMsg, inner) + "\n" + s.fullTail)
+		}
+		return x + 1, y + 1, w - 2, h - 2
+	})
 
 	// WHY (RD-2): рамки у неактивных панелей нет — её роль играет строка
 	// заголовка с hairline-разделителем. Пропорции — константы pct*.
@@ -182,6 +202,7 @@ func newMailScreen(a *App) *mailScreen {
 	})
 	s.folders.SetSelectedFunc(func(_ int, _ string, _ string, _ rune) {
 		s.app.tapp.SetFocus(s.messages)
+		s.app.showHint()
 	})
 	s.messages.SetSelectionChangedFunc(func(row, _ int) {
 		if row != s.selRow {
@@ -195,7 +216,7 @@ func newMailScreen(a *App) *mailScreen {
 		s.maybeLoadNextPage(row)
 	})
 	s.messages.SetSelectedFunc(func(row, _ int) {
-		s.openDetails(row)
+		s.readMessage(row)
 	})
 
 	// Tab/BackTab — циклический фокус панелей; ←/→ — соседняя панель (PLAN
@@ -218,9 +239,11 @@ func newMailScreen(a *App) *mailScreen {
 		switch event.Key() {
 		case tcell.KeyLeft:
 			s.app.tapp.SetFocus(s.folders)
+			s.app.showHint()
 			return nil
 		case tcell.KeyRight:
 			s.app.tapp.SetFocus(s.preview)
+			s.app.showHint()
 			return nil
 		case tcell.KeyRune:
 			if event.Rune() == 'g' || event.Rune() == 'G' {
@@ -231,14 +254,59 @@ func newMailScreen(a *App) *mailScreen {
 		}
 		return tabHook(event)
 	})
-	s.preview.SetInputCapture(tabHook)
+	s.preview.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyEsc, tcell.KeyLeft:
+			// V-15: Esc из панели чтения — назад к списку (стрелки листают
+			// тело, поэтому выход на←/Esc, а не на стрелку).
+			s.app.tapp.SetFocus(s.messages)
+			s.app.showHint()
+			return nil
+		case tcell.KeyRune:
+			if !s.reading {
+				break
+			}
+			switch event.Rune() {
+			case 'g', 'G':
+				s.app.showLinks(s.app.currentLinks, s.backToReading)
+				return nil
+			case 'v', 'V':
+				s.app.showAttachments(s.app.currentAttachments, s.backToReading)
+				return nil
+			}
+		}
+		return tabHook(event)
+	})
 	return s
 }
 
-// openDetails открывает полноэкранный экран деталей письма (Enter): все
-// заголовки, полный текст, список вложений (PLAN.md этап 2); Esc — назад.
-func (s *mailScreen) openDetails(row int) {
-	s.loadMessage(s.itemIndex(row), s.app.showDetails)
+// backToReading возвращает фокус в панель чтения после модала (V-15):
+// подсказки экрана — снова набор панели просмотра.
+func (s *mailScreen) backToReading() {
+	s.app.pages.SwitchToPage(pageMail)
+	s.app.tapp.SetFocus(s.preview)
+	s.app.showHint()
+}
+
+// readMessage — Enter на списке (V-15): письмо догружается GetItem и
+// рендерится в правой панели. Полноэкранная страница pageDetails больше не
+// открывается по Enter (сама страница остаётся в pages, но не переключается).
+func (s *mailScreen) readMessage(row int) {
+	s.loadMessage(s.itemIndex(row), s.showReading)
+}
+
+// showReading выводит полное письмо в панели просмотра (V-15): шапка-
+// карточка + тело + вложения; фокус уходит в панель — сразу работают g/v и
+// прокрутка. Раскладку шапки под ширину панели делает DrawFunc (fullW).
+func (s *mailScreen) showReading(m mail.Message) {
+	tail, links := messageView(m)
+	s.fullMsg, s.fullTail, s.reading = m, tail, true
+	s.fullW = 0 // DrawFunc пересоберёт карточку под фактическую ширину панели
+	s.app.currentLinks = links
+	s.app.currentAttachments = m.Attachments
+	s.preview.ScrollToBeginning()
+	s.app.tapp.SetFocus(s.preview)
+	s.app.showHint()
 }
 
 // loadMessage догружает письмо GetItem (тело, вложения) и отдаёт его на
@@ -465,6 +533,7 @@ func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 	s.totalInView = 0 // счётчики прежней папки не показываем — ждём ответ (WHY в updateListTitle)
 	s.keepSelection()
 	s.rebuildPending = true
+	s.reading = false // V-15: смена папки — панель снова пустая, не старое письмо
 	s.preview.SetText(mutedText(previewEmptyHint))
 	s.loadMessages()
 }
@@ -731,6 +800,10 @@ const (
 
 // showPreview показывает черновик письма в панели просмотра (без загрузки).
 func (s *mailScreen) showPreview(row int) {
+	// WHY (V-15): курсор ушёл с прочитанного письма — панель снова черновик,
+	// reading=false обязателен: иначе DrawFunc при resize перерисует в неё
+	// старое прочитанное письмо поверх черновика.
+	s.reading = false
 	idx := s.itemIndex(row)
 	if idx < 0 || idx >= len(s.items) {
 		return

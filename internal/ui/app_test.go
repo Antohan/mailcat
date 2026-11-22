@@ -218,3 +218,21 @@ func TestHintLineFollowsPages(t *testing.T) {
 		t.Errorf("конец загрузки затронул строку подсказок: %q", got)
 	}
 }
+
+// TestReadingInPreview (V-15): Enter больше не открывает полноэкранную
+// страницу — письмо читается в панели просмотра, фокус и подсказки уходят
+// туда; выбор другой строки возвращает панель в режим черновика.
+func TestReadingInPreview(t *testing.T) {
+	a := newTestApp(t)
+	a.mail.showReading(mail.Message{MessageSummary: mail.MessageSummary{Subject: "Тема"}, BodyText: "тело"})
+	if !a.mail.reading || a.tapp.GetFocus() != a.mail.preview {
+		t.Fatalf("письмо не открылось в панели чтения: reading=%v", a.mail.reading)
+	}
+	if got := a.hint.GetText(false); got != formatHint(hintReading) {
+		t.Errorf("подсказки панели чтения: %q", got)
+	}
+	a.mail.showPreview(-1) // курсор ушёл со строки — панель снова черновик
+	if a.mail.reading {
+		t.Error("reading не сброшен при смене строки — resize вернёт старое письмо")
+	}
+}

@@ -50,9 +50,12 @@ type hintSeg struct {
 // V-7: у КАЖДОЙ клавиши есть подпись (П.3) — бейдж без пояснения читается
 // как ребус. «1/2» подписано «экран», чтобы строка влезала в 100 колонок.
 var (
-	hintMail        = []hintSeg{{"↑↓", "выбор"}, {"Enter", "читать"}, {"u", "обновить"}, {"v", "вложения"}, {"g", "ссылки"}, {"1/2", "экран"}, {"q", "выход"}}
-	hintCalendar    = []hintSeg{{"←→↑↓", "день"}, {"n/p", "месяц"}, {"Enter", "детали"}, {"1/2", "экран"}, {"q", "выход"}}
-	hintDetails     = []hintSeg{{"Esc", "к списку"}, {"g", "ссылки"}, {"v", "вложения"}, {"1/2", "экран"}, {"q", "выход"}}
+	hintMail     = []hintSeg{{"↑↓", "выбор"}, {"Enter", "читать"}, {"u", "обновить"}, {"v", "вложения"}, {"g", "ссылки"}, {"1/2", "экран"}, {"q", "выход"}}
+	hintCalendar = []hintSeg{{"←→↑↓", "день"}, {"n/p", "месяц"}, {"Enter", "детали"}, {"1/2", "экран"}, {"q", "выход"}}
+	hintDetails  = []hintSeg{{"Esc", "к списку"}, {"g", "ссылки"}, {"v", "вложения"}, {"1/2", "экран"}, {"q", "выход"}}
+	// V-15: панель чтения — стрелки листают тело, v/g работают без ухода
+	// на отдельную страницу.
+	hintReading     = []hintSeg{{"↑↓", "прокрутка"}, {"Esc", "к списку"}, {"g", "ссылки"}, {"v", "вложения"}, {"1/2", "экран"}, {"q", "выход"}}
 	hintEvent       = []hintSeg{{"Esc", "к календарю"}, {"g", "ссылки"}, {"1/2", "экран"}, {"q", "выход"}}
 	hintLinks       = []hintSeg{{"Enter", "открыть"}, {"Esc", "назад"}}
 	hintAttachments = []hintSeg{{"s", "сохранить"}, {"o", "открыть"}, {"Esc", "назад"}}
@@ -199,7 +202,10 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 				})
 				return nil
 			case 'v', 'V':
-				a.showAttachments(a.currentAttachments)
+				a.showAttachments(a.currentAttachments, func() {
+					a.pages.SwitchToPage(pageDetails)
+					a.tapp.SetFocus(a.detail)
+				})
 				return nil
 			}
 		}
@@ -397,36 +403,13 @@ func (a *App) closeModals(focus tview.Primitive) {
 // Тело проходит через реестр ссылок ([N] host, ⚠, [IDN]) и санитайзер;
 // клавиши g/v открывают модалы ссылок и вложений.
 func (a *App) showDetails(m mail.Message) {
-	reg := mail.NewLinkRegistry()
-	var body string
-	if m.BodyHTML != "" {
-		body = reg.RenderBodyHTML(m.BodyHTML)
-	} else {
-		body = reg.RenderBody(m.BodyText)
-	}
-	a.currentLinks = reg.List()
+	tail, links := messageView(m)
+	a.currentLinks = links
 	a.currentAttachments = m.Attachments
 
-	// RD-5/V-5: шапка-карточка (FormatMessageCard) печатает setDetailsText
-	// перед телом; пустое тело — заглушка. Escape обязателен: TextView с
-	// dynamic colors, сырой «[» из EWS стал бы тегом.
-	var tail strings.Builder
-	if strings.TrimSpace(body) == "" {
-		tail.WriteString(mutedText(noBodyPlaceholder))
-	} else {
-		tail.WriteString(tview.Escape(security.Sanitize(body)))
-	}
-	if m.InternetMessageID != "" {
-		tail.WriteString("\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID)))
-	}
-	if atts := FormatAttachments(m.Attachments); atts != "" {
-		tail.WriteString("\n" + atts + "\n\n(g — ссылки, v — вложения)")
-	} else if len(a.currentLinks) > 0 {
-		tail.WriteString("\n\n(g — ссылки)")
-	}
 	// Тело кэшируется: DrawFunc на resize пересобирает только карточку шапки.
 	a.detailsMsg = m
-	a.detailsTail = tail.String()
+	a.detailsTail = tail
 	a.setDetailsText(readWidth - 2) // широкая колонка; DrawFunc поправит узкую
 	a.detail.ScrollToBeginning()
 	a.pages.SwitchToPage(pageDetails)
@@ -625,6 +608,11 @@ func (a *App) pageHint() string {
 	case pageConfirm:
 		return formatHint(hintConfirm)
 	default:
+		// V-15: фокус в панели чтения после Enter — набор клавиш панели,
+		// а не списка (там Enter «читать», здесь Esc «к списку»).
+		if a.mail.reading && a.tapp.GetFocus() == a.mail.preview {
+			return formatHint(hintReading)
+		}
 		return formatHint(hintMail)
 	}
 }

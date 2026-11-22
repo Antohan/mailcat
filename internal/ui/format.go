@@ -377,6 +377,38 @@ func FormatMessageCard(m mail.Message, width int) string {
 	return b.String()
 }
 
+// messageView собирает тело письма для показа целиком (V-15): реестр ссылок
+// ([N] host, ⚠, [IDN]) + санитайзер тела, Message-ID, секция вложений и
+// напоминание о клавишах. Общий для панели чтения и страницы деталей — один
+// реестр ссылок, одни и те же g/v. Ссылки возвращаются для a.currentLinks.
+func messageView(m mail.Message) (string, []mail.LinkInfo) {
+	reg := mail.NewLinkRegistry()
+	var body string
+	if m.BodyHTML != "" {
+		body = reg.RenderBodyHTML(m.BodyHTML)
+	} else {
+		body = reg.RenderBody(m.BodyText)
+	}
+	// RD-5/V-5: шапка-карточка (FormatMessageCard) печатается перед телом;
+	// пустое тело — заглушка. Escape обязателен: TextView с dynamic colors,
+	// сырой «[» из EWS стал бы тегом.
+	var tail strings.Builder
+	if strings.TrimSpace(body) == "" {
+		tail.WriteString(mutedText(noBodyPlaceholder))
+	} else {
+		tail.WriteString(tview.Escape(security.Sanitize(body)))
+	}
+	if m.InternetMessageID != "" {
+		tail.WriteString("\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID)))
+	}
+	if atts := FormatAttachments(m.Attachments); atts != "" {
+		tail.WriteString("\n" + atts + "\n\n(g — ссылки, v — вложения)")
+	} else if len(reg.List()) > 0 {
+		tail.WriteString("\n\n(g — ссылки)")
+	}
+	return tail.String(), reg.List()
+}
+
 // FormatAttachments — секция вложений на странице деталей (V-5): линия,
 // «Вложения N» жирным и пункты «имя (размер)» с человекочитаемыми размерами.
 func FormatAttachments(list []mail.Attachment) string {
