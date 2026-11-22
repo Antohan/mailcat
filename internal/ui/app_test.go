@@ -127,13 +127,36 @@ func TestPageHint(t *testing.T) {
 // жирным, подпись — второстепенным цветом; текст наш (не из EWS), теги
 // динамических цветов допустимы, «[» бейджа экранирован от парсера tview.
 func TestFormatHint(t *testing.T) {
-	got := formatHint([]hintSeg{{"Esc", "назад"}, {"q", "выход"}})
+	got := formatHint([]hintSeg{{"Esc", "назад", false}, {"q", "выход", false}})
 	want := fmt.Sprintf("[#%06x::b]%s [#%06x]назад [#%06x]· [#%06x::b]%s [#%06x]выход",
 		colorAccent.Hex(), tview.Escape("[Esc]"),
 		colorTextSecondary.Hex(), colorTextSecondary.Hex(),
 		colorAccent.Hex(), tview.Escape("[q]"), colorTextSecondary.Hex())
 	if got != want {
 		t.Errorf("formatHint = %q, хочу %q", got, want)
+	}
+}
+
+// TestFormatHintFit (V-17): на узком экране необязательный сегмент «←/→
+// панели» снимается, чтобы подсказка влезала в 100 колонок; на широком —
+// показывается; без opt-сегментов текст не меняется.
+func TestFormatHintFit(t *testing.T) {
+	full := formatHint(hintMail)
+	if got := formatHintFit(hintMail, 120); got != full {
+		t.Errorf("широкий экран: подсказка урезана")
+	}
+	fullW := tview.TaggedStringWidth(full)
+	narrow := formatHintFit(hintMail, fullW-1)
+	if strings.Contains(narrow, "панели") {
+		t.Errorf("узкий экран: необязательный сегмент не снят: %q", narrow)
+	}
+	if tview.TaggedStringWidth(narrow) > fullW-1 {
+		t.Errorf("узкий экран: подсказка всё ещё шире (%d > %d)",
+			tview.TaggedStringWidth(narrow), fullW-1)
+	}
+	custom := []hintSeg{{"Esc", "назад", false}, {"q", "выход", false}}
+	if got := formatHintFit(custom, 3); got != formatHint(custom) {
+		t.Errorf("без opt-сегментов текст изменился: %q", got)
 	}
 }
 

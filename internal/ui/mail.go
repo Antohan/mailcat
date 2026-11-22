@@ -221,7 +221,19 @@ func newMailScreen(a *App) *mailScreen {
 		}
 		return event
 	}
-	s.folders.SetInputCapture(tabHook)
+	// V-17: ←/→ — панели. Из папок → уводит в письма; левее панели нет —
+	// стрелку не отдаём List (его ←/→ — горизонтальный скролл).
+	s.folders.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyRight:
+			s.app.tapp.SetFocus(s.messages)
+			s.app.showHint()
+			return nil
+		case tcell.KeyLeft:
+			return nil
+		}
+		return tabHook(event)
+	})
 	s.messages.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyLeft:

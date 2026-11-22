@@ -270,6 +270,42 @@ func TestScrollOffsetForItem(t *testing.T) {
 	}
 }
 
+// TestFolderArrows (V-17): из панели папок → переводит фокус в список писем,
+// ← (левее панели нет) фокус не трогает, а стрелка не уходит в List
+// (горизонтальный скролл подсказки не обещает).
+func TestFolderArrows(t *testing.T) {
+	a := newTestApp(t)
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(110, 28)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+
+	var hook func(*tcell.EventKey) *tcell.EventKey
+	_ = a.tapp.QueueUpdateDraw(func() { hook = a.mail.folders.GetInputCapture() })
+	if hook == nil {
+		t.Fatal("у папок нет обработчика клавиш")
+	}
+	_ = a.tapp.QueueUpdateDraw(func() {
+		a.tapp.SetFocus(a.mail.folders)
+		if got := hook(tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone)); got != nil {
+			t.Errorf("→ не перехвачена: %v", got)
+		}
+		if a.tapp.GetFocus() != a.mail.messages {
+			t.Error("→ из папок не перевела фокус в письма")
+		}
+		a.tapp.SetFocus(a.mail.folders)
+		hook(tcell.NewEventKey(tcell.KeyLeft, 0, tcell.ModNone))
+		if a.tapp.GetFocus() != a.mail.folders {
+			t.Error("← из папок увела фокус (левее панели нет)")
+		}
+	})
+}
+
 // TestV3ThinFrame — сторож каркаса V-3: рамка панели с фокусом одинарная
 // (не двойные focus-линии tview), между колонками — по одному тонкому
 // вертикальному разделителю.

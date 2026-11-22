@@ -39,9 +39,11 @@ const (
 )
 
 // hintSeg — «клавиша — описание» подсказки экрана (RD-6): пустое desc —
-// клавиша без пояснения.
+// клавиша без пояснения. opt — сегмент необязательный: formatHintFit убирает
+// его на узком экране, чтобы подсказка не обрезалась (V-17).
 type hintSeg struct {
 	key, desc string
+	opt       bool
 }
 
 // Подсказки статус-бара по экрану (UI-7): у почты и календаря свои наборы
@@ -50,16 +52,18 @@ type hintSeg struct {
 // V-7: у КАЖДОЙ клавиши есть подпись (П.3) — бейдж без пояснения читается
 // как ребус. «1/2» подписано «экран», чтобы строка влезала в 100 колонок.
 var (
-	hintMail     = []hintSeg{{"↑↓", "выбор"}, {"Enter", "читать"}, {"u", "обновить"}, {"v", "вложения"}, {"g", "ссылки"}, {"1/2", "экран"}, {"q", "выход"}}
-	hintCalendar = []hintSeg{{"←→↑↓", "день"}, {"n/p", "месяц"}, {"Enter", "детали"}, {"1/2", "экран"}, {"q", "выход"}}
-	hintDetails  = []hintSeg{{"Esc", "к списку"}, {"g", "ссылки"}, {"v", "вложения"}, {"1/2", "экран"}, {"q", "выход"}}
+	// V-17: «←/→ панели» — стрелки переключают панели; сегмент opt: на 100
+	// колонках подсказка иначе не влезает и обрезала бы «q».
+	hintMail     = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "читать", false}, {"u", "обновить", false}, {"v", "вложения", false}, {"g", "ссылки", false}, {"←/→", "панели", true}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintCalendar = []hintSeg{{"←→↑↓", "день", false}, {"n/p", "месяц", false}, {"Enter", "детали", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintDetails  = []hintSeg{{"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	// V-15: панель чтения — стрелки листают тело, v/g работают без ухода
 	// на отдельную страницу.
-	hintReading     = []hintSeg{{"↑↓", "прокрутка"}, {"Esc", "к списку"}, {"g", "ссылки"}, {"v", "вложения"}, {"1/2", "экран"}, {"q", "выход"}}
-	hintEvent       = []hintSeg{{"Esc", "к календарю"}, {"g", "ссылки"}, {"1/2", "экран"}, {"q", "выход"}}
-	hintLinks       = []hintSeg{{"Enter", "открыть"}, {"Esc", "назад"}}
-	hintAttachments = []hintSeg{{"s", "сохранить"}, {"o", "открыть"}, {"Esc", "назад"}}
-	hintConfirm     = []hintSeg{{"←→", "выбор"}, {"Enter", "подтвердить"}}
+	hintReading     = []hintSeg{{"↑↓", "прокрутка", false}, {"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintEvent       = []hintSeg{{"Esc", "к календарю", false}, {"g", "ссылки", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintLinks       = []hintSeg{{"Enter", "открыть", false}, {"Esc", "назад", false}}
+	hintAttachments = []hintSeg{{"s", "сохранить", false}, {"o", "открыть", false}, {"Esc", "назад", false}}
+	hintConfirm     = []hintSeg{{"←→", "выбор", false}, {"Enter", "подтвердить", false}}
 )
 
 // bordered — панель почты/календаря с рамкой (UI-6): у Box нет геттера цвета
@@ -163,6 +167,12 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	a.hint = tview.NewTextView().
 		SetDynamicColors(true). // RD-6: красит клавиши; текст наш, не из EWS — escape-инвариант не задет
 		SetText(formatHint(hintMail))
+	// V-17: подсказка подстраивается под ширину — необязательные сегменты
+	// (opt) снимаются на узком экране, иначе строка обрезалась бы по краю.
+	a.hint.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		a.hint.SetText(formatHintFit(a.pageHintSegs(), w))
+		return x, y, w, h
+	})
 
 	a.mail = newMailScreen(a)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
@@ -585,6 +595,36 @@ func formatHint(segs []hintSeg) string {
 	return b.String()
 }
 
+// formatHintFit — подсказка под ширину max: необязательные сегменты (opt)
+// снимаются с конца, пока текст не влезет; max <= 0 — ширина неизвестна,
+// отдаём полный набор. Если влезть не удалось — возвращаем что есть (край
+// обрежется, но обязательные клавиши останутся).
+func formatHintFit(segs []hintSeg, max int) string {
+	if max <= 0 {
+		return formatHint(segs)
+	}
+	for {
+		text := formatHint(segs)
+		if tview.TaggedStringWidth(text) <= max {
+			return text
+		}
+		drop := -1
+		for i := len(segs) - 1; i >= 0; i-- {
+			if segs[i].opt {
+				drop = i
+				break
+			}
+		}
+		if drop < 0 {
+			return text
+		}
+		next := make([]hintSeg, 0, len(segs)-1)
+		next = append(next, segs[:drop]...)
+		next = append(next, segs[drop+1:]...)
+		segs = next
+	}
+}
+
 // keycap — клавиша в бейдже `[клавиша]`. WHY: tview.Escape получит ВСЮ
 // скобку целиком — одиночный «[» паттерн escape не ловит, и `[Enter]`/`[u]`
 // съедаются парсером как цвет-теги (проверено скриншотом V-7).
@@ -593,27 +633,31 @@ func keycap(k string) string {
 }
 
 // pageHint — подсказка для верхней видимой страницы (модалы закрывают экран).
-func (a *App) pageHint() string {
+func (a *App) pageHint() string { return formatHint(a.pageHintSegs()) }
+
+// pageHintSegs — набор подсказок видимой страницы (без форматирования: его
+// под ширину подбирает formatHintFit в DrawFunc строки подсказок).
+func (a *App) pageHintSegs() []hintSeg {
 	switch name, _ := a.pages.GetFrontPage(); name {
 	case pageCalendar:
-		return formatHint(hintCalendar)
+		return hintCalendar
 	case pageDetails:
-		return formatHint(hintDetails)
+		return hintDetails
 	case pageEvent:
-		return formatHint(hintEvent)
+		return hintEvent
 	case pageLinks:
-		return formatHint(hintLinks)
+		return hintLinks
 	case pageAttachments:
-		return formatHint(hintAttachments)
+		return hintAttachments
 	case pageConfirm:
-		return formatHint(hintConfirm)
+		return hintConfirm
 	default:
 		// V-15: фокус в панели чтения после Enter — набор клавиш панели,
 		// а не списка (там Enter «читать», здесь Esc «к списку»).
 		if a.mail.reading && a.tapp.GetFocus() == a.mail.preview {
-			return formatHint(hintReading)
+			return hintReading
 		}
-		return formatHint(hintMail)
+		return hintMail
 	}
 }
 
