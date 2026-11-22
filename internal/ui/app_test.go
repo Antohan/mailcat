@@ -274,3 +274,12 @@ func TestReadingInPreview(t *testing.T) {
 		t.Error("reading не сброшен при смене строки — resize вернёт старое письмо")
 	}
 }
+
+// TestInitialFocusMessages (V-21): приложение стартует с фокусом в списке
+// писем — подсказка стартового экрана (hintMail) и акцентная рамка совпадают.
+func TestInitialFocusMessages(t *testing.T) {
+	a := newTestApp(t)
+	if got := a.tapp.GetFocus(); got != a.mail.messages {
+		t.Errorf("стартовый фокус не в списке писем: %T", got)
+	}
+}

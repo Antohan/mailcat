@@ -216,9 +216,9 @@ func newMailScreen(a *App) *mailScreen {
 	s.root = tview.NewFlex().
 		AddItem(foldersCol, 0, pctFolders, false).
 		AddItem(d1, 1, 0, false).
-		AddItem(messagesCol, 0, pctMessages, false).
+		AddItem(messagesCol, 0, pctMessages, true).
 		AddItem(d2, 1, 0, false).
-		AddItem(previewCol, 0, pctPreview, true)
+		AddItem(previewCol, 0, pctPreview, false)
 
 	s.folders.SetChangedFunc(func(_ int, _, _ string, _ rune) {
 		// V-20: курсор меняет только вид строк — открытую папку (folderName и

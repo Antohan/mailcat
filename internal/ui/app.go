@@ -180,6 +180,9 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	})
 
 	a.mail = newMailScreen(a)
+	// V-21: старт — список писем: подсказка стартового экрана — набор клавиш
+	// списка (hintMail), акцентная рамка должна стоять там же.
+	a.tapp.SetFocus(a.mail.messages)
 	a.pages.AddPage(pageMail, a.mail.root, true, true)
 
 	a.calendar = newCalendarScreen(a)
