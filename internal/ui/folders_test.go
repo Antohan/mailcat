@@ -154,6 +154,18 @@ func TestRenderFoldersToggle(t *testing.T) {
 	}
 }
 
+// TestFoldersTwoLine (V-17): в высоком окне пункты папок идут через строку
+// (воздух), в низком — по одной, иначе папки уезжали бы под край без
+// индикатора прокрутки.
+func TestFoldersTwoLine(t *testing.T) {
+	if !foldersTwoLine(39, 15) {
+		t.Error("39 строк на 15 папок: ожидались двухстрочные пункты")
+	}
+	if foldersTwoLine(25, 15) {
+		t.Error("25 строк на 15 папок: двухстрочные не помещаются")
+	}
+}
+
 // TestRenderFoldersNoTech: без техпапок пункт «Ещё ▸» не добавляется.
 func TestRenderFoldersNoTech(t *testing.T) {
 	s := &mailScreen{

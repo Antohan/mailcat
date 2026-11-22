@@ -224,9 +224,24 @@ func TestHintLineFollowsPages(t *testing.T) {
 // туда; выбор другой строки возвращает панель в режим черновика.
 func TestReadingInPreview(t *testing.T) {
 	a := newTestApp(t)
-	a.mail.showReading(mail.Message{MessageSummary: mail.MessageSummary{Subject: "Тема"}, BodyText: "тело"})
+	a.mail.showReading(mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject:  "Тема",
+			From:     mail.Address{Name: "Иван", Email: "ivan@company.example"},
+			Received: time.Date(2026, 11, 20, 21, 25, 0, 0, time.Local),
+		},
+		To:       []mail.Address{{Name: "everybody", Email: "everybody@company.example"}},
+		BodyText: "тело",
+	})
 	if !a.mail.reading || a.tapp.GetFocus() != a.mail.preview {
 		t.Fatalf("письмо не открылось в панели чтения: reading=%v", a.mail.reading)
+	}
+	// V-17: шапка подробная (Тема/От/Кому/Дата), а не аватар-карточка V-5.
+	text := a.mail.preview.GetText(false)
+	for _, want := range []string{"Тема:", "От:", "Кому:", "Дата:", "20.11.2026 21:25"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("в шапке нет %q:\n%s", want, text)
+		}
 	}
 	if got := a.hint.GetText(false); got != formatHint(hintReading) {
 		t.Errorf("подсказки панели чтения: %q", got)

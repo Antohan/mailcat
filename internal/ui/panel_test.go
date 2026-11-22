@@ -176,8 +176,9 @@ func TestMessageRowReadState(t *testing.T) {
 	}
 }
 
-// TestMessageListDensity (RD-2, DoD): на 140×40 в списке видно ≥30 писем —
-// раскладка с заголовками панелей плотность не съела.
+// TestMessageListDensity (RD-2, DoD; V-17): на 140×40 в списке видно ≥10
+// писем. С V-17 пункт занимает три строки (отправитель, тема, пустая
+// прокладка), поэтому считаем письма по itemRows, а не строки с текстом.
 func TestMessageListDensity(t *testing.T) {
 	a := newTestApp(t)
 	rows := make([]mail.MessageSummary, 40)
@@ -206,25 +207,44 @@ func TestMessageListDensity(t *testing.T) {
 	}()
 	a.tapp.QueueUpdateDraw(func() {})
 
-	x0 := runeIndex(simRow(sim, 1), "ПИСЬМА")
-	if x0 < 0 {
+	if x0 := runeIndex(simRow(sim, 1), "ПИСЬМА"); x0 < 0 {
 		t.Fatal("заголовок «ПИСЬМА» не найден")
 	}
+	_, _, _, innerH := a.mail.messages.GetInnerRect()
+	offset, _ := a.mail.messages.GetOffset()
 	visible := 0
-	for y := 3; y < height-3; y++ {
-		line := simRow(sim, y)
-		for x := x0 + 2; x < x0+12 && x < len(line); x++ {
-			if line[x] != ' ' && line[x] != 0 {
-				visible++
-				break
-			}
+	for _, row := range a.mail.itemRows {
+		if row >= offset && row < offset+innerH {
+			visible++
 		}
 	}
-	if visible < 30 {
-		t.Errorf("в списке видно %d писем на 140×40, нужно ≥30", visible)
+	if visible < 10 {
+		t.Errorf("в списке видно %d писем на 140×40, нужно ≥10", visible)
 	}
 	a.tapp.Stop()
 	<-done
+}
+
+// TestMessageListGap (V-17): пункты разведены пустой невыбираемой строкой —
+// второй пункт начинается через три строки после первого; прокладка не
+// попадает в itemRows (О-1) и курсором пропускается (NotSelectable).
+func TestMessageListGap(t *testing.T) {
+	a := newTestApp(t)
+	now := time.Now()
+	rows := []mail.MessageSummary{
+		{Subject: "Первое", From: mail.Address{Name: "Иван", Email: "ivan@example.com"}, Received: now},
+		{Subject: "Второе", From: mail.Address{Name: "Иван", Email: "ivan@example.com"}, Received: now},
+	}
+	a.mail.items = append(a.mail.items, rows...)
+	a.mail.appendRows(rows)
+
+	if got := a.mail.itemRows[1] - a.mail.itemRows[0]; got != 3 {
+		t.Fatalf("между пунктами %d строк, хочу 3 (две строки пункта + прокладка)", got)
+	}
+	gap := a.mail.itemRows[0] + 2
+	if c := a.mail.messages.GetCell(gap, 0); c == nil || !c.NotSelectable {
+		t.Errorf("строка-прокладка %d должна быть невыбираемой: %+v", gap, c)
+	}
 }
 
 // TestV3ThinFrame — сторож каркаса V-3: рамка панели с фокусом одинарная

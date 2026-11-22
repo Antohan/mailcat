@@ -389,9 +389,9 @@ func messageView(m mail.Message) (string, []mail.LinkInfo) {
 	} else {
 		body = reg.RenderBody(m.BodyText)
 	}
-	// RD-5/V-5: шапка-карточка (FormatMessageCard) печатается перед телом;
-	// пустое тело — заглушка. Escape обязателен: TextView с dynamic colors,
-	// сырой «[» из EWS стал бы тегом.
+	// RD-5/V-17: вызывающий печатает перед хвостом подробную шапку
+	// (FormatMessageHeader); пустое тело — заглушка. Escape обязателен:
+	// TextView с dynamic colors, сырой «[» из EWS стал бы тегом.
 	var tail strings.Builder
 	if strings.TrimSpace(body) == "" {
 		tail.WriteString(mutedText(noBodyPlaceholder))

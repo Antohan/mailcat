@@ -96,14 +96,10 @@ type mailScreen struct {
 	// старый ответ A снова станет «свежим».
 	gen int
 
-	// V-15: письмо, прочитанное в панели просмотра (Enter). tail — тело и
-	// вложения; шапку-карточку пересобирает DrawFunc при resize (fullW), так
-	// что реестр ссылок на кадр не перегенерируется. reading=false — в
-	// панели черновик выбранной строки.
-	fullMsg  mail.Message
-	fullTail string
-	fullW    int
-	reading  bool
+	// V-15/V-17: письмо прочитано в панели просмотра (Enter) — g/v работают;
+	// шапка подробная (Тема/От/Кому/Дата) собирается один раз в showReading,
+	// от ширины она не зависит. reading=false — в панели черновик строки.
+	reading bool
 
 	pageSize int
 }
@@ -115,15 +111,31 @@ func newMailScreen(a *App) *mailScreen {
 	}
 
 	s.folders = tview.NewList().
-		ShowSecondaryText(false).
+		// V-17: воздух между папками — второй (пустой) строкой пункта; tview
+		// List не умеет межстрочный интервал, а пустые пункты-прокладки ставили
+		// бы курсор на пустую строку.
+		ShowSecondaryText(true).
+		// V-17: заливка — на всю строку панели, как в референсе (было — только
+		// по ширине текста, «чип» с рваным правым краем).
+		SetHighlightFullLine(true).
 		SetMainTextColor(colorTextPrimary).
 		SetSelectedBackgroundColor(colorSelectedBg).
 		SetSelectedTextColor(colorSelectedFg)
 	s.folders.SetBorder(true)
+	// WHY (V-17): в низком окне (100×30) двухстрочные папки не помещаются —
+	// часть уезжала бы под край без индикатора прокрутки. Флаг пересчитывается
+	// на кадр до отрисовки пунктов: высокое окно — с воздухом, низкое — по
+	// одной строке (tview List не умеет межстрочный интервал).
+	s.folders.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		s.folders.ShowSecondaryText(foldersTwoLine(h, s.folders.GetItemCount()))
+		return x + 1, y + 1, w - 2, h - 2
+	})
 
+	// V-17: разделитель колонок — пробел, а не «│»: вертикальная линия резала
+	// заливку выбранного пункта пополам (в референсе между текстом и временем
+	// её нет).
 	s.messages = tview.NewTable().
 		SetSelectable(true, false).
-		SetSeparator('│').
 		SetSelectedStyle(tcell.StyleDefault.Background(colorSelectedBg).Foreground(colorSelectedFg))
 	s.messages.SetBorder(true)
 	// WHY (V-1): кап ширины колонки 0 обязателен. tview выбрасывает колонки,
@@ -145,17 +157,6 @@ func newMailScreen(a *App) *mailScreen {
 		SetDynamicColors(true)
 	s.preview.SetBorder(true)
 	s.preview.SetText(mutedText(previewEmptyHint))
-	// WHY (V-15): шапка-карточка паддингом под ширину панели — тот же приём,
-	// что на странице деталей (V-5): пересборка только при смене ширины
-	// (гард fullW), тело из кэша fullTail. Не делать: собирать текст на
-	// каждый кадр — реестр ссылок и санитайзер тела поедут в цикле отрисовки.
-	s.preview.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
-		if inner := w - 2; s.reading && inner > 2 && inner != s.fullW {
-			s.fullW = inner
-			s.preview.SetText(FormatMessageCard(s.fullMsg, inner) + "\n" + s.fullTail)
-		}
-		return x + 1, y + 1, w - 2, h - 2
-	})
 
 	// WHY (RD-2): рамки у неактивных панелей нет — у папок и просмотра
 	// заголовка тоже нет (V-16): назначение очевидно, фокус показывает рамка.
@@ -291,13 +292,14 @@ func (s *mailScreen) readMessage(row int) {
 	s.loadMessage(s.itemIndex(row), s.showReading)
 }
 
-// showReading выводит полное письмо в панели просмотра (V-15): шапка-
-// карточка + тело + вложения; фокус уходит в панель — сразу работают g/v и
-// прокрутка. Раскладку шапки под ширину панели делает DrawFunc (fullW).
+// showReading выводит полное письмо в панели просмотра (V-15, V-17): подробная
+// шапка (Тема/От/Кому/Дата) + тело + вложения; фокус уходит в панель — сразу
+// работают g/v и прокрутка. Шапка от ширины не зависит (в отличие от
+// карточки-аватара V-5), поэтому текст собирается здесь один раз.
 func (s *mailScreen) showReading(m mail.Message) {
 	tail, links := messageView(m)
-	s.fullMsg, s.fullTail, s.reading = m, tail, true
-	s.fullW = 0 // DrawFunc пересоберёт карточку под фактическую ширину панели
+	s.reading = true
+	s.preview.SetText(FormatMessageHeader(m) + "\n" + tail)
 	s.app.currentLinks = links
 	s.app.currentAttachments = m.Attachments
 	s.preview.ScrollToBeginning()
@@ -384,6 +386,13 @@ func (s *mailScreen) loadFolders() {
 			s.selectFolder(ews.FolderID{}, "Входящие")
 		})
 	}()
+}
+
+// foldersTwoLine — влезают ли двухстрочные пункты папок в высоту h списка
+// (внешнюю, с рамкой): запас — две строки рамки. В высоком окне пункты идут
+// через строку (воздух), в низком — по одной, иначе папки уезжают под край.
+func foldersTwoLine(h, items int) bool {
+	return h-2 >= 2*items
 }
 
 // renderFolders перестраивает панель целиком: блок стандартных папок, линия,
@@ -719,6 +728,14 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 		prevBucket = dayBucket(now, s.items[base-1].Received)
 	}
 	for _, m := range added {
+		// V-17: воздух между письмами — пустая невыбираемая строка: tview не
+		// умеет межстрочный интервал, прокладка — единственный способ развести
+		// двухстрочные пункты (курсор её пропускает: NotSelectable). В
+		// itemRows не попадает — там только строки-отправители (О-1).
+		if s.messages.GetRowCount() > 0 {
+			s.messages.SetCell(s.messages.GetRowCount(), 0,
+				tview.NewTableCell("").SetSelectable(false))
+		}
 		if b := dayBucket(now, m.Received); b != prevBucket {
 			prevBucket = b
 			s.messages.SetCell(s.messages.GetRowCount(), 0,
