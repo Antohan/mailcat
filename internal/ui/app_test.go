@@ -105,7 +105,7 @@ func TestPageHint(t *testing.T) {
 	a := newTestApp(t)
 	hints := map[string]string{
 		pageMail:        formatHint(hintMail),
-		pageCalendar:    formatHint(hintCalendar),
+		pageCalendar:    formatHint(hintCalendarGrid),
 		pageDetails:     formatHint(hintDetails),
 		pageEvent:       formatHint(hintEvent),
 		pageLinks:       formatHint(hintLinks),
@@ -228,16 +228,16 @@ func TestHintLineFollowsPages(t *testing.T) {
 	a := newTestApp(t)
 	a.pages.SwitchToPage(pageCalendar)
 	a.showHint()
-	if got := a.hint.GetText(false); got != formatHint(hintCalendar) {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendarGrid) {
 		t.Errorf("строка подсказок не сменилась со страницей: %q", got)
 	}
 	id := a.beginLoad("Загрузка календаря…")
 	a.showError(errors.New("сбой"))
-	if got := a.hint.GetText(false); got != formatHint(hintCalendar) {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendarGrid) {
 		t.Errorf("сообщение/ошибка затронули строку подсказок: %q", got)
 	}
 	a.endLoad(id)
-	if got := a.hint.GetText(false); got != formatHint(hintCalendar) {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendarGrid) {
 		t.Errorf("конец загрузки затронул строку подсказок: %q", got)
 	}
 }

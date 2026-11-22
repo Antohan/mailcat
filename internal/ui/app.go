@@ -58,9 +58,12 @@ var (
 	// V-24: у панели папок свой набор — из папок можно только → в письма,
 	// v/g там не работают. Все сегменты обязательные: набор укладывается в
 	// 100 колонок без opt (проверяет тест), иначе терялась бы «q».
-	hintFolders  = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "открыть", false}, {"→", "панели", false}, {"u", "обновить", false}, {"1/2", "экран", false}, {"q", "выход", false}}
-	hintCalendar = []hintSeg{{"←→↑↓", "день", false}, {"n/p", "месяц", false}, {"Enter", "детали", false}, {"1/2", "экран", false}, {"q", "выход", false}}
-	hintDetails  = []hintSeg{{"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintFolders = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "открыть", false}, {"→", "панели", false}, {"u", "обновить", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	// V-35: у календаря два набора — по фокусу (сетка/повестка), как у почты.
+	// Оба укладываются в 100 колонок без opt (проверяет тест).
+	hintCalendarGrid   = []hintSeg{{"←→↑↓", "день", false}, {"n/p", "месяц", false}, {"Enter", "повестка", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintCalendarAgenda = []hintSeg{{"↑↓", "встреча", false}, {"Enter", "детали", false}, {"Esc", "к сетке", false}, {"g", "ссылки", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintDetails        = []hintSeg{{"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	// V-15: панель чтения — стрелки листают тело, v/g работают без ухода
 	// на отдельную страницу.
 	hintReading     = []hintSeg{{"↑↓", "прокрутка", false}, {"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
@@ -437,6 +440,9 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 			// останутся на месте (UI-9).
 			a.closeModals(a.calendar.grid)
 			a.pages.SwitchToPage(pageCalendar)
+			// V-35: 1/2 фокус не переносит — иначе стрелки уходят в скрытый
+			// список писем. Фокус повестки календаря сохраняется.
+			a.calendar.ensureFocus()
 			a.updateTopBar() // V-31: на календаре — месяц
 			a.showHint()
 			a.calendar.ensureLoaded()
@@ -697,7 +703,12 @@ func (a *App) pageHint() string { return formatHint(a.pageHintSegs()) }
 func (a *App) pageHintSegs() []hintSeg {
 	switch name, _ := a.pages.GetFrontPage(); name {
 	case pageCalendar:
-		return hintCalendar
+		// V-35: у календаря два набора — по фокусу панели: на повестке Enter
+		// открывает детали, Esc/← возвращают к сетке.
+		if a.tapp.GetFocus() == a.calendar.agenda {
+			return hintCalendarAgenda
+		}
+		return hintCalendarGrid
 	case pageDetails:
 		return hintDetails
 	case pageEvent:

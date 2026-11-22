@@ -132,7 +132,17 @@ func newCalendarScreen(a *App) *calendarScreen {
 	}
 	// V-32: стрелки на сетке двигают выбор на день/неделю с зажимом в месяце;
 	// на повестке те же клавиши остаются списку (hook туда не вешаем).
+	// V-35: Tab/Shift-Tab — сетка↔повестка, Enter — фокус в повестку.
 	gridHook := func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyBacktab:
+			s.cycleFocus()
+			return nil
+		case tcell.KeyEnter:
+			s.app.tapp.SetFocus(s.agenda)
+			s.app.showHint()
+			return nil
+		}
 		if event.Modifiers() == tcell.ModNone {
 			switch event.Key() {
 			case tcell.KeyLeft:
@@ -152,8 +162,53 @@ func newCalendarScreen(a *App) *calendarScreen {
 		return monthHook(event)
 	}
 	s.grid.SetInputCapture(gridHook)
-	s.agenda.SetInputCapture(monthHook)
+	// V-35: Esc и ← (без Ctrl) с повестки возвращают фокус сетке; Enter на
+	// повестке — детали встречи (SetSelectedFunc у List).
+	s.agenda.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyBacktab:
+			s.cycleFocus()
+			return nil
+		case tcell.KeyEsc:
+			s.focusGrid()
+			return nil
+		case tcell.KeyLeft:
+			if event.Modifiers()&tcell.ModCtrl == 0 {
+				s.focusGrid()
+				return nil
+			}
+		}
+		return monthHook(event)
+	})
 	return s
+}
+
+// cycleFocus перебирает панели календаря (Tab). Панелей две, поэтому
+// Shift-Tab (как и Tab) ведёт в соседнюю: сетка ↔ повестка.
+func (s *calendarScreen) cycleFocus() {
+	var next tview.Primitive = s.grid
+	if s.app.tapp.GetFocus() == s.grid {
+		next = s.agenda
+	}
+	s.app.tapp.SetFocus(next)
+	// V-23: набор подсказок зависит от фокуса — его пересобирает showHint.
+	s.app.showHint()
+}
+
+// focusGrid возвращает фокус сетке (Esc/← на повестке).
+func (s *calendarScreen) focusGrid() {
+	s.app.tapp.SetFocus(s.grid)
+	s.app.showHint()
+}
+
+// ensureFocus ставит фокус на сетку, если он остался в скрытой панели почты:
+// переключение 1/2 фокус не переносит, иначе стрелки уходили бы в список
+// писем. Фокус, уже стоящий в календаре (повестка), не трогаем.
+func (s *calendarScreen) ensureFocus() {
+	if p := s.app.tapp.GetFocus(); p == s.grid || p == s.agenda {
+		return
+	}
+	s.app.tapp.SetFocus(s.grid)
 }
 
 // ensureLoaded подгружает месяц при входе на экран (кэш — до смены месяца).
