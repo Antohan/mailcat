@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -149,7 +150,7 @@ func TestPluralUnread(t *testing.T) {
 // Тема в тестах переключаема, поэтому проверяем структуру, а не hex цвета.
 func TestFormatFolder(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, false, false)
+	got := FormatFolder(f, false, false, 0)
 	if !strings.HasPrefix(got, "  Входящие") {
 		t.Errorf("нет отступа перед именем: %q", got)
 	}
@@ -160,7 +161,7 @@ func TestFormatFolder(t *testing.T) {
 		t.Errorf("счётчик не выровнен на колонку %d: %q", folderNameCol, got)
 	}
 	f2 := mail.Folder{DisplayName: "Отправленные"}
-	if got2 := FormatFolder(f2, false, false); !strings.HasPrefix(got2, "  Отправленные") || strings.Contains(got2, "(0)") {
+	if got2 := FormatFolder(f2, false, false, 0); !strings.HasPrefix(got2, "  Отправленные") || strings.Contains(got2, "(0)") {
 		t.Errorf("FormatFolder без непрочитанных = %q", got2)
 	}
 }
@@ -169,11 +170,11 @@ func TestFormatFolder(t *testing.T) {
 // чтобы читать его на фоне выделения (П.2б).
 func TestFormatFolderSelected(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, false, true)
+	got := FormatFolder(f, false, true, 0)
 	if !strings.Contains(got, fmt.Sprintf("[%s](23)", hexTag(colorSelectedFg))) {
 		t.Errorf("счётчик на выделенной строке не colorSelectedFg: %q", got)
 	}
-	if got2 := FormatFolder(f, false, false); strings.Contains(got2, hexTag(colorSelectedFg)) {
+	if got2 := FormatFolder(f, false, false, 0); strings.Contains(got2, hexTag(colorSelectedFg)) {
 		t.Errorf("невыделенная строка красится colorSelectedFg: %q", got2)
 	}
 }
@@ -182,15 +183,50 @@ func TestFormatFolderSelected(t *testing.T) {
 // счётчик остаётся вторичным, акцентируется только имя.
 func TestFormatFolderActive(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, true, false)
+	got := FormatFolder(f, true, false, 0)
 	if !strings.Contains(got, "::b]") {
 		t.Errorf("активная папка не жирная: %q", got)
 	}
 	if !strings.Contains(got, fmt.Sprintf("[%s::b]", hexTag(colorAccent))) {
 		t.Errorf("активная папка не accent: %q", got)
 	}
-	if got := FormatFolder(f, false, false); strings.Contains(got, "::b]") {
+	if got := FormatFolder(f, false, false, 0); strings.Contains(got, "::b]") {
 		t.Errorf("неактивная папка жирная: %q", got)
+	}
+}
+
+// visibleWidth — длина строки в клетках без tview-тегов цвета: теги рисуются
+// форматированием, а не текстом (V-26 — проверяем, что строка ровно в ширину).
+func visibleWidth(s string) int {
+	return utf8.RuneCountInString(folderTagRe.ReplaceAllString(s, ""))
+}
+
+var folderTagRe = regexp.MustCompile(`\[[#-][^\]]*\]`)
+
+// TestFormatFolderWidth (V-26): счётчик прижат к правому краю панели ширины
+// width; длинное имя усекается «…», а счётчик остаётся справа.
+func TestFormatFolderWidth(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	for _, w := range []int{20, 30} {
+		got := FormatFolder(f, false, false, w)
+		if vw := visibleWidth(got); vw != w {
+			t.Errorf("ширина %d: строка занимает %d клеток: %q", w, vw, got)
+		}
+		if !strings.HasSuffix(got, "(23)") {
+			t.Errorf("ширина %d: счётчик не прижат к правому краю: %q", w, got)
+		}
+	}
+
+	long := mail.Folder{DisplayName: "Очень длинное имя папки", UnreadCount: 5}
+	got := FormatFolder(long, false, false, 20)
+	if !strings.Contains(got, "…") {
+		t.Errorf("длинное имя не усечено «…»: %q", got)
+	}
+	if !strings.HasSuffix(got, "(5)") {
+		t.Errorf("счётчик усечён вместе с именем: %q", got)
+	}
+	if vw := visibleWidth(got); vw != 20 {
+		t.Errorf("усечённая строка занимает %d клеток, хочу 20: %q", vw, got)
 	}
 }
 

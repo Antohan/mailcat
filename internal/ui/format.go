@@ -203,35 +203,56 @@ func pluralUnread(n int) string {
 }
 
 // folderNameCol — ширина колонки имени (отступ + имя): 2 клетки отступа
-// и 13 на «Нежелательная». Счётчик прижат вправо выравниванием на эту
-// колонку; у более длинных имён — минимальный зазор (pad < 1 → 1).
+// и 13 на «Нежелательная». До первой отрисовки панели (V-26) счётчик
+// начинается с этой колонки (прежний зазор); у более длинных имён —
+// минимальный зазор (pad < 1 → 1).
 const folderNameCol = 15
 
 // FormatFolder — пункт списка папок: отступ, имя, счётчик непрочитанных
-// цветом textSecondary (прижат вправо на folderNameCol). active — папка
-// открыта: текст accent + жирный; selected — строка под курсором списка:
-// счётчик перекрашивается в colorSelectedFg, иначе серый tag не читается
-// на фоне выделения (П.2б). Sanitize + tview.Escape сохраняются (List
-// интерпретирует теги безусловно — данные экранируются, теги наши).
+// цветом textSecondary, прижатый к правому краю панели ширины width (V-26;
+// width ≤ 0 — ширина ещё неизвестна, прежний зазор до колонки folderNameCol).
+// Длинное имя усекается «…» ДО tview.Escape — резать escaped-строку нельзя.
+// active — папка открыта: текст accent + жирный; selected — строка под
+// курсором списка: счётчик перекрашивается в colorSelectedFg, иначе серый
+// tag не читается на фоне выделения (П.2б). Sanitize + tview.Escape
+// сохраняются (List интерпретирует теги безусловно — данные экранируются,
+// теги наши).
 // WHY (П.2а): без иконок — все строки с одинаковым отступом.
-func FormatFolder(f mail.Folder, active, selected bool) string {
+func FormatFolder(f mail.Folder, active, selected bool, width int) string {
 	indent := "  "
-	pad := folderNameCol - utf8.RuneCountInString(indent) - utf8.RuneCountInString(f.DisplayName)
+	indentLen := utf8.RuneCountInString(indent)
+	counter := ""
+	if f.UnreadCount > 0 {
+		counter = fmt.Sprintf("(%d)", f.UnreadCount)
+	}
+	name := security.Sanitize(f.DisplayName)
+	// width ≤ 0: прежний зазор — счётчик начинается с колонки folderNameCol,
+	// как было до V-26 (панель ещё не нарисована, ширина неизвестна).
+	pad := folderNameCol - indentLen - utf8.RuneCountInString(name)
+	if width > 0 {
+		counterLen := utf8.RuneCountInString(counter)
+		nameMax := width - indentLen - counterLen
+		if counter != "" {
+			nameMax-- // минимальный зазор между именем и счётчиком
+		}
+		name = truncateEllipsis(name, nameMax)
+		pad = width - indentLen - utf8.RuneCountInString(name) - counterLen
+	}
 	if pad < 1 {
 		pad = 1
 	}
-	row := indent + tview.Escape(security.Sanitize(f.DisplayName)) + strings.Repeat(" ", pad)
+	row := indent + tview.Escape(name) + strings.Repeat(" ", pad)
 	if active {
 		row = fmt.Sprintf("[%s::b]%s[-::-]", hexTag(colorAccent), row)
 	}
-	if f.UnreadCount > 0 {
-		counterColor := colorTextSecondary
-		if selected {
-			counterColor = colorSelectedFg
-		}
-		return fmt.Sprintf("%s[%s](%d)", row, hexTag(counterColor), f.UnreadCount)
+	if counter == "" {
+		return row
 	}
-	return row
+	counterColor := colorTextSecondary
+	if selected {
+		counterColor = colorSelectedFg
+	}
+	return fmt.Sprintf("%s[%s]%s", row, hexTag(counterColor), counter)
 }
 
 // standardFolders — фиксированный порядок стандартных папок в панели (UI-1).

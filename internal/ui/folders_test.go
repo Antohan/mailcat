@@ -204,7 +204,7 @@ func TestCursorDoesNotRenameFolder(t *testing.T) {
 		t.Errorf("folderName = %q, хочу «Входящие» (курсор не открывает папку)", s.folderName)
 	}
 	got, _ := s.folders.GetItemText(0)
-	if want := FormatFolder(s.mainFolders[0], true, false); got != want {
+	if want := FormatFolder(s.mainFolders[0], true, false, 0); got != want {
 		t.Errorf("строка «Входящих» = %q, хочу accent открытой папки %q", got, want)
 	}
 }
@@ -230,6 +230,31 @@ func TestUpdateInboxUnreadKeepsCursor(t *testing.T) {
 	}
 	if s.mainFolders[0].UnreadCount != 7 {
 		t.Errorf("кэш счётчика = %d, хочу 7", s.mainFolders[0].UnreadCount)
+	}
+}
+
+// TestSetFoldersWidthKeepsCursor (V-26): смена ширины панели пересобирает
+// строки под новую ширину (счётчик справа), курсор остаётся на прежнем пункте.
+func TestSetFoldersWidthKeepsCursor(t *testing.T) {
+	s := &mailScreen{
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}, {DisplayName: "Отправленные"}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	s.renderFolders()
+	s.folders.SetCurrentItem(1)
+
+	s.setFoldersWidth(20)
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Errorf("курсор = %d, хочу 1 (ширина не двигает курсор)", got)
+	}
+	if s.foldersW != 20 {
+		t.Errorf("foldersW = %d, хочу 20", s.foldersW)
+	}
+	got, _ := s.folders.GetItemText(0)
+	if want := FormatFolder(s.mainFolders[0], false, false, 20); got != want {
+		t.Errorf("строка «Входящих» = %q, хочу ширину 20 %q", got, want)
 	}
 }
 

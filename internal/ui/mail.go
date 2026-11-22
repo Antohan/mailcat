@@ -83,6 +83,10 @@ type mailScreen struct {
 	// moreIdx — индекс пункта «Ещё ▸/▾»; len(mainFolders) больше не равен ему:
 	// разделители групп стоят в списке тоже. Ставится в renderFolders.
 	moreIdx int
+	// foldersW — внутренняя ширина панели папок, известная только при
+	// отрисовке (V-26): от неё зависит длина строки со счётчиком. 0 — ещё
+	// не рисовали, строки идут по прежней колонке folderNameCol.
+	foldersW int
 	// conn — футер сайдбара (V-12, по референсу): две строки — «● Connected»
 	// и username под ним. Текст собирает connText, ставит setConn или DrawFunc
 	// (ширина панели известна только при отрисовке — обрезка «…» по ней).
@@ -129,6 +133,15 @@ func newMailScreen(a *App) *mailScreen {
 		SetSelectedBackgroundColor(colorSelectedBg).
 		SetSelectedTextColor(colorSelectedFg)
 	s.folders.SetBorder(true)
+	// V-26: счётчик непрочитанных прижат к правому краю панели, а длина
+	// строки зависит от её ширины — та известна только при отрисовке.
+	// WHY: SetItemText в DrawFunc безопасен (не будит SetChangedFunc и не
+	// двигает курсор); Clear потерял бы позицию, GetFocus сломал бы порядок
+	// отрисовки tview. Возвращаем внутренний прямоугольник рамки.
+	s.folders.SetDrawFunc(func(_ tcell.Screen, x, y, w, h int) (int, int, int, int) {
+		s.setFoldersWidth(w - 2)
+		return x + 1, y + 1, max(w-2, 0), max(h-2, 0)
+	})
 
 	// V-17: разделитель колонок — пробел, а не «│»: вертикальная линия резала
 	// заливку выбранного пункта пополам (в референсе между текстом и временем
@@ -452,7 +465,7 @@ func (s *mailScreen) renderFolders() {
 	s.rowByItem = make(map[int]mail.Folder)
 	add := func(f mail.Folder) {
 		idx := s.folders.GetItemCount()
-		s.folders.AddItem(FormatFolder(f, s.isActiveFolder(f), false), "", 0, func() {
+		s.folders.AddItem(FormatFolder(f, s.isActiveFolder(f), false, s.foldersW), "", 0, func() {
 			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, f.DisplayName)
 		})
 		s.rowByItem[idx] = f
@@ -553,11 +566,28 @@ func (s *mailScreen) isActiveFolder(f mail.Folder) bool {
 // остаётся штатный вид инверсии. SetItemText не будит SetChangedFunc —
 // рекурсии нет.
 func (s *mailScreen) applyActiveFolderStyle() {
-	cursor := s.folders.GetCurrentItem()
 	for i, f := range s.rowByItem {
-		cursorOnRow := i == cursor
-		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow), "")
+		s.folders.SetItemText(i, s.folderRowText(i, f), "")
 	}
+}
+
+// folderRowText — вид строки панели: активность и выделение по курсору,
+// ширина — последняя известная (V-26; 0 до первой отрисовки). Одна формула
+// на все пути записи строки: мусорные кэши разъехались бы на resize.
+func (s *mailScreen) folderRowText(i int, f mail.Folder) string {
+	cursorOnRow := i == s.folders.GetCurrentItem()
+	return FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow, s.foldersW)
+}
+
+// setFoldersWidth пересобирает строки панели под новую внутреннюю ширину
+// (V-26): счётчик прижат к правому краю, длинное имя усекается «…».
+// Только SetItemText — курсор и прокрутка остаются на месте (WHY в DrawFunc).
+func (s *mailScreen) setFoldersWidth(width int) {
+	if width < 1 || width == s.foldersW {
+		return
+	}
+	s.foldersW = width
+	s.applyActiveFolderStyle()
 }
 
 // toggleTech сворачивает/разворачивает секцию техпапок. Курсор возвращается
@@ -996,7 +1026,7 @@ func (s *mailScreen) updateInboxUnread(n int) {
 // refreshFolderRow перекрашивает одну строку панели без пересборки списка:
 // тик watcher'а не должен сбрасывать курсор и прокрутку пользователя.
 // WHY: SetItemText не будит SetChangedFunc, а renderFolders делает Clear и
-// теряет позицию; вид строки — та же формула, что в applyActiveFolderStyle.
+// теряет позицию; вид строки — folderRowText, как в applyActiveFolderStyle.
 func (s *mailScreen) refreshFolderRow(f mail.Folder) {
 	for i, row := range s.rowByItem {
 		if f.ID != "" && row.ID != f.ID {
@@ -1005,8 +1035,9 @@ func (s *mailScreen) refreshFolderRow(f mail.Folder) {
 		if f.ID == "" && row.DisplayName != f.DisplayName {
 			continue
 		}
-		cursorOnRow := i == s.folders.GetCurrentItem()
-		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow), "")
+		// WHY: вид строки — из f (в нём новый UnreadCount), а rowByItem хранит
+		// копию папки на момент renderFolders и счётчик бы отстал.
+		s.folders.SetItemText(i, s.folderRowText(i, f), "")
 		return
 	}
 }
