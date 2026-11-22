@@ -426,6 +426,83 @@ func FormatMessageCard(m mail.Message, width int) string {
 	return b.String()
 }
 
+// bodyHeadingMax — предел длины строки-заголовка (V-28): длиннее — абзац,
+// жирнить его целиком незачем.
+const bodyHeadingMax = 40
+
+// formatBody — тело письма для TextView с dynamic colors (V-28): серии пустых
+// строк схлопываются в одну, короткая изолированная строка без завершающей
+// пунктуации печатается заголовком (жирный accent) и прижимается к абзацу —
+// пустая строка после неё убирается. Каждая строка проходит Sanitize +
+// tview.Escape (SECURITY §3: граница UI, TextView с dynamic colors).
+func formatBody(body string) string {
+	lines := strings.Split(body, "\n")
+	for i, ln := range lines {
+		lines[i] = security.Sanitize(ln)
+	}
+	blank := func(i int) bool {
+		return i < 0 || i >= len(lines) || strings.TrimSpace(lines[i]) == ""
+	}
+	out := make([]string, 0, len(lines))
+	noBlank := true // пустая строка перед этой не нужна: начало, заголовок или уже пусто
+	for i, ln := range lines {
+		if blank(i) {
+			if !noBlank {
+				out = append(out, "")
+				noBlank = true
+			}
+			continue
+		}
+		if isBodyHeading(ln, blank(i-1), blank(i+1)) {
+			out = append(out, fmt.Sprintf("[%s::b]%s[-::-]", hexTag(colorAccent), tview.Escape(strings.TrimSpace(ln))))
+			noBlank = true // заголовок прижат к абзацу
+			continue
+		}
+		out = append(out, tview.Escape(ln))
+		noBlank = false
+	}
+	for len(out) > 0 && out[len(out)-1] == "" { // хвост перед Message-ID не нужен
+		out = out[:len(out)-1]
+	}
+	return strings.Join(out, "\n")
+}
+
+// isBodyHeading — эвристика заголовка (V-28): строка изолирована пустыми
+// строками, ≤ bodyHeadingMax рун, не пункт списка и не кончается пунктуацией.
+// WHY best-effort: после HTMLToText разметки заголовков не осталось — признак
+// только такой; ошибка стоит одной лишней жирной строки, не потери данных.
+// Not to do: жирнить любую короткую строку — «Привет!», подпись, «— пункт»
+// тоже короткие, а заголовками не являются.
+func isBodyHeading(line string, prevBlank, nextBlank bool) bool {
+	if !prevBlank || !nextBlank {
+		return false
+	}
+	s := strings.TrimSpace(line)
+	if s == "" || utf8.RuneCountInString(s) > bodyHeadingMax {
+		return false
+	}
+	first, size := utf8.DecodeRuneInString(s)
+	if isListMarker(first, s[size:]) {
+		return false
+	}
+	last, _ := utf8.DecodeLastRuneInString(s)
+	return !unicode.IsPunct(last)
+}
+
+// isListMarker — маркер пункта списка в начале строки («— », «- », «• »,
+// «1. », «2) »): такие строки заголовками не считаются.
+func isListMarker(first rune, rest string) bool {
+	switch first {
+	case '-', '–', '—', '•', '*', '·':
+		return true
+	}
+	if !unicode.IsDigit(first) {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(strings.TrimLeftFunc(rest, unicode.IsDigit))
+	return r == '.' || r == ')'
+}
+
 // messageView собирает тело письма для показа целиком (V-15): реестр ссылок
 // ([N] host, ⚠, [IDN]) + санитайзер тела, Message-ID, секция вложений и
 // напоминание о клавишах. Общий для панели чтения и страницы деталей — один
@@ -440,12 +517,13 @@ func messageView(m mail.Message) (string, []mail.LinkInfo) {
 	}
 	// RD-5/V-17: вызывающий печатает перед хвостом подробную шапку
 	// (FormatMessageHeader); пустое тело — заглушка. Escape обязателен:
-	// TextView с dynamic colors, сырой «[» из EWS стал бы тегом.
+	// TextView с dynamic colors, сырой «[» из EWS стал бы тегом (V-28:
+	// построчно, внутри formatBody).
 	var tail strings.Builder
-	if strings.TrimSpace(body) == "" {
+	if formatted := formatBody(body); formatted == "" {
 		tail.WriteString(mutedText(noBodyPlaceholder))
 	} else {
-		tail.WriteString(tview.Escape(security.Sanitize(body)))
+		tail.WriteString(formatted)
 	}
 	if m.InternetMessageID != "" {
 		tail.WriteString("\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID)))

@@ -475,3 +475,53 @@ func TestClampKeepsSenderRuns(t *testing.T) {
 		t.Errorf("повтор после clamp = %q, хочу точку без имени", second)
 	}
 }
+
+// TestFormatBody (V-28): серии пустых строк схлопываются в одну, изолированная
+// короткая строка без завершающей пунктуации — заголовок жирным accent, пустая
+// строка после него убрана; приветствие, пункт списка, длинная и
+// неизолированная строка заголовками не считаются; «[»/ESC экранируются.
+func TestFormatBody(t *testing.T) {
+	accent := fmt.Sprintf("[%s::b]", hexTag(colorAccent))
+	heading := func(s string) string { return accent + s + "[-::-]" }
+
+	t.Run("заголовок прижат к абзацу", func(t *testing.T) {
+		if got, want := formatBody("Оргмоменты\n\nВстреча в четверг."),
+			heading("Оргмоменты")+"\nВстреча в четверг."; got != want {
+			t.Errorf("formatBody = %q, хочу %q", got, want)
+		}
+	})
+
+	t.Run("пустые строки схлопнуты", func(t *testing.T) {
+		if got, want := formatBody("\nАбзац один.\n\n\n\nАбзац два.\n\n"),
+			"Абзац один.\n\nАбзац два."; got != want {
+			t.Errorf("formatBody = %q, хочу %q", got, want)
+		}
+	})
+
+	t.Run("не заголовки", func(t *testing.T) {
+		for _, line := range []string{
+			"Привет! Как дела?",
+			"— пункт списка",
+			"1. пункт списка",
+			strings.Repeat("длинная строка ", 4),
+		} {
+			if got := formatBody(line); got != tview.Escape(line) {
+				t.Errorf("formatBody(%q) = %q, хочу без заголовка", line, got)
+			}
+		}
+		if got := formatBody("Вводная строка\nОргмоменты\n\nтекст."); strings.Contains(got, accent) {
+			t.Errorf("строка внутри абзаца стала заголовком: %q", got)
+		}
+	})
+
+	t.Run("экранирование", func(t *testing.T) {
+		if got, want := formatBody("[red]Опасный заголовок\n\nтекст."),
+			heading(tview.Escape("[red]Опасный заголовок"))+"\nтекст."; got != want {
+			t.Errorf("formatBody = %q, хочу %q", got, want)
+		}
+		got := formatBody("текст.\n\x1b[2Jопасно")
+		if strings.ContainsRune(got, '\x1b') || !strings.Contains(got, "опасно") {
+			t.Errorf("ESC из тела не вычищен: %q", got)
+		}
+	})
+}
