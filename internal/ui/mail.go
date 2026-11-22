@@ -318,7 +318,18 @@ func newMailScreen(a *App) *mailScreen {
 			s.app.tapp.SetFocus(s.messages)
 			s.app.showHint()
 			return nil
+		case tcell.KeyRight:
+			// WHY (V-27): SetWrap(true) не отключает горизонтальный скролл
+			// tview — → двигает columnOffset и режет начало строк. Переносить
+			// уже нечего, клавишу поглощаем (как и h/l ниже).
+			// Не делать: SetScrollable(false) — пропадёт вертикальная прокрутка
+			// тела и полоса V-17.
+			return nil
 		case tcell.KeyRune:
+			// V-27: h/l — тот же горизонтальный скролл TextView, см. → выше.
+			if r := event.Rune(); r == 'h' || r == 'l' {
+				return nil
+			}
 			if !s.reading {
 				break
 			}

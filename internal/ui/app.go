@@ -215,8 +215,14 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 			a.pages.SwitchToPage(pageMail)
 			a.showHint()
 			return nil
+		case tcell.KeyRight:
+			// V-27: перенос тела делает горизонтальный скролл → бессмысленным
+			// (tview режет начало строк) — клавишу поглощаем, как и h/l.
+			return nil
 		case tcell.KeyRune:
 			switch event.Rune() {
+			case 'h', 'l':
+				return nil // V-27: горизонтальный скролл при SetWrap(true)
 			case 'g', 'G':
 				a.showLinks(a.currentLinks, func() {
 					a.pages.SwitchToPage(pageDetails)

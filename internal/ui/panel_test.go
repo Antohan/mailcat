@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -304,6 +305,77 @@ func TestFolderArrows(t *testing.T) {
 			t.Error("← из папок увела фокус (левее панели нет)")
 		}
 	})
+}
+
+// TestPreviewNoHorizontalScroll (V-27): тело письма переносится по ширине
+// панели чтения, а →/l/h не двигают его вправо (tview иначе двигает
+// columnOffset и режет начало строк): columnOffset остаётся 0, картинка
+// панели не меняется. На полноэкранной странице письма те же клавиши
+// поглощаются.
+func TestPreviewNoHorizontalScroll(t *testing.T) {
+	a := newTestApp(t)
+	a.mail.showReading(mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject:  "Тема",
+			From:     mail.Address{Name: "Иван", Email: "ivan@company.example"},
+			Received: time.Date(2026, 11, 20, 21, 25, 0, 0, time.Local),
+		},
+		BodyText: strings.Repeat("длинная строка текста ", 20) + "\n" + strings.Repeat("токен", 80),
+	})
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(110, 28)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+	a.tapp.QueueUpdateDraw(func() {})
+
+	var x0, y0, w, h int
+	var before []string
+	keys := []*tcell.EventKey{
+		tcell.NewEventKey(tcell.KeyRight, 0, tcell.ModNone),
+		tcell.NewEventKey(tcell.KeyRune, 'l', tcell.ModNone),
+		tcell.NewEventKey(tcell.KeyRune, 'h', tcell.ModNone),
+	}
+	previewHook := a.mail.preview.GetInputCapture()
+	if previewHook == nil {
+		t.Fatal("у панели чтения нет обработчика клавиш")
+	}
+	a.tapp.QueueUpdateDraw(func() {
+		x0, y0, w, h = a.mail.preview.GetInnerRect()
+		for y := y0; y < y0+h; y++ {
+			before = append(before, string(simRow(sim, y)[x0:x0+w]))
+		}
+		handler := a.mail.preview.InputHandler()
+		for _, ev := range keys {
+			if got := previewHook(ev); got != nil {
+				t.Errorf("→/l/h не поглощены в панели чтения: %v", got)
+			}
+			handler(ev, nil)
+		}
+	})
+	a.tapp.QueueUpdateDraw(func() {})
+	if _, col := a.mail.preview.GetScrollOffset(); col != 0 {
+		t.Errorf("горизонтальный offset панели чтения = %d, хочу 0", col)
+	}
+	for i, want := range before {
+		if got := string(simRow(sim, y0+i)[x0 : x0+w]); got != want {
+			t.Errorf("строка %d панели сдвинута после →/l/h:\nбыло  %q\nстало %q", i, want, got)
+		}
+	}
+
+	hook := a.detail.GetInputCapture()
+	if hook == nil {
+		t.Fatal("у страницы письма нет обработчика клавиш")
+	}
+	for _, ev := range keys {
+		if got := hook(ev); got != nil {
+			t.Errorf("→/l/h не поглощены на странице письма: %v", got)
+		}
+	}
 }
 
 // TestScrollThumb (V-17): геометрия бегунка полосы прокрутки — нет
