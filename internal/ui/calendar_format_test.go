@@ -198,25 +198,29 @@ func TestFormatAgenda(t *testing.T) {
 	}
 }
 
-// TestAgendaTitle: заголовок панели «Повестка: 18.11 — N встреч» с русскими
-// формами множественного числа (1 встреча, 2–4 встречи, 5+ встреч, 11–14 встреч).
+// TestAgendaTitle: левая часть шапки повестки без капса и без счётчика (V-31),
+// счётчик — в правой части meetingsCount, с русскими формами множественного
+// числа (1 встреча, 2–4 встречи, 5+ встреч, 11–14 встреч).
 func TestAgendaTitle(t *testing.T) {
 	day := time.Date(2026, 11, 18, 0, 0, 0, 0, time.Local)
+	if got, want := AgendaTitle(day), "Повестка · 18.11"; got != want {
+		t.Errorf("AgendaTitle = %q, хочу %q", got, want)
+	}
 	cases := []struct {
 		n    int
 		want string
 	}{
-		{0, "Повестка: 18.11 — 0 встреч"},
-		{1, "Повестка: 18.11 — 1 встреча"},
-		{3, "Повестка: 18.11 — 3 встречи"},
-		{5, "Повестка: 18.11 — 5 встреч"},
-		{11, "Повестка: 18.11 — 11 встреч"},
-		{21, "Повестка: 18.11 — 21 встреча"},
-		{22, "Повестка: 18.11 — 22 встречи"},
+		{0, "0 встреч"},
+		{1, "1 встреча"},
+		{3, "3 встречи"},
+		{5, "5 встреч"},
+		{11, "11 встреч"},
+		{21, "21 встреча"},
+		{22, "22 встречи"},
 	}
 	for _, c := range cases {
-		if got := AgendaTitle(day, c.n); got != c.want {
-			t.Errorf("AgendaTitle(%d) = %q, хочу %q", c.n, got, c.want)
+		if got := meetingsCount(c.n); got != c.want {
+			t.Errorf("meetingsCount(%d) = %q, хочу %q", c.n, got, c.want)
 		}
 	}
 }
@@ -245,9 +249,13 @@ func TestOnDaySelectedAgenda(t *testing.T) {
 	if len(s.dayLinks) != 1 {
 		t.Errorf("dayLinks = %d ссылок, хочу 1 (для модала g)", len(s.dayLinks))
 	}
-	// RD-2: заголовок панели живёт в строке-заголовке, не в рамке.
-	if title := s.agendaHeader.title; !strings.Contains(title, "1 ВСТРЕЧА") {
-		t.Errorf("заголовок панели: %q", title)
+	// RD-2: заголовок панели живёт в строке-заголовке, не в рамке (V-31:
+	// слева — без капса, справа — счётчик встреч).
+	if title := s.agendaHeader.title; title != "Повестка · 17.11" {
+		t.Errorf("левый заголовок панели: %q", title)
+	}
+	if right := s.agendaHeader.right; right != "1 встреча" {
+		t.Errorf("счётчик повестки: %q", right)
 	}
 }
 

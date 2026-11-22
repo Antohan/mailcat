@@ -163,9 +163,17 @@ func FormatAgenda(events []mail.Event, reg *mail.LinkRegistry) []string {
 	return lines
 }
 
-// AgendaTitle — заголовок панели повестки: «Повестка: 18.11 — 3 встречи».
-func AgendaTitle(day time.Time, count int) string {
-	return fmt.Sprintf("Повестка: %s — %d %s", day.Format("02.01"), count, meetingsWord(count))
+// AgendaTitle — левая часть заголовка повестки: «Повестка · 18.11».
+// V-31: без капса и без счётчика — он уходит в правую часть (meetingsCount).
+func AgendaTitle(day time.Time) string {
+	return "Повестка · " + day.Format("02.01")
+}
+
+// meetingsCount — правая часть шапки панели: «3 встречи» (месяц/повестка).
+// WHY: формы множественного числа нужны и сетке месяца, и повестке; без
+// капса — счётчик стоит рядом с данными, а не UI-подписью.
+func meetingsCount(n int) string {
+	return fmt.Sprintf("%d %s", n, meetingsWord(n))
 }
 
 // meetingsWord — русская форма множественного числа: 1 встреча, 2–4 встречи,

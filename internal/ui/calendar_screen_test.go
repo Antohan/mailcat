@@ -30,9 +30,13 @@ func TestCalendarWithoutBanner(t *testing.T) {
 	}()
 	a.tapp.QueueUpdateDraw(func() {})
 
-	// Строка 0 — верхний бар, строка 1 — шапка панели с месяцем.
-	if row := string(simRow(sim, 1)); runeIndex(simRow(sim, 1), "НОЯБРЬ 2026") < 0 {
+	// Строка 0 — верхний бар, строка 1 — шапка панели с месяцем (V-31: без капса).
+	if row := string(simRow(sim, 1)); runeIndex(simRow(sim, 1), "Ноябрь 2026") < 0 {
 		t.Errorf("месяца нет в шапке панели: %q", row)
+	}
+	// V-31: справа в шапке сетки — счётчик встреч месяца.
+	if row := string(simRow(sim, 1)); runeIndex(simRow(sim, 1), "0 встреч") < 0 {
+		t.Errorf("счётчика встреч нет в шапке сетки: %q", row)
 	}
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {

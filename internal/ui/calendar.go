@@ -49,8 +49,12 @@ func newCalendarScreen(a *App) *calendarScreen {
 	s.agendaHeader = newPanelHeader("Повестка дня")
 	// V-30: баннера месяца нет — месяц показывает шапка панели (RD-2), сетка
 	// начинается сразу под ней.
+	// WHY (V-31): разделитель между колонками — как на почте (V-3): правый
+	// счётчик шапки сетки иначе упирается в заголовок «Повестка» соседней
+	// панели. Не делать: отступ пустой колонкой — линия есть у почты.
 	s.root = tview.NewFlex().
 		AddItem(panelColumn(s.gridHeader, s.grid), 0, 55, true).
+		AddItem(newDivider(), 1, 0, false).
 		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 45, false)
 
 	s.grid.SetSelectionChangedFunc(func(row, col int) {
@@ -115,6 +119,7 @@ func (s *calendarScreen) monthKey() string {
 func (s *calendarScreen) shiftMonth(delta int) {
 	t := time.Date(s.year, s.month+time.Month(delta), 1, 0, 0, 0, 0, time.Local)
 	s.year, s.month = t.Year(), t.Month()
+	s.app.updateTopBar() // V-31: верхний бар календаря — месяц, как шапка сетки
 	s.loadMonth()
 }
 
@@ -156,7 +161,7 @@ func (s *calendarScreen) loadMonth() {
 // день — инверсия выделения таблицы (разные маркеры).
 func (s *calendarScreen) render() {
 	s.grid.Clear()
-	s.gridHeader.SetTitle(MonthTitle(s.year, s.month))
+	s.gridHeader.SetListTitle(MonthTitle(s.year, s.month), meetingsCount(len(s.events)))
 	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 	for col, name := range weekdays {
 		s.grid.SetCell(0, col, tview.NewTableCell(name).
@@ -222,7 +227,7 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 			s.agenda.AddItem(line, "", 0, nil)
 		}
 	}
-	s.agendaHeader.SetTitle(AgendaTitle(day, len(s.dayEvents)))
+	s.agendaHeader.SetListTitle(AgendaTitle(day), meetingsCount(len(s.dayEvents)))
 }
 
 // openEventDetails показывает детали выбранной встречи; ссылки на созвон

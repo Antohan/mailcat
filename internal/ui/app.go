@@ -349,13 +349,19 @@ func (a *App) Run() error {
 	return err
 }
 
-// updateTopBar пересобирает верхний бар (V-6, V-11): «mailcat · <папка>» —
-// имя папки из EWS: Sanitize + Escape (инвариант escape). Дата/время и точка
+// updateTopBar пересобирает верхний бар (V-6, V-11): «mailcat · <папка>» на
+// почте и «mailcat · <месяц>» на календаре (V-31) — по фронт-странице.
+// Имя папки из EWS: Sanitize + Escape (инвариант escape). Дата/время и точка
 // связи убраны: статус связи живёт в футере сайдбара (V-4, V-12).
-// Зовётся при старте и смене папки (selectFolder).
+// Зовётся при старте, смене папки (selectFolder), 1/2 (globalKeys) и смене
+// месяца (shiftMonth).
 func (a *App) updateTopBar() {
 	left := "[::b]mailcat[-::-]"
-	if name := a.mail.folderName; name != "" {
+	name := a.mail.folderName
+	if page, _ := a.pages.GetFrontPage(); page == pageCalendar {
+		name = MonthTitle(a.calendar.year, a.calendar.month)
+	}
+	if name != "" {
 		left += mutedText(" · ") + tview.Escape(security.Sanitize(name))
 	}
 	a.topLeft.SetText(left)
@@ -422,6 +428,7 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 		case '1':
 			a.closeModals(a.mail.messages)
 			a.pages.SwitchToPage(pageMail)
+			a.updateTopBar() // V-31: на почте — папка
 			a.showHint()
 			return nil
 		case '2':
@@ -430,6 +437,7 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 			// останутся на месте (UI-9).
 			a.closeModals(a.calendar.grid)
 			a.pages.SwitchToPage(pageCalendar)
+			a.updateTopBar() // V-31: на календаре — месяц
 			a.showHint()
 			a.calendar.ensureLoaded()
 			return nil

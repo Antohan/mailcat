@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -41,6 +42,23 @@ func TestTopBar(t *testing.T) {
 	}
 	a.tapp.Stop()
 	<-done
+}
+
+// TestTopBarCalendarMonth (V-31): на календаре верхний бар показывает месяц,
+// после 1 — снова имя папки. ensureLoaded не ходит в сеть: месяц «загружен».
+func TestTopBarCalendarMonth(t *testing.T) {
+	a := newTestApp(t)
+	a.mail.folderName = "Входящие"
+	a.calendar.year, a.calendar.month = 2026, time.November
+	a.calendar.loadedKey = a.calendar.monthKey()
+	a.globalKeys(tcell.NewEventKey(tcell.KeyRune, '2', tcell.ModNone))
+	if got := a.topLeft.GetText(true); !strings.Contains(got, "Ноябрь 2026") {
+		t.Errorf("верхний бар календаря: %q", got)
+	}
+	a.globalKeys(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone))
+	if got := a.topLeft.GetText(true); !strings.Contains(got, "Входящие") {
+		t.Errorf("верхний бар почты: %q", got)
+	}
 }
 
 // TestConnFooter: футер сайдбара в две строки (V-12) — «● Connected» и
