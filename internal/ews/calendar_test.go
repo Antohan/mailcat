@@ -47,6 +47,84 @@ func TestCalendarRequestGolden(t *testing.T) {
 	assertXMLLike(t, "запрос CalendarView", data, want)
 }
 
+// TestEventBodyRequestGolden: запрос описания встречи совпадает с §11:
+// BaseShape Default + item:TextBody, тот же m:GetItem, без BodyType.
+func TestEventBodyRequestGolden(t *testing.T) {
+	data, err := xml.MarshalIndent(newEventBodyRequest("AAMkAGI2CAL1=", "DwAAABYAAA"), "", "  ")
+	if err != nil {
+		t.Fatalf("маршалинг запроса описания: %v", err)
+	}
+	want := []byte(`<m:GetItem
+	    xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+	    xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types">
+	  <m:ItemShape>
+	    <t:BaseShape>Default</t:BaseShape>
+	    <t:AdditionalProperties>
+	      <t:FieldURI FieldURI="item:TextBody"/>
+	    </t:AdditionalProperties>
+	  </m:ItemShape>
+	  <m:ItemIds>
+	    <t:ItemId Id="AAMkAGI2CAL1=" ChangeKey="DwAAABYAAA"/>
+	  </m:ItemIds>
+	</m:GetItem>`)
+	assertXMLLike(t, "запрос описания встречи", data, want)
+}
+
+// TestEventBodyParse: фикстура §11 — t:CalendarItem с HTML-телом; TextBody нет,
+// HTML отдаётся как BodyHTML (конвертация в текст — в internal/mail).
+func TestEventBodyParse(t *testing.T) {
+	var resp getEventBodyResponse
+	if err := parseResponse(fixture(t, "getitem_calendar_response.xml"), &resp); err != nil {
+		t.Fatalf("parseResponse: %v", err)
+	}
+	body, err := resp.result()
+	if err != nil {
+		t.Fatalf("result: %v", err)
+	}
+	if body.BodyType != "Html" || !strings.Contains(body.BodyHTML, "https://meet.example/x") {
+		t.Errorf("HTML описания = %q (%s)", body.BodyHTML, body.BodyType)
+	}
+	if body.BodyText != "" {
+		t.Errorf("BodyText = %q, хочу пусто (сервер дал только HTML)", body.BodyText)
+	}
+}
+
+// TestEventBodyParseTextBody: TextBody — основной путь; пустой и текстовый
+// t:Body (BodyType=Text) тоже разбираются.
+func TestEventBodyParseTextBody(t *testing.T) {
+	cases := []struct {
+		name, item, wantText, wantHTML string
+	}{
+		{"TextBody предпочтителен",
+			`<t:CalendarItem><t:ItemId Id="A"/><t:Body BodyType="Html">&lt;p&gt;html&lt;/p&gt;</t:Body><t:TextBody>текст</t:TextBody></t:CalendarItem>`,
+			"текст", "<p>html</p>"},
+		{"BodyType=Text без TextBody",
+			`<t:CalendarItem><t:ItemId Id="A"/><t:Body BodyType="Text">текст</t:Body></t:CalendarItem>`,
+			"текст", ""},
+		{"описание пустое",
+			`<t:CalendarItem><t:ItemId Id="A"/></t:CalendarItem>`,
+			"", ""},
+	}
+	for _, c := range cases {
+		xmlData := `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages" xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"><soap:Body>` +
+			`<m:GetItemResponse><m:ResponseMessages><m:GetItemResponseMessage ResponseClass="Success"><m:Items>` +
+			c.item + `</m:Items></m:GetItemResponseMessage></m:ResponseMessages></m:GetItemResponse>` +
+			`</soap:Body></soap:Envelope>`
+		var resp getEventBodyResponse
+		if err := parseResponse([]byte(xmlData), &resp); err != nil {
+			t.Fatalf("%s: parseResponse: %v", c.name, err)
+		}
+		body, err := resp.result()
+		if err != nil {
+			t.Fatalf("%s: result: %v", c.name, err)
+		}
+		if body.BodyText != c.wantText || body.BodyHTML != c.wantHTML {
+			t.Errorf("%s: BodyText=%q BodyHTML=%q, хочу %q/%q",
+				c.name, body.BodyText, body.BodyHTML, c.wantText, c.wantHTML)
+		}
+	}
+}
+
 // TestCalendarParse: фикстура — 3 встречи (Occurrence раскрыта сервером,
 // Exception и Single), статусы ответов, участники.
 func TestCalendarParse(t *testing.T) {

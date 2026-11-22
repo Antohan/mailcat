@@ -5,6 +5,7 @@ package mail
 // ruling этапа 2: первый потребитель — UI.
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -140,4 +141,24 @@ func TestConvertEvents(t *testing.T) {
 	if ResponseTypeLabel(e.MyResponseType) != "принято" {
 		t.Errorf("ярлык статуса не работает в связке")
 	}
+}
+
+// TestFullEventBody: TextBody сервера — приоритет; только HTML — конвертация
+// в текст (оффлайн), как у письма (FullMessage).
+func TestFullEventBody(t *testing.T) {
+	got := FullEventBody(ews.EventBody{BodyText: "готовый текст", BodyHTML: "<p>html</p>"})
+	if got.BodyText != "готовый текст" || got.BodyHTML != "<p>html</p>" {
+		t.Errorf("TextBody не приоритет: %+v", got)
+	}
+	got = FullEventBody(ews.EventBody{BodyHTML: "<p>Повестка<br>релиз</p>"})
+	if !containsBoth(got.BodyText, "Повестка", "релиз") {
+		t.Errorf("HTML не конвертирован в текст: %q", got.BodyText)
+	}
+	if got := FullEventBody(ews.EventBody{}); got != (EventBody{}) {
+		t.Errorf("пустое описание: %+v", got)
+	}
+}
+
+func containsBoth(s, a, b string) bool {
+	return strings.Contains(s, a) && strings.Contains(s, b)
 }

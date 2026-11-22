@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"mailcat/internal/mail"
 	"mailcat/internal/security"
@@ -195,36 +196,30 @@ func meetingsWord(n int) string {
 	}
 }
 
-// FormatEventDetails — детали встречи: организатор, участники, ваш статус.
-func FormatEventDetails(ev mail.Event) string {
+// FormatEventHeader — шапка деталей встречи в типографике письма (V-36):
+// подписи как в FormatMessageHeader, тема жирным, линия-разделитель; тело
+// печатает showEventDetails. «Место» проходит через реестр ссылок: URL
+// заменяется маркером [N] host (модал g), как в повестке. Все данные EWS —
+// Sanitize + tview.Escape (строка попадает в TextView с dynamic colors).
+func FormatEventHeader(ev mail.Event, reg *mail.LinkRegistry) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Тема:    %s\n", security.Sanitize(ev.Subject))
-	fmt.Fprintf(&b, "Начало:  %s\n", ev.Start.Local().Format("02.01.2006 15:04"))
-	fmt.Fprintf(&b, "Конец:   %s\n", ev.End.Local().Format("02.01.2006 15:04"))
-	if ev.Location != "" {
-		fmt.Fprintf(&b, "Место:   %s\n", security.Sanitize(ev.Location))
+	fmt.Fprintf(&b, "[::b]Тема:  %s[-::-]\n", tview.Escape(security.Sanitize(ev.Subject)))
+	if org := ev.Organizer.String(); org != "" {
+		b.WriteString("От:    " + tview.Escape(security.Sanitize(org)) + "\n")
 	}
-	fmt.Fprintf(&b, "Организатор: %s\n", security.Sanitize(ev.Organizer.String()))
-	fmt.Fprintf(&b, "Ваш статус:  %s\n", mail.ResponseTypeLabel(ev.MyResponseType))
 	if len(ev.RequiredAttendees) > 0 {
-		b.WriteString("Обязательные: ")
-		for i, a := range ev.RequiredAttendees {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(security.Sanitize(a.String()))
-		}
-		b.WriteString("\n")
+		b.WriteString("Кому:  " + tview.Escape(security.Sanitize(joinAddresses(ev.RequiredAttendees))) + "\n")
 	}
 	if len(ev.OptionalAttendees) > 0 {
-		b.WriteString("Необязательные: ")
-		for i, a := range ev.OptionalAttendees {
-			if i > 0 {
-				b.WriteString(", ")
-			}
-			b.WriteString(security.Sanitize(a.String()))
-		}
-		b.WriteString("\n")
+		b.WriteString("Копия: " + tview.Escape(security.Sanitize(joinAddresses(ev.OptionalAttendees))) + "\n")
 	}
+	fmt.Fprintf(&b, "Дата:  %s–%s\n",
+		ev.Start.Local().Format("02.01.2006 15:04"), ev.End.Local().Format("15:04"))
+	if ev.Location != "" {
+		loc := reg.RenderBody(ev.Location)
+		b.WriteString("Место: " + tview.Escape(security.Sanitize(loc)) + "\n")
+	}
+	fmt.Fprintf(&b, "Статус: %s\n", mail.ResponseTypeLabel(ev.MyResponseType))
+	b.WriteString(mutedText(strings.Repeat("─", headerRuleWidth)) + "\n")
 	return b.String()
 }

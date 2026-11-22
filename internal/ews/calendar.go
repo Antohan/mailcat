@@ -8,6 +8,7 @@ package ews
 import (
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -90,7 +91,8 @@ type findEventsResponse struct {
 	} `xml:"ResponseMessages"`
 }
 
-// xmlCalendarItem — t:CalendarItem из ответа CalendarView (§8).
+// xmlCalendarItem — t:CalendarItem из ответа CalendarView (§8) или GetItem
+// описания (§11): тело запрашивается только у GetItem.
 type xmlCalendarItem struct {
 	ItemID         xmlItemIDRef      `xml:"ItemId"`
 	Subject        string            `xml:"Subject"`
@@ -102,6 +104,84 @@ type xmlCalendarItem struct {
 	MyResponseType string            `xml:"MyResponseType"`
 	Required       *xmlMailboxList   `xml:"RequiredAttendees"`
 	Optional       *xmlMailboxList   `xml:"OptionalAttendees"`
+	Body           xmlBody           `xml:"Body"`
+	TextBody       string            `xml:"TextBody"`
+}
+
+// EventBody — описание встречи из GetItem (§11). ItemId и ChangeKey уже есть
+// из CalendarView (§8), поэтому в ответе они не дублируются.
+type EventBody struct {
+	BodyType string // Html | Text — формат t:Body из ответа (fallback-путь)
+	BodyHTML string // содержимое t:Body при BodyType="Html"
+	BodyText string // t:TextBody; если сервер вернул Text — t:Body
+}
+
+// GetEventBody читает описание встречи по ItemId и ChangeKey (EWS-REFERENCE §11).
+func (c *Client) GetEventBody(ctx context.Context, itemID, changeKey string) (EventBody, error) {
+	var resp getEventBodyResponse
+	if err := c.Do(ctx, newEventBodyRequest(itemID, changeKey), &resp); err != nil {
+		return EventBody{}, fmt.Errorf("чтение встречи: %w", err)
+	}
+	body, err := resp.result()
+	if err != nil {
+		return EventBody{}, fmt.Errorf("чтение встречи: %w", err)
+	}
+	return body, nil
+}
+
+// newEventBodyRequest строит запрос по шаблону EWS-REFERENCE.md §11: тела нет
+// в BaseShape, нужен item:TextBody; BodyType не запрашиваем (§6/§11).
+func newEventBodyRequest(itemID, changeKey string) *getItemRequest {
+	return &getItemRequest{
+		ItemShape: itemShapeRequest{
+			BaseShape: "Default",
+			AdditionalProperties: &additionalPropertiesRequest{FieldURIs: []fieldURIRequest{
+				{FieldURI: "item:TextBody"},
+			}},
+		},
+		ItemIDs: itemIdsRequest{
+			ItemID: xmlItemIDRequest{ID: itemID, ChangeKey: changeKey},
+		},
+	}
+}
+
+// getEventBodyResponse — m:GetItemResponse с t:CalendarItem (разбор по
+// локальным именам, soap.go); отдельная структура от письма — другой тип
+// элемента в t:Items.
+type getEventBodyResponse struct {
+	XMLName          xml.Name `xml:"GetItemResponse"`
+	ResponseMessages struct {
+		GetItemResponseMessage struct {
+			responseHeader
+			Items struct {
+				CalendarItem []xmlCalendarItem `xml:"CalendarItem"`
+			} `xml:"Items"`
+		} `xml:"GetItemResponseMessage"`
+	} `xml:"ResponseMessages"`
+}
+
+// result проверяет ResponseClass и конвертирует первое описание встречи.
+func (r *getEventBodyResponse) result() (EventBody, error) {
+	msg := &r.ResponseMessages.GetItemResponseMessage
+	if err := msg.err(); err != nil {
+		return EventBody{}, err
+	}
+	if len(msg.Items.CalendarItem) == 0 {
+		return EventBody{}, errors.New("в ответе GetItem нет встречи (удалена или перемещена)")
+	}
+	return msg.Items.CalendarItem[0].eventBody(), nil
+}
+
+// eventBody конвертирует t:CalendarItem в EventBody (та же логика, что у
+// письма: TextBody основной, t:Body — fallback).
+func (it *xmlCalendarItem) eventBody() EventBody {
+	b := EventBody{BodyType: it.Body.BodyType, BodyText: it.TextBody}
+	if it.Body.BodyType == "Html" {
+		b.BodyHTML = it.Body.Value
+	} else if b.BodyText == "" {
+		b.BodyText = it.Body.Value
+	}
+	return b
 }
 
 // result проверяет ResponseClass и конвертирует ответ в []CalendarEvent.

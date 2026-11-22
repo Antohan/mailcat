@@ -392,28 +392,35 @@ func TestAgendaListStyles(t *testing.T) {
 	<-done
 }
 
-func TestFormatEventDetails(t *testing.T) {
+func TestFormatEventHeader(t *testing.T) {
 	ev := mail.Event{
 		Subject:           "Синк команды",
 		Start:             nov(t, 17, 10, 0),
 		End:               nov(t, 17, 10, 30),
-		Location:          "Zoom",
+		Location:          "https://meet.example/x",
 		Organizer:         mail.Address{Name: "Иванов И.", Email: "ivanov@company.example"},
 		MyResponseType:    "Accept",
 		RequiredAttendees: []mail.Address{{Email: "apetrova@company.example"}},
 		OptionalAttendees: []mail.Address{{Email: "dkuznetsov@company.example"}},
 	}
-	got := FormatEventDetails(ev)
+	reg := mail.NewLinkRegistry()
+	got := FormatEventHeader(ev, reg)
 	for _, want := range []string{
-		"Синк команды", "10:00", "10:30", "Zoom",
-		"Иванов И. <ivanov@company.example>",
-		"Обязательные:", "apetrova@company.example",
-		"Необязательные:", "dkuznetsov@company.example",
-		"Ваш статус", "принято",
+		"[::b]Тема:  Синк команды[-::-]",
+		"От:    Иванов И. <ivanov@company.example>",
+		"Кому:  apetrova@company.example",
+		"Копия: dkuznetsov@company.example",
+		"10:00–10:30",
+		"Место: [1[] meet.example", // URL в «Месте» — маркер реестра, не сырой адрес
+		"Статус: принято",
+		mutedText(strings.Repeat("─", headerRuleWidth)),
 	} {
 		if !strings.Contains(got, want) {
-			t.Errorf("в деталях нет %q:\n%s", want, got)
+			t.Errorf("в шапке встречи нет %q:\n%s", want, got)
 		}
+	}
+	if len(reg.List()) != 1 {
+		t.Errorf("ссылок «Места» в реестре = %d, хочу 1", len(reg.List()))
 	}
 }
 
@@ -425,4 +432,89 @@ func TestMonthBounds(t *testing.T) {
 	if end.Day() != 30 || end.Month() != time.November {
 		t.Errorf("end = %v", end)
 	}
+}
+
+// TestShowEventDetailsBody (V-36): страница встречи — шапка в типографике
+// письма, тело тем же конвейером (HTML → текст, ссылки, Escape); пустое
+// описание — заглушка. Повторный Enter берёт кэш (без клиента — иначе паника).
+func TestShowEventDetailsBody(t *testing.T) {
+	a := newTestApp(t)
+	ev := mail.Event{
+		ItemID: "AAMkCAL", Subject: "Синк",
+		Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30),
+		Location: "https://meet.example/x", MyResponseType: "Accept",
+	}
+
+	a.showEventDetails(ev, mail.EventBody{})
+	text := a.event.GetText(false)
+	for _, want := range []string{"Тема:  Синк", "Место: [1[] meet.example", "Статус: принято", "(Встреча без описания)"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("пустое описание: нет %q:\n%s", want, text)
+		}
+	}
+	if len(a.currentLinks) != 1 {
+		t.Errorf("ссылок «Места» = %d, хочу 1", len(a.currentLinks))
+	}
+
+	a.showEventDetails(ev, mail.EventBody{
+		BodyHTML: `<p>Повестка: релиз</p><p>Созвон https://call.example/room</p>`,
+		BodyText: "текст",
+	})
+	text = a.event.GetText(false)
+	for _, want := range []string{"Повестка", "Созвон [2[] call.example"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("HTML-описание: нет %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "(Встреча без описания)") {
+		t.Error("при непустом описании осталась заглушка")
+	}
+	if len(a.currentLinks) != 2 {
+		t.Errorf("ссылок = %d, хочу 2 (место + тело)", len(a.currentLinks))
+	}
+
+	// Кэш: описание уже загружено — второй Enter не идёт в сеть (client nil).
+	s := a.calendar
+	s.dayEvents = []mail.Event{ev}
+	s.eventBodies = map[string]mail.EventBody{ev.ItemID: {BodyText: "из кэша"}}
+	s.openEventDetails(0)
+	s.openEventDetails(0)
+	if got := a.event.GetText(false); !strings.Contains(got, "из кэша") {
+		t.Errorf("кэш не использован:\n%s", got)
+	}
+	if len(s.eventLoading) != 0 {
+		t.Errorf("кэш-путь оставил загрузку: %v", s.eventLoading)
+	}
+}
+
+// TestEventDetailsScreen (V-36): sim страницы — шапка и описание видны в
+// терминале, тело переносится по ширине.
+func TestEventDetailsScreen(t *testing.T) {
+	a := newTestApp(t)
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(100, 30)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	ev := mail.Event{
+		Subject: "Синк команды", Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30),
+		Location: "Zoom", MyResponseType: "Accept",
+	}
+	a.tapp.QueueUpdateDraw(func() {
+		a.showEventDetails(ev, mail.EventBody{BodyText: "Повестка: релиз\n\nОбсуждение сроков."})
+	})
+	joined := ""
+	for y := 0; y < 30; y++ {
+		joined += string(simRow(sim, y))
+	}
+	for _, want := range []string{"Встреча", "Тема:  Синк команды", "10:00–10:30", "Место: Zoom", "Обсуждение сроков"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("на экране нет %q", want)
+		}
+	}
+	a.tapp.Stop()
+	<-done
 }

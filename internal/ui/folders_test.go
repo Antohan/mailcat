@@ -32,7 +32,11 @@ func mockFixture(t *testing.T, reqBody string) []byte {
 	case strings.Contains(reqBody, "FindFolder"):
 		file = "findfolder_response.xml"
 	case strings.Contains(reqBody, "GetItem"):
-		file = "getitem_response.xml"
+		if strings.Contains(reqBody, "AAMkAGI2CAL") {
+			file = "getitem_calendar_response.xml"
+		} else {
+			file = "getitem_response.xml"
+		}
 	case strings.Contains(reqBody, "CalendarView"):
 		file = "calendar_response.xml"
 	case strings.Contains(reqBody, `Offset="0"`), !strings.Contains(reqBody, "Offset="):

@@ -34,6 +34,10 @@ type calendarScreen struct {
 
 	dayEvents []mail.Event    // события выбранного дня (для повестки)
 	dayLinks  []mail.LinkInfo // ссылки повестки дня (модал g)
+
+	// V-36: описания встреч по ItemId — GetItem один раз на встречу.
+	eventBodies  map[string]mail.EventBody
+	eventLoading map[string]bool
 }
 
 func newCalendarScreen(a *App) *calendarScreen {
@@ -330,14 +334,43 @@ func (s *calendarScreen) restyleAgenda(sel int) {
 	s.dayLinks = reg.List()
 }
 
-// openEventDetails показывает детали выбранной встречи; ссылки на созвон
-// (в поле «Место») — через реестр ссылок, как в письмах (PLAN этап 4).
+// openEventDetails показывает детали выбранной встречи: описание догружается
+// GetItem (V-36) один раз на ItemId — повторный Enter берёт кэш; пока идёт
+// запрос, второй Enter ничего не запускает.
 func (s *calendarScreen) openEventDetails(idx int) {
 	if idx < 0 || idx >= len(s.dayEvents) {
 		return
 	}
 	ev := s.dayEvents[idx]
-	s.app.showEventDetails(ev)
+	if body, ok := s.eventBodies[ev.ItemID]; ok {
+		s.app.showEventDetails(ev, body)
+		return
+	}
+	if s.eventLoading[ev.ItemID] {
+		return
+	}
+	if s.eventLoading == nil {
+		s.eventLoading = make(map[string]bool)
+	}
+	s.eventLoading[ev.ItemID] = true
+	id := s.app.beginLoad("Загрузка встречи…")
+	go func() {
+		raw, err := s.app.client.GetEventBody(s.app.ctx, ev.ItemID, ev.ChangeKey)
+		s.app.tapp.QueueUpdateDraw(func() {
+			s.app.endLoad(id)
+			delete(s.eventLoading, ev.ItemID)
+			if err != nil {
+				s.app.showError(err)
+				return
+			}
+			if s.eventBodies == nil {
+				s.eventBodies = make(map[string]mail.EventBody)
+			}
+			body := mail.FullEventBody(raw)
+			s.eventBodies[ev.ItemID] = body
+			s.app.showEventDetails(ev, body)
+		})
+	}()
 }
 
 func cellOf(grid [][]DayCell, day int) (int, int) {

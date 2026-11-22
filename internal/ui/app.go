@@ -266,7 +266,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	event := tview.NewTextView().
 		SetWrap(true).
 		SetScrollable(true).
-		SetDynamicColors(false)
+		SetDynamicColors(true)
 	event.SetBorder(true).SetTitle(" Встреча ")
 	event.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
@@ -527,20 +527,26 @@ func (a *App) layoutDetails(w int) {
 	}
 }
 
-// showEventDetails выводит детали встречи; ссылки на созвон из «Места» —
-// через реестр (модал g, как в письмах; PLAN.md этап 4).
-func (a *App) showEventDetails(ev mail.Event) {
+// showEventDetails выводит детали встречи: шапка в типографике письма (V-36),
+// описание — тем же конвейером (реестр ссылок + formatBody/Sanitize+Escape),
+// пустое — заглушкой. Ссылки «Места» и тела попадают в модал g.
+func (a *App) showEventDetails(ev mail.Event, body mail.EventBody) {
 	reg := mail.NewLinkRegistry()
-	text := FormatEventDetails(ev)
-	if ev.Location != "" {
-		rendered := reg.RenderBody(ev.Location)
-		if len(reg.List()) > 0 {
-			text += "\nСсылки: " + security.Sanitize(rendered) + "\n(g — все ссылки)"
-		}
+	header := FormatEventHeader(ev, reg)
+	var text string
+	if body.BodyHTML != "" {
+		text = reg.RenderBodyHTML(body.BodyHTML)
+	} else {
+		text = reg.RenderBody(body.BodyText)
+	}
+	if formatted := formatBody(text); formatted == "" {
+		text = mutedText("(Встреча без описания)")
+	} else {
+		text = formatted
 	}
 	a.currentLinks = reg.List()
 	a.currentAttachments = nil
-	a.event.SetText(security.Sanitize(text))
+	a.event.SetText(header + text)
 	a.event.ScrollToBeginning()
 	a.pages.SwitchToPage(pageEvent)
 	a.tapp.SetFocus(a.event)
