@@ -5,6 +5,8 @@ package ui
 // и счётчик встреч стояли в левом верхнем углу ячейки.
 
 import (
+	"strings"
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -113,7 +115,8 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 }
 
 // Draw рисует шапку дней недели и дни: число и «·N» — в левом верхнем углу
-// ячейки, выбранный день залит colorSelectedBg целиком (V-33 уточнит палитру).
+// ячейки; выбранный день залит colorSelectedBg целиком, «сегодня» — tint
+// colorTodayBg + bold, Сб/Вс — colorWeekend (V-33).
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
@@ -135,27 +138,44 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			if cw <= 0 || ch <= 0 {
 				continue
 			}
-			style := tcell.StyleDefault.Foreground(colorTextPrimary).Background(colorPanelBg)
-			if col >= 5 {
-				style = style.Foreground(colorWeekend) // Сб/Вс
-			}
-			today := cell.Day == g.today
-			if today {
-				// О-3: «сегодня» — светлый оттенок акцента; сплошной акцент
-				// занят выбором, иначе выбранный день не отличить от сегодня.
-				style = style.Bold(true).Background(colorTodayBg)
-			}
-			if g.hasSel && row == g.selRow && col == g.selCol {
-				style = style.Foreground(colorSelectedFg).Background(colorSelectedBg).Bold(false)
-			}
+			dayStyle, countStyle := g.cellStyles(row, col)
 			for yy := cy; yy < cy+ch; yy++ {
 				for xx := cx; xx < cx+cw; xx++ {
-					screen.SetContent(x+xx, y+yy, ' ', nil, style)
+					screen.SetContent(x+xx, y+yy, ' ', nil, dayStyle)
 				}
 			}
-			gridText(screen, x+cx, y+cy, cw, FormatDayCell(cell, today), style)
+			label := FormatDayCell(cell)
+			dayText, count, _ := strings.Cut(label, "·")
+			gridText(screen, x+cx, y+cy, cw, dayText, dayStyle)
+			if count != "" {
+				dx := len([]rune(dayText))
+				gridText(screen, x+cx+dx, y+cy, cw-dx, "·"+count, countStyle)
+			}
 		}
 	}
+}
+
+// cellStyles — стили числа и счётчика «·N» одной ячейки. Состояния
+// накладываются по порядку: выходной → «сегодня» → выбранный.
+// WHY: счётчик — второстепенный текст, но на акцентной заливке он берёт
+// colorSelectedFg: colorTextSecondary на акценте нечитаем.
+// Не делать: один стиль на всю строку — счётчик перестал бы отличаться.
+func (g *monthGrid) cellStyles(row, col int) (day, count tcell.Style) {
+	day = tcell.StyleDefault.Foreground(colorTextPrimary).Background(colorPanelBg)
+	count = tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+	if col >= 5 {
+		day = day.Foreground(colorWeekend) // Сб/Вс
+	}
+	if g.cells[row][col].Day == g.today {
+		// О-3: «сегодня» — светлый оттенок акцента, сплошной занят выбором.
+		day = day.Bold(true).Background(colorTodayBg)
+		count = count.Background(colorTodayBg)
+	}
+	if g.hasSel && row == g.selRow && col == g.selCol {
+		day = tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
+		count = tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
+	}
+	return day, count
 }
 
 // gridText рисует строку без tview-разметки, обрезая по ширине ячейки:

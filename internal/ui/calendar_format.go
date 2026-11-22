@@ -78,20 +78,17 @@ func MonthTitle(year int, month time.Month) string {
 	return fmt.Sprintf("%s %d", russianMonths[month-1], year)
 }
 
-// FormatDayCell — текст ячейки сетки месяца (UI-5): число дня, при событиях —
-// их количество («17·2»), сегодня — в скобках («[17]»/«[17·2]»).
-// WHY: выбранный день отдельного маркера не имеет — его показывает инверсия
-// выделения таблицы, поэтому маркер «сегодня» (скобки) с ним не путается.
-func FormatDayCell(cell DayCell, today bool) string {
+// FormatDayCell — текст ячейки сетки месяца: число дня, при событиях — их
+// количество («17·2»).
+// WHY: маркер «сегодня» и выбранный день живут в стиле ячейки, а не в тексте
+// (V-33): скобки «[N]» путались с маркерами ссылок.
+func FormatDayCell(cell DayCell) string {
 	if cell.Day == 0 {
 		return ""
 	}
 	text := fmt.Sprintf("%2d", cell.Day)
 	if cell.Events > 0 {
 		text += fmt.Sprintf("·%d", cell.Events)
-	}
-	if today {
-		text = "[" + text + "]"
 	}
 	return text
 }

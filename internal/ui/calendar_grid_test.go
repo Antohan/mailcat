@@ -136,3 +136,78 @@ func TestCalendarGridFillsPanel(t *testing.T) {
 	a.tapp.Stop()
 	<-done
 }
+
+// TestMonthGridStyles: палитра ячеек (V-33) — выбранный день залит целиком
+// colorSelectedBg, «сегодня» — tint colorTodayBg + bold, Сб/Вс — colorWeekend,
+// «·N» — colorTextSecondary (на акценте — colorSelectedFg). Цвета — RGB-роли,
+// поэтому на 256-цветном терминале и в truecolor они одни и те же.
+func TestMonthGridStyles(t *testing.T) {
+	g := newMonthGrid()
+	g.SetBorder(true)
+	const w, h = 72, 14
+	g.SetRect(0, 0, w, h)
+	cells := MonthGrid(2026, time.November, nil)
+	for _, ev := range []struct{ day, events int }{{17, 2}, {20, 3}} {
+		row, col := cellOf(cells, ev.day)
+		cells[row][col].Events = ev.events
+	}
+	g.SetCells(cells, 17) // «сегодня» — 17 ноября
+	g.SelectDay(20)       // выбранный — 20 ноября (пятница)
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	sim.SetSize(w, h)
+	g.Draw(sim)
+
+	ix, iy, iw, ih := g.GetInnerRect()
+	cell := func(day int) (x, y, cw int) {
+		row, col := cellOf(cells, day)
+		cx, cy, cw, _ := dayCellRect(row, col, iw, ih)
+		return ix + cx, iy + cy, cw
+	}
+	styleAt := func(x, y int) tcell.Style {
+		_, _, st, _ := sim.GetContent(x, y)
+		return st
+	}
+
+	// Шапка дней недели — второстепенный текст.
+	if fg, _, _ := styleAt(ix, iy).Decompose(); fg != colorTextSecondary {
+		t.Errorf("дни недели: fg=%v, хочу colorTextSecondary", fg)
+	}
+
+	// Выбранный день: сплошная заливка на всю ширину, текст — onAccent.
+	x, y, cw := cell(20)
+	if r, _, _, _ := sim.GetContent(x, y); r != '2' {
+		t.Errorf("в выбранной ячейке %q, ждали число 20", r)
+	}
+	fg, bg, _ := styleAt(x, y).Decompose()
+	if fg != colorSelectedFg || bg != colorSelectedBg {
+		t.Errorf("выбранный день: fg/bg=%v/%v, хочу %v/%v", fg, bg, colorSelectedFg, colorSelectedBg)
+	}
+	if _, blankBg, _ := styleAt(x+cw-1, y).Decompose(); blankBg != colorSelectedBg {
+		t.Errorf("выбранный день залит не целиком: пустая клетка bg=%v", blankBg)
+	}
+	if fg, _, _ := styleAt(x+2, y).Decompose(); fg != colorSelectedFg {
+		t.Errorf("счётчик на акценте: fg=%v, хочу colorSelectedFg", fg)
+	}
+
+	// «Сегодня»: tint-фон и жирный номер; счётчик остаётся secondary.
+	x, y, _ = cell(17)
+	fg, bg, attr := styleAt(x, y).Decompose()
+	if fg != colorTextPrimary || bg != colorTodayBg || attr&tcell.AttrBold == 0 {
+		t.Errorf("сегодня: fg=%v bg=%v bold=%v, хочу primary/%v/bold",
+			fg, bg, attr&tcell.AttrBold != 0, colorTodayBg)
+	}
+	fg, bg, _ = styleAt(x+2, y).Decompose()
+	if fg != colorTextSecondary || bg != colorTodayBg {
+		t.Errorf("счётчик сегодня: fg=%v bg=%v, хочу secondary/%v", fg, bg, colorTodayBg)
+	}
+
+	// Выходной (21 ноября — суббота).
+	x, y, _ = cell(21)
+	if fg, _, _ := styleAt(x, y).Decompose(); fg != colorWeekend {
+		t.Errorf("выходной: fg=%v, хочу colorWeekend", fg)
+	}
+}

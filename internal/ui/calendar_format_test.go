@@ -85,25 +85,22 @@ func TestMonthTitle(t *testing.T) {
 	}
 }
 
-// TestFormatDayCell: маркеры ячейки (UI-5) — количество событий «17·2»,
-// сегодня — в скобках; выбранный день маркера в тексте не имеет (инверсия).
+// TestFormatDayCell: маркеры ячейки (V-33) — количество событий «17·2»;
+// скобок нет: «сегодня» и выбранный день показывает стиль ячейки.
 func TestFormatDayCell(t *testing.T) {
 	cases := []struct {
-		name  string
-		cell  DayCell
-		today bool
-		want  string
+		name string
+		cell DayCell
+		want string
 	}{
-		{"без событий", DayCell{Day: 5}, false, " 5"},
-		{"двузначный день", DayCell{Day: 17}, false, "17"},
-		{"одно событие", DayCell{Day: 17, Events: 1}, false, "17·1"},
-		{"три события", DayCell{Day: 5, Events: 3}, false, " 5·3"},
-		{"сегодня", DayCell{Day: 20}, true, "[20]"},
-		{"сегодня с событиями", DayCell{Day: 17, Events: 2}, true, "[17·2]"},
-		{"пустая ячейка", DayCell{}, false, ""},
+		{"без событий", DayCell{Day: 5}, " 5"},
+		{"двузначный день", DayCell{Day: 17}, "17"},
+		{"одно событие", DayCell{Day: 17, Events: 1}, "17·1"},
+		{"три события", DayCell{Day: 5, Events: 3}, " 5·3"},
+		{"пустая ячейка", DayCell{}, ""},
 	}
 	for _, c := range cases {
-		if got := FormatDayCell(c.cell, c.today); got != c.want {
+		if got := FormatDayCell(c.cell); got != c.want {
 			t.Errorf("%s: FormatDayCell = %q, хочу %q", c.name, got, c.want)
 		}
 	}
