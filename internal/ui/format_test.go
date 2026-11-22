@@ -149,7 +149,7 @@ func TestPluralUnread(t *testing.T) {
 // Тема в тестах переключаема, поэтому проверяем структуру, а не hex цвета.
 func TestFormatFolder(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, false, false)
+	got := FormatFolder(f, false, false, false)
 	if !strings.HasPrefix(got, "  Входящие") {
 		t.Errorf("нет отступа перед именем: %q", got)
 	}
@@ -160,7 +160,7 @@ func TestFormatFolder(t *testing.T) {
 		t.Errorf("счётчик не выровнен на колонку %d: %q", folderNameCol, got)
 	}
 	f2 := mail.Folder{DisplayName: "Отправленные"}
-	if got2 := FormatFolder(f2, false, false); !strings.HasPrefix(got2, "  Отправленные") || strings.Contains(got2, "(0)") {
+	if got2 := FormatFolder(f2, false, false, false); !strings.HasPrefix(got2, "  Отправленные") || strings.Contains(got2, "(0)") {
 		t.Errorf("FormatFolder без непрочитанных = %q", got2)
 	}
 }
@@ -169,11 +169,14 @@ func TestFormatFolder(t *testing.T) {
 // чтобы читать его на фоне выделения (П.2б).
 func TestFormatFolderSelected(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, false, true)
+	got := FormatFolder(f, false, true, true)
 	if !strings.Contains(got, fmt.Sprintf("[%s](23)", hexTag(colorSelectedFg))) {
 		t.Errorf("счётчик на выделенной строке не colorSelectedFg: %q", got)
 	}
-	if got2 := FormatFolder(f, false, false); strings.Contains(got2, hexTag(colorSelectedFg)) {
+	if muted := FormatFolder(f, false, false, true); !strings.Contains(muted, fmt.Sprintf("[%s](23)", hexTag(colorSelectedMutedFg))) {
+		t.Errorf("счётчик на приглушённом выделении не colorSelectedMutedFg: %q", muted)
+	}
+	if got2 := FormatFolder(f, false, false, false); strings.Contains(got2, hexTag(colorSelectedFg)) {
 		t.Errorf("невыделенная строка красится colorSelectedFg: %q", got2)
 	}
 }
@@ -182,14 +185,14 @@ func TestFormatFolderSelected(t *testing.T) {
 // счётчик остаётся вторичным, акцентируется только имя.
 func TestFormatFolderActive(t *testing.T) {
 	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	got := FormatFolder(f, true, false)
+	got := FormatFolder(f, true, false, false)
 	if !strings.Contains(got, "::b]") {
 		t.Errorf("активная папка не жирная: %q", got)
 	}
 	if !strings.Contains(got, fmt.Sprintf("[%s::b]", hexTag(colorAccent))) {
 		t.Errorf("активная папка не accent: %q", got)
 	}
-	if got := FormatFolder(f, false, false); strings.Contains(got, "::b]") {
+	if got := FormatFolder(f, false, false, false); strings.Contains(got, "::b]") {
 		t.Errorf("неактивная папка жирная: %q", got)
 	}
 }

@@ -36,6 +36,10 @@ var (
 	colorSelectedBg  = colorAccent
 	colorSelectedFg  = colorOnAccent
 	colorFocusBorder = colorAccent
+	// V-22: выделение панели без фокуса — светлый tint (роль «сегодня»),
+	// текст — основной: строка видна, но не спорит с accent активной панели.
+	colorSelectedMutedBg = colorTodayBg
+	colorSelectedMutedFg = colorTextPrimary
 )
 
 // applyTheme выбирает палитру по cfg.UI.Theme ("light" по умолчанию).
@@ -98,6 +102,8 @@ func applyDerivedRoles() {
 	colorSelectedBg = colorAccent
 	colorSelectedFg = colorOnAccent
 	colorFocusBorder = colorAccent
+	colorSelectedMutedBg = colorTodayBg
+	colorSelectedMutedFg = colorTextPrimary
 }
 
 // applyStyles переносит палитру в глобальные стили tview.

@@ -401,3 +401,49 @@ func TestPaintSubjectClearsHighlight(t *testing.T) {
 		t.Errorf("снятая тема: ячейка не прозрачна (Transparent=false) — останется полоса")
 	}
 }
+
+// TestSelectedRowMutedWithoutFocus (V-22): у панели без фокуса выделенная
+// строка — светлый tint, у панели с фокусом — accent (sim: цвет берётся из
+// отрисованной ячейки, а не из состояния таблицы).
+func TestSelectedRowMutedWithoutFocus(t *testing.T) {
+	a := newTestApp(t)
+	rows := []mail.MessageSummary{{
+		Subject:  "Тема",
+		From:     mail.Address{Name: "Иван Петров", Email: "ivan.petrov@example.com"},
+		Received: time.Now(),
+	}}
+	a.mail.items = append(a.mail.items, rows...)
+	a.mail.appendRows(rows)
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	defer sim.Fini()
+	sim.SetSize(80, 10)
+	a.mail.messages.SetRect(0, 0, 80, 10)
+	row := a.mail.itemRows[0] // перед пунктом — строка-разделитель дня
+	// Выделение без побочных эффектов: SelectionChanged полез бы в сеть.
+	a.mail.messages.SetSelectionChangedFunc(nil)
+	a.mail.messages.Select(row, 0)
+	// App.New ставит фокус на список писем — для проверки blur снимаем его.
+	a.mail.setMessagesFocus(false)
+	// clampMessageColumns сдвигает внутренний прямоугольник на рамку+поле:
+	// первая клетка пункта — (2, 1+row).
+	const cellX, cellY0 = 2, 1
+
+	rowBg := func() tcell.Color {
+		t.Helper()
+		a.mail.messages.Draw(sim)
+		_, _, style, _ := sim.GetContent(cellX, cellY0+row)
+		_, bg, _ := style.Decompose()
+		return bg
+	}
+	if bg := rowBg(); bg != colorSelectedMutedBg {
+		t.Errorf("без фокуса фон выделенной строки %v, хочу tint %v", bg, colorSelectedMutedBg)
+	}
+	a.mail.setMessagesFocus(true)
+	if bg := rowBg(); bg != colorSelectedBg {
+		t.Errorf("с фокусом фон выделенной строки %v, хочу accent %v", bg, colorSelectedBg)
+	}
+}
