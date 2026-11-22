@@ -326,7 +326,7 @@
       Тест: label без скобок; sim цвета выбранного/сегодня/выходного/счётчика;
       256 цветов.
 
-- [ ] **V-34. Календарь: повестка — список в стиле писем**
+- [x] **V-34. Календарь: повестка — список в стиле писем**
       Что делает: `agenda` List — `SetHighlightFullLine(true)`, main
       `colorTextPrimary`, selected `colorSelectedBg`/`colorSelectedFg`; строки
       `FormatAgendaLine(ev, reg, selected)`: время/место muted (в выбранной строке
