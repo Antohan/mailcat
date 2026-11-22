@@ -1,10 +1,8 @@
 # mailcat — HANDOFF
 
 ## Дальше
-**V-8** (календарь) — последняя задача итерации. СПЕКА-ОСНОВА: сначала шаблон
-GetItem для CalendarItem в `EWS-REFERENCE.md §11` (источник правды), затем
-`calendar.go`/`calendar_format.go`: убрать ASCII-баннер, растянуть сетку,
-Enter → детали встречи, описание через GetItem Body с кэшем по ItemId.
+**V-30** (волна 5, `docs/PLAN-ITER3.1.md`): календарь без ASCII-баннера —
+`calendar.go`/`banner.go`; далее V-31…V-36 по плану.
 
 ## Сделано
 - iter31 V-29 (36bb752): разделители групп папок пропускаются курсором и кликом.
@@ -23,5 +21,5 @@ Enter → детали встречи, описание через GetItem Body 
 - V-26: ширина панели папок — только из DrawFunc (`setFoldersWidth`, один `SetItemText`, без Clear/GetFocus); вид строки — `folderRowText` для обоих путей.
 - V-25: имя отправителя — только у первого письма серии (`sameSenderRun`: ящик + группа дня); [ВНЕШН] у каждой строки (SECURITY §4).
 - V-24/V-23/V-21: `hintFolders` — все сегменты обязательные; панели переключает только cycleFocus (он же зовёт showHint); кэш `a.hintSegs` пишет лишь showHint (V-17); старт — фокус `messages`.
-- Выделение — всегда `colorSelectedBg`/`colorSelectedFg`; фокус показывает только accent-рамка (V-22 отменён).
+- Выделение — всегда `colorSelectedBg`/`colorSelectedFg`; фокус показывает только accent-рамка (V-22 отменён). Календарь (волна 5) — те же правила: theme-роли, `SetListTitle` без капса данных, списки/бары как в почте; сетка — `monthGrid`, не `Table`.
 - V-17: пункт — две строки, вторая — paintItemTail; поля — listPadLeft/Right; в Table нет «│»; подсказки — opt снимает formatHintFit, в DrawFunc НЕ звать GetFocus; Enter — readMessage.
