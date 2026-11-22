@@ -288,6 +288,11 @@ func newMailScreen(a *App) *mailScreen {
 			return nil
 		case tcell.KeyLeft:
 			return nil
+		case tcell.KeyUp, tcell.KeyDown, tcell.KeyHome, tcell.KeyEnd, tcell.KeyPgUp, tcell.KeyPgDn:
+			// V-29: разделители групп курсором не выбираются — двигаем сами
+			// и перескакиваем их (правила tview.List — в moveFolderCursor).
+			s.moveFolderCursor(event.Key())
+			return nil
 		}
 		return tabHook(event)
 	})
@@ -566,6 +571,69 @@ func (s *mailScreen) isActiveFolder(f mail.Folder) bool {
 		return f.ID == s.folder.ID
 	}
 	return f.DisplayName == s.folderName
+}
+
+// moveFolderCursor двигает курсор панели папок по правилам tview.List
+// (list.go InputHandler: ↑/↓ — ±1, PgUp/PgDn — ±высота, края без обёртки),
+// но с разделителя групп съезжает на ближайшую папку в сторону движения
+// (V-29). Клавиша поглощается в capture — иначе List поставил бы курсор на
+// линию.
+func (s *mailScreen) moveFolderCursor(key tcell.Key) {
+	n := s.folders.GetItemCount()
+	if n == 0 {
+		return
+	}
+	cur := s.folders.GetCurrentItem()
+	to, dir := cur, 1
+	switch key {
+	case tcell.KeyUp:
+		to, dir = cur-1, -1
+	case tcell.KeyDown:
+		to = cur + 1
+	case tcell.KeyHome:
+		to = 0
+	case tcell.KeyEnd:
+		to, dir = n-1, -1
+	case tcell.KeyPgUp:
+		_, _, _, h := s.folders.GetInnerRect()
+		to, dir = cur-h, -1
+	case tcell.KeyPgDn:
+		_, _, _, h := s.folders.GetInnerRect()
+		to = cur + h
+	}
+	if to < 0 {
+		to = 0
+	} else if to >= n {
+		to = n - 1
+	}
+	s.folders.SetCurrentItem(s.folderRowNear(to, dir))
+	// WHY: SetCurrentItem зовёт SetChangedFunc ДО смены currentItem — вид
+	// строк пересчитался бы по старой позиции, и выделение уехало бы со
+	// строки. Повтор после сдвига ставит выделение на новую.
+	s.applyActiveFolderStyle()
+}
+
+// folderRowNear — ближайшая в направлении dir выбираемая строка (папка или
+// «Ещё»); разделители групп пропускаются (V-29). В направлении упёрлись —
+// курсор остаётся на месте.
+func (s *mailScreen) folderRowNear(row, dir int) int {
+	for ; row >= 0 && row < s.folders.GetItemCount(); row += dir {
+		if s.isFolderRow(row) {
+			return row
+		}
+	}
+	return s.folders.GetCurrentItem()
+}
+
+// isFolderRow — строку можно выбрать: папка из rowByItem или пункт «Ещё».
+// WHY: «Ещё» ищем по тексту, а не по moreIdx: при пустых техпапках
+// renderFolders выходит раньше и moreIdx остаётся от прежней сборки.
+func (s *mailScreen) isFolderRow(i int) bool {
+	if _, ok := s.rowByItem[i]; ok {
+		return true
+	}
+	text, _ := s.folders.GetItemText(i)
+	return text == moreFoldersClosed || text == moreFoldersOpen
 }
 
 // applyActiveFolderStyle — вид строк: открытая папка accent + жирный, но

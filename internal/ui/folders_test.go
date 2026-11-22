@@ -334,6 +334,68 @@ func TestFolderSwitchSelectsFirst(t *testing.T) {
 	}
 }
 
+// TestFolderCursorSkipsSeparators (V-29): ↑/↓/Home/End/PgUp/PgDn не ставят
+// курсор на разделители групп, а клик по линии оставляет его на следующей
+// папке (фокус — панели папок).
+func TestFolderCursorSkipsSeparators(t *testing.T) {
+	a := New(config.Defaults(), nil, nil)
+	s := a.mail
+	s.folderName, s.folder = "Входящие", ews.FolderID{}
+	s.mainFolders = []mail.Folder{{DisplayName: "Входящие"}, {DisplayName: "Отправленные"}, {DisplayName: "Проекты"}}
+	s.techFolders = []mail.Folder{{DisplayName: "Опции"}}
+	s.renderFolders()
+	// строки: 0 Входящие, 1 Отправленные, 2 разделитель, 3 Проекты,
+	// 4 разделитель, 5 «Ещё ▸».
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer sim.Fini()
+	sim.SetSize(120, 40)
+	a.mail.root.SetRect(0, 0, 120, 40)
+	a.mail.root.Draw(sim) // раскладка: GetInnerRect панели папок
+
+	press := func(k tcell.Key) {
+		t.Helper()
+		s.folders.InputHandler()(tcell.NewEventKey(k, 0, tcell.ModNone), func(tview.Primitive) {})
+	}
+	check := func(k tcell.Key, want int) {
+		t.Helper()
+		press(k)
+		if got := s.folders.GetCurrentItem(); got != want {
+			t.Fatalf("%v: курсор = %d, хочу %d", k, got, want)
+		}
+	}
+	check(tcell.KeyDown, 1)
+	check(tcell.KeyDown, 3) // через разделитель (2)
+	check(tcell.KeyUp, 1)   // обратно через разделитель
+	check(tcell.KeyEnd, 5)  // «Ещё ▸» — выбираем
+	check(tcell.KeyHome, 0)
+	check(tcell.KeyPgDn, 5)
+	check(tcell.KeyPgUp, 0)
+
+	// Клик по линии-разделителю (строка 2) — курсор на «Проектах» (3),
+	// папка не открывается (selectFolder не зовётся — клиент nil).
+	x, y, _, _ := s.folders.GetInnerRect()
+	ev := tcell.NewEventMouse(x+1, y+2, tcell.Button1, tcell.ModNone)
+	if got, _ := a.tapp.GetMouseCapture()(ev, tview.MouseLeftClick); got != nil {
+		t.Errorf("клик по разделителю не поглощён (событие ушло в List)")
+	}
+	if got := s.folders.GetCurrentItem(); got != 3 {
+		t.Errorf("после клика курсор = %d, хочу 3 («Проекты»)", got)
+	}
+	if a.tapp.GetFocus() != s.folders {
+		t.Errorf("после клика фокус не на панели папок")
+	}
+
+	// Клик по папке идёт штатным обработчиком (capture событие не гасит).
+	ev = tcell.NewEventMouse(x+1, y, tcell.Button1, tcell.ModNone)
+	if got, _ := a.tapp.GetMouseCapture()(ev, tview.MouseLeftClick); got == nil {
+		t.Errorf("клик по папке поглощён — List не получит выбор")
+	}
+}
+
 // TestRefreshRestoresEmptySidebar: «u» (refreshFolder) при пустом сайдбаре —
 // состояние после ошибки FindFolders при старте — восстанавливает и папки, а
 // не только письма: loadFolders завершается selectFolder («Входящие»).

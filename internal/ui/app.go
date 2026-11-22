@@ -303,7 +303,37 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 
 	a.tapp.SetRoot(root, true).EnableMouse(true)
 	a.tapp.SetInputCapture(a.globalKeys)
+	a.tapp.SetMouseCapture(a.foldersMouse)
 	return a
+}
+
+// foldersMouse переводит клик по разделителю групп панели папок на следующую
+// папку: курсор туда, фокус — панели (V-29).
+// WHY: событие гасим, а не сдвигаем координату на строку ниже — List по
+// Selected у папки вызвал бы selectFolder, и клик по линии открывал бы папку.
+// Not to do: отдавать клик List с подменённой позицией.
+func (a *App) foldersMouse(event *tcell.EventMouse, action tview.MouseAction) (*tcell.EventMouse, tview.MouseAction) {
+	if action != tview.MouseLeftClick {
+		return event, action
+	}
+	if name, _ := a.pages.GetFrontPage(); name != pageMail {
+		return event, action // модал поверх: клик не наш
+	}
+	x, y, w, h := a.mail.folders.GetInnerRect()
+	mx, my := event.Position()
+	if mx < x || mx >= x+w || my < y || my >= y+h {
+		return event, action
+	}
+	off, _ := a.mail.folders.GetOffset()
+	row := my - y + off
+	if row < 0 || row >= a.mail.folders.GetItemCount() || a.mail.isFolderRow(row) {
+		return event, action // папка/«Ещё» и пустота ниже — штатный обработчик
+	}
+	a.tapp.SetFocus(a.mail.folders)
+	a.mail.folders.SetCurrentItem(a.mail.folderRowNear(row, 1))
+	// SetCurrentItem зовёт changed до сдвига курсора (WHY в moveFolderCursor).
+	a.mail.applyActiveFolderStyle()
+	return nil, action
 }
 
 // Run запускает цикл событий; блокируется до выхода (q/Ctrl-C).
