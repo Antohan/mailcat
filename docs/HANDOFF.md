@@ -1,25 +1,25 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 3.1: следующий **V-24** (подсказки панели папок), `/stage V-24`;
-читать `app.go: hintMail/pageHintSegs/showHint`, `mail.go: paintFocusFrames`.
-Старт визуальной волны — после «ок» пользователя по выделению (откат V-22).
+Итерация 3.1: следующий **V-25** (отправитель не повторяется в серии),
+`/stage V-25`; читать `format.go: FormatMessageListItem`, `mail.go: appendRows`,
+`clampMessageColumns`. Старт визуальной волны — после «ок» пользователя по
+выделению (откат V-22).
 
 ## Сделано
+- iter31 V-24 (b2059df): при фокусе на папках — свой набор подсказок (`hintFolders`).
 - iter31 V-23 (022c0e2): Tab/Shift-Tab зовёт showHint после SetFocus.
-- iter31 V-22: отменён — приглушение выделения без фокуса откачено (revert 657378a).
-- iter31 V-21 (9104f4b): стартовый фокус — список писем (флаг колонки + SetFocus в New).
-- iter31 V-20 (d8ee71a): SetChangedFunc не пишет folderName, accent стоит на открытой папке.
+- iter31 V-22: отменён (revert 657378a) — выделение без фокуса не приглушается.
+- iter31 V-21 (9104f4b): стартовый фокус — список писем.
+- iter31 V-20 (d8ee71a): SetChangedFunc не пишет folderName.
 
 ## Открыто
-- TODO юзера (TESTING.md §5): smoke S3–S7; О-3 в Terminal.app/VS Code; V-17 на живом терминале.
+- TODO юзера (TESTING.md §5): smoke S3–S7; О-3 в Terminal.app/VS Code; V-17/V-24 на живом терминале.
 - НИЗКО (security): attachments.go ~120 — частичный файл при Write; отложено: item:Importance, write, Catppuccin, item:Preview; скругления — tview только прямоугольник.
 
 ## Не трогать
-- V-23: панели переключает только cycleFocus, и он же после SetFocus зовёт showHint — кэш `a.hintSegs` пишет лишь showHint (V-17), поэтому Tab без него оставлял чужие подсказки.
-- Выделение — всегда `colorSelectedBg`/`colorSelectedFg`, независимо от фокуса; фокус показывает только accent-рамка (V-22 отменён).
-- V-21: стартовый фокус — `messages`: флаг `focus` у колонки писем и `SetFocus` в `New`.
-- V-20: folderName/accent задаёт только selectFolder; SetChangedFunc — лишь applyActiveFolderStyle (по имени: inbox с пустым ID).
-- V-19: renderFolders до Clear помнит папку/«Ещё», после — restoreFolderCursor (ID, при пустом — имя).
-- V-18: счётчик watcher'а — только refreshFolderRow (SetItemText, без renderFolders/Clear).
-- V-17: пункт — две строки, вторая — paintItemTail; scrollItemIntoView двигает offset у нижнего края; поля — listPadLeft/Right в appendRows и clampMessageColumns; папки — по одной; шапка — FormatMessageHeader; в Table нет «│»; смена папки сбрасывает restoreID/row; connText: ● =1, текст =3; подсказки — opt снимает formatHintFit, в DrawFunc НЕ звать GetFocus; полосы — scrollbar.go после панели; header: nil; Enter — readMessage.
+- V-24: `hintFolders` — все сегменты обязательные, ≤100 колонок без opt; у папок нет v/g, есть Enter/→.
+- V-23/V-21: панели переключает только cycleFocus (он же зовёт showHint); кэш `a.hintSegs` пишет лишь showHint (V-17); старт — фокус `messages`.
+- Выделение — всегда `colorSelectedBg`/`colorSelectedFg`; фокус показывает только accent-рамка (V-22 отменён).
+- V-20/V-19/V-18: folderName/accent — только selectFolder; renderFolders помнит папку/«Ещё» (restoreFolderCursor); watcher — только refreshFolderRow.
+- V-17: пункт — две строки, вторая — paintItemTail; поля — listPadLeft/Right в appendRows и clampMessageColumns; папки — по одной; в Table нет «│»; connText: ● =1, текст =3; подсказки — opt снимает formatHintFit, в DrawFunc НЕ звать GetFocus; header: nil; Enter — readMessage.
