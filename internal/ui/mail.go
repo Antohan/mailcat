@@ -623,12 +623,19 @@ func (s *mailScreen) setConn(ok bool) {
 }
 
 // wrappedLines — число строк превью с учётом переноса (для бегунка).
-// WHY: GetWrappedLineCount парсит весь текст — кэшируем до смены текста
-// (previewLinesDirty) или ширины панели.
+// WHY (V-27): считаем сами через tview.WordWrap, а НЕ TextView.GetWrappedLineCount.
+// Тот парсит с t.width (у нас не задан = 0 = «без переноса») и дописывает в общий
+// индекс строк неразвёрнутые строки: дальше Draw режет их по краю панели посреди
+// слова и теряет хвост (наблюдалось на живом письме). Индекс строк TextView
+// трогает только его собственный Draw.
+// Кэш — до смены текста (previewLinesDirty) или ширины панели.
 func (s *mailScreen) wrappedLines() int {
 	_, _, w, _ := s.preview.GetInnerRect()
+	if w <= 0 {
+		return 0 // раскладки ещё нет — переносить не по чему
+	}
 	if s.previewLinesDirty || w != s.previewLinesW {
-		s.previewLines = s.preview.GetWrappedLineCount()
+		s.previewLines = len(tview.WordWrap(s.preview.GetText(false), w))
 		s.previewLinesW = w
 		s.previewLinesDirty = false
 	}

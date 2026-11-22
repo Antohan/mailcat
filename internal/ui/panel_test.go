@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 
 	"mailcat/internal/mail"
 )
@@ -374,6 +375,55 @@ func TestPreviewNoHorizontalScroll(t *testing.T) {
 	for _, ev := range keys {
 		if got := hook(ev); got != nil {
 			t.Errorf("→/l/h не поглощены на странице письма: %v", got)
+		}
+	}
+}
+
+// TestReadingTextNotClipped (V-27): подсчёт строк для бегунка не портит
+// индекс строк TextView. Раньше wrappedLines звал GetWrappedLineCount — тот
+// парсит с t.width==0 («без переноса») и дописывал в общий индекс строк
+// неразвёрнутые строки, после чего Draw резал их по краю панели посреди слова и
+// терял хвост (живой баг). Теперь нарисованное должно совпадать с переносом.
+func TestReadingTextNotClipped(t *testing.T) {
+	a := newTestApp(t)
+	paras := make([]string, 20)
+	for i := range paras {
+		paras[i] = fmt.Sprintf("Абзац %d: мы хотим создать новое поколение решений, способных заменить рутину и упростить работу всем.", i+1)
+	}
+	a.mail.showReading(mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject:  "Тема",
+			From:     mail.Address{Name: "Иван", Email: "ivan@company.example"},
+			Received: time.Date(2026, 11, 20, 21, 25, 0, 0, time.Local),
+		},
+		BodyText: strings.Join(paras, "\n\n"),
+	})
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(163, 40)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+	a.tapp.QueueUpdateDraw(func() {})
+
+	var x0, y0, w, h int
+	var want []string
+	a.tapp.QueueUpdateDraw(func() {
+		x0, y0, w, h = a.mail.preview.GetInnerRect()
+		// Именно этот вызов до фикса портил индекс строк TextView.
+		if a.mail.wrappedLines() == 0 {
+			t.Fatal("бегунок не знает числа строк")
+		}
+		want = tview.WordWrap(a.mail.preview.GetText(true), w)
+	})
+	a.tapp.QueueUpdateDraw(func() {})
+	for i := 0; i < h && i < len(want); i++ {
+		got := strings.TrimRight(string(simRow(sim, y0+i)[x0:x0+w]), " ")
+		if exp := strings.TrimRight(want[i], " "); got != exp {
+			t.Fatalf("строка %d нарисована иначе, чем перенос (индекс строк испорчен):\nна экране %q\nперенос   %q", i, got, exp)
 		}
 	}
 }
