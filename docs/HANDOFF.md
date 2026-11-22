@@ -1,9 +1,9 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 3.1, волна 4 закрыта. Следующий — **V-8** (календарь). EWS: сначала
-спека GetItem для CalendarItem в `EWS-REFERENCE.md §11`. Читать `calendar.go`,
-`calendar_format.go`.
+**V-29** — разделители групп папок не выбираются курсором (план волны 4:
+`mail.go` — input capture, `app.go` — mouse capture). Затем **V-8** (календарь):
+EWS — спека GetItem для CalendarItem в `EWS-REFERENCE.md §11`.
 
 ## Сделано
 - iter31 V-28 (499e03b): заголовки тела — жирный accent, пустые строки схлопнуты.
