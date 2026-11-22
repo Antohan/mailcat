@@ -63,11 +63,6 @@ type mailScreen struct {
 	totalInView int  // TotalItemsInView последней страницы (счётчик «всего», V-2)
 	loading     bool // запрос страниц в полёте (ревью этапа 2: защита от дублей)
 
-	// V-22: фокус панелей — выбор цвета выделения (accent/tint). Пишут
-	// focus/blur-хуки списка и таблицы, читают paintItemTail и FormatFolder.
-	foldersFocused  bool
-	messagesFocused bool
-
 	// RD-7: пересборка списка после перечитывания/смены папки. Старые строки
 	// остаются на экране до прихода свежих (без мерцания); выделение
 	// восстанавливается по ItemId, скролл — по сохранённой верхней строке.
@@ -131,10 +126,8 @@ func newMailScreen(a *App) *mailScreen {
 		// по ширине текста, «чип» с рваным правым краем).
 		SetHighlightFullLine(true).
 		SetMainTextColor(colorTextPrimary).
-		// V-22: старт — без фокуса: выделение приглушено; accent ставит
-		// focus-хук ниже, когда панель получает фокус.
-		SetSelectedBackgroundColor(colorSelectedMutedBg).
-		SetSelectedTextColor(colorSelectedMutedFg)
+		SetSelectedBackgroundColor(colorSelectedBg).
+		SetSelectedTextColor(colorSelectedFg)
 	s.folders.SetBorder(true)
 
 	// V-17: разделитель колонок — пробел, а не «│»: вертикальная линия резала
@@ -142,7 +135,7 @@ func newMailScreen(a *App) *mailScreen {
 	// её нет).
 	s.messages = tview.NewTable().
 		SetSelectable(true, false).
-		SetSelectedStyle(tcell.StyleDefault.Background(colorSelectedMutedBg).Foreground(colorSelectedMutedFg))
+		SetSelectedStyle(tcell.StyleDefault.Background(colorSelectedBg).Foreground(colorSelectedFg))
 	s.messages.SetBorder(true)
 	// WHY (V-1): кап ширины колонки 0 обязателен. tview выбрасывает колонки,
 	// не влезающие целиком, — без капа длинная тема выталкивает колонку
@@ -241,12 +234,6 @@ func newMailScreen(a *App) *mailScreen {
 		s.app.tapp.SetFocus(s.messages)
 		s.app.showHint()
 	})
-	// V-22: фон выделения — accent только у панели с фокусом; без него —
-	// светлый tint, иначе два accent'а в раскладке конкурируют.
-	s.folders.SetFocusFunc(func() { s.setFoldersFocus(true) })
-	s.folders.SetBlurFunc(func() { s.setFoldersFocus(false) })
-	s.messages.SetFocusFunc(func() { s.setMessagesFocus(true) })
-	s.messages.SetBlurFunc(func() { s.setMessagesFocus(false) })
 	s.messages.SetSelectionChangedFunc(func(row, _ int) {
 		if row != s.selRow {
 			if s.selRow >= 0 {
@@ -465,7 +452,7 @@ func (s *mailScreen) renderFolders() {
 	s.rowByItem = make(map[int]mail.Folder)
 	add := func(f mail.Folder) {
 		idx := s.folders.GetItemCount()
-		s.folders.AddItem(FormatFolder(f, s.isActiveFolder(f), s.foldersFocused, false), "", 0, func() {
+		s.folders.AddItem(FormatFolder(f, s.isActiveFolder(f), false), "", 0, func() {
 			s.selectFolder(ews.FolderID{ID: f.ID, ChangeKey: f.ChangeKey}, f.DisplayName)
 		})
 		s.rowByItem[idx] = f
@@ -569,35 +556,7 @@ func (s *mailScreen) applyActiveFolderStyle() {
 	cursor := s.folders.GetCurrentItem()
 	for i, f := range s.rowByItem {
 		cursorOnRow := i == cursor
-		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, s.foldersFocused, cursorOnRow), "")
-	}
-}
-
-// setFoldersFocus переключает вид выделения папок под фокус (V-22): accent у
-// активной панели, светлый tint у остальных. Счётчики пересчитываются:
-// colorSelectedFg на приглушённой заливке не читается.
-func (s *mailScreen) setFoldersFocus(focused bool) {
-	s.foldersFocused = focused
-	bg, fg := colorSelectedMutedBg, colorSelectedMutedFg
-	if focused {
-		bg, fg = colorSelectedBg, colorSelectedFg
-	}
-	s.folders.SetSelectedBackgroundColor(bg).SetSelectedTextColor(fg)
-	s.applyActiveFolderStyle()
-}
-
-// setMessagesFocus — то же для списка писем (V-22). Строку пункта tview красит
-// по selectedStyle, вторую (тему) — paintItemTail, поэтому после смены стиля
-// перекрашивается хвост текущего пункта.
-func (s *mailScreen) setMessagesFocus(focused bool) {
-	s.messagesFocused = focused
-	style := tcell.StyleDefault.Background(colorSelectedMutedBg).Foreground(colorSelectedMutedFg)
-	if focused {
-		style = tcell.StyleDefault.Background(colorSelectedBg).Foreground(colorSelectedFg)
-	}
-	s.messages.SetSelectedStyle(style)
-	if s.selRow >= 0 {
-		s.paintItemTail(s.selRow+1, true)
+		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow), "")
 	}
 }
 
@@ -940,12 +899,7 @@ func (s *mailScreen) paintItemTail(row int, selected bool) {
 	for col := 0; col <= 1; col++ {
 		c := s.messages.GetCell(row, col)
 		if selected {
-			// V-22: без фокуса выделение — светлый tint, не accent.
-			if s.messagesFocused {
-				c.SetBackgroundColor(colorSelectedBg)
-			} else {
-				c.SetBackgroundColor(colorSelectedMutedBg)
-			}
+			c.SetBackgroundColor(colorSelectedBg)
 		} else {
 			// WHY (V-13): SetBackgroundColor снимает прозрачность ячейки,
 			// поэтому ColorDefault оставлял на каждой посещённой строке
@@ -958,9 +912,6 @@ func (s *mailScreen) paintItemTail(row int, selected bool) {
 	c := s.messages.GetCell(row, 0)
 	if selected {
 		c.SetTextColor(colorSelectedFg)
-		if !s.messagesFocused {
-			c.SetTextColor(colorSelectedMutedFg)
-		}
 	} else {
 		c.SetTextColor(colorTextSecondary)
 	}
@@ -1046,7 +997,7 @@ func (s *mailScreen) refreshFolderRow(f mail.Folder) {
 			continue
 		}
 		cursorOnRow := i == s.folders.GetCurrentItem()
-		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, s.foldersFocused, cursorOnRow), "")
+		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow), "")
 		return
 	}
 }

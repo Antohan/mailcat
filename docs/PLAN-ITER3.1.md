@@ -196,17 +196,6 @@
       Ограничения: `paintFocusFrames` по `HasFocus`; модалы не трогаем.
       Тест: после `New` `GetFocus() == a.mail.messages`.
 
-- [ ] **V-22. Приглушение выделения без фокуса**
-      Что делает: у панели без фокуса выделенная/курсорная строка — светлый
-      tint, у панели с фокусом — accent; строка видна в обоих случаях.
-      Затронуто: `theme.go`: `applyDerivedRoles` (`colorSelectedMutedBg =
-      colorTodayBg`, `colorSelectedMutedFg = colorTextPrimary`); `mail.go`:
-      focus/blur-хуки `folders`/`messages`, `paintItemTail`, `FormatFolder`
-      (+`focused`).
-      Ограничения: тему выделения красят вручную (строка невыбираемая);
-      начальное состояние — muted.
-      Тест: sim — фон выбранной строки после blur.
-
 - [ ] **V-23. Tab обновляет подсказку**
       Что делает: смена панели Tab/Shift-Tab обновляет строку подсказок.
       Затронуто: `mail.go`: `cycleFocus` — `s.app.showHint()` после `SetFocus`.

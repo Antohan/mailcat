@@ -204,7 +204,7 @@ func TestCursorDoesNotRenameFolder(t *testing.T) {
 		t.Errorf("folderName = %q, хочу «Входящие» (курсор не открывает папку)", s.folderName)
 	}
 	got, _ := s.folders.GetItemText(0)
-	if want := FormatFolder(s.mainFolders[0], true, s.foldersFocused, false); got != want {
+	if want := FormatFolder(s.mainFolders[0], true, false); got != want {
 		t.Errorf("строка «Входящих» = %q, хочу accent открытой папки %q", got, want)
 	}
 }

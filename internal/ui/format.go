@@ -190,13 +190,12 @@ const folderNameCol = 15
 
 // FormatFolder — пункт списка папок: отступ, имя, счётчик непрочитанных
 // цветом textSecondary (прижат вправо на folderNameCol). active — папка
-// открыта: текст accent + жирный; selected — строка под курсором списка,
-// focused — список в фокусе: счётчик перекрашивается в цвет текста выделения
-// (accent на фоне accent, приглушённый — на светлом tint, V-22), иначе серый
-// tag не читается на заливке (П.2б). Sanitize + tview.Escape сохраняются (List
+// открыта: текст accent + жирный; selected — строка под курсором списка:
+// счётчик перекрашивается в colorSelectedFg, иначе серый tag не читается
+// на фоне выделения (П.2б). Sanitize + tview.Escape сохраняются (List
 // интерпретирует теги безусловно — данные экранируются, теги наши).
 // WHY (П.2а): без иконок — все строки с одинаковым отступом.
-func FormatFolder(f mail.Folder, active, focused, selected bool) string {
+func FormatFolder(f mail.Folder, active, selected bool) string {
 	indent := "  "
 	pad := folderNameCol - utf8.RuneCountInString(indent) - utf8.RuneCountInString(f.DisplayName)
 	if pad < 1 {
@@ -210,9 +209,6 @@ func FormatFolder(f mail.Folder, active, focused, selected bool) string {
 		counterColor := colorTextSecondary
 		if selected {
 			counterColor = colorSelectedFg
-			if !focused {
-				counterColor = colorSelectedMutedFg
-			}
 		}
 		return fmt.Sprintf("%s[%s](%d)", row, hexTag(counterColor), f.UnreadCount)
 	}
