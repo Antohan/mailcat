@@ -154,6 +154,30 @@ func TestRenderFoldersToggle(t *testing.T) {
 	}
 }
 
+// TestUpdateInboxUnreadKeepsCursor (V-18): тик watcher'а меняет только
+// счётчик строки «Входящих» — курсор и состав списка остаются на месте.
+func TestUpdateInboxUnreadKeepsCursor(t *testing.T) {
+	s := &mailScreen{
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}, {DisplayName: "Черновики"}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	s.renderFolders()
+	s.folders.SetCurrentItem(1)
+
+	s.updateInboxUnread(7)
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Errorf("курсор = %d, хочу 1 (строка «Входящих» не пересобирает список)", got)
+	}
+	if main, _ := s.folders.GetItemText(0); !strings.Contains(main, "(7)") {
+		t.Errorf("строка «Входящих» = %q, хочу счётчик (7)", main)
+	}
+	if s.mainFolders[0].UnreadCount != 7 {
+		t.Errorf("кэш счётчика = %d, хочу 7", s.mainFolders[0].UnreadCount)
+	}
+}
+
 // TestRenderFoldersNoTech: без техпапок пункт «Ещё ▸» не добавляется.
 func TestRenderFoldersNoTech(t *testing.T) {
 	s := &mailScreen{

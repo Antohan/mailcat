@@ -942,9 +942,28 @@ func (s *mailScreen) updateInboxUnread(n int) {
 	for i := range s.mainFolders {
 		if s.mainFolders[i].DisplayName == "Входящие" {
 			s.mainFolders[i].UnreadCount = n
-			s.renderFolders()
+			s.refreshFolderRow(s.mainFolders[i])
+			s.updateListTitle()
 			return
 		}
+	}
+}
+
+// refreshFolderRow перекрашивает одну строку панели без пересборки списка:
+// тик watcher'а не должен сбрасывать курсор и прокрутку пользователя.
+// WHY: SetItemText не будит SetChangedFunc, а renderFolders делает Clear и
+// теряет позицию; вид строки — та же формула, что в applyActiveFolderStyle.
+func (s *mailScreen) refreshFolderRow(f mail.Folder) {
+	for i, row := range s.rowByItem {
+		if f.ID != "" && row.ID != f.ID {
+			continue
+		}
+		if f.ID == "" && row.DisplayName != f.DisplayName {
+			continue
+		}
+		cursorOnRow := i == s.folders.GetCurrentItem()
+		s.folders.SetItemText(i, FormatFolder(f, s.isActiveFolder(f) && !cursorOnRow, cursorOnRow), "")
+		return
 	}
 }
 
