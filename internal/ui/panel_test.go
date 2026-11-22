@@ -57,22 +57,20 @@ func TestPanelLayoutSizes(t *testing.T) {
 		}()
 		a.tapp.QueueUpdateDraw(func() {})
 
-		// Строка 0 — верхний бар (V-6), заголовки панелей — строкой ниже.
+		// Строка 0 — верхний бар (V-6), подпись списка — строкой ниже.
+		// V-16: у ПАПОК и ПРОСМОТРА подписи нет, осталась только ПИСЬМА.
 		row := simRow(sim, 1)
-		folders := runeIndex(row, "ПАПКИ")
 		messages := runeIndex(row, "ПИСЬМА")
-		preview := runeIndex(row, "ПРОСМОТР")
-		if folders < 0 || messages < 0 || preview < 0 {
-			t.Fatalf("%dx%d: заголовки панелей не найдены: %q", sz.w, sz.h, string(row))
+		if messages < 0 {
+			t.Fatalf("%dx%d: подпись «ПИСЬМА» не найдена: %q", sz.w, sz.h, string(row))
 		}
-		if !(folders < messages && messages < preview) {
-			t.Errorf("%dx%d: порядок панелей нарушен: %d %d %d", sz.w, sz.h, folders, messages, preview)
+		if runeIndex(row, "ПАПКИ") >= 0 || runeIndex(row, "ПРОСМОТР") >= 0 {
+			t.Errorf("%dx%d: подписи ПАПКИ/ПРОСМОТР вернулись: %q", sz.w, sz.h, string(row))
 		}
-		if sz.w == 100 {
-			// 20% / 42% / 38% от 100 — ровно 20 и 62.
-			if folders != 0 || messages != 20 || preview != 62 {
-				t.Errorf("100×30: колонки %d/%d/%d, хочу 0/20/62", folders, messages, preview)
-			}
+		// Подпись списка — в средней колонке, между сайдбаром и просмотром.
+		lo, hi := sz.w*pctFolders/100, sz.w*(pctFolders+pctMessages)/100+1
+		if messages < lo || messages >= hi {
+			t.Errorf("%dx%d: подпись списка в колонке %d, хочу %d…%d", sz.w, sz.h, messages, lo, hi)
 		}
 		a.tapp.Stop()
 		<-done // Run сам вызывает screen.Fini()
@@ -249,20 +247,29 @@ func TestV3ThinFrame(t *testing.T) {
 	a.tapp.SetFocus(a.mail.messages)
 	a.tapp.QueueUpdateDraw(func() {})
 
-	row1 := simRow(sim, 2) // строка 0 — верхний бар (V-6), 1 — заголовки панелей
-	if runeIndex(row1, "╔") >= 0 || runeIndex(row1, "═") >= 0 || runeIndex(row1, "║") >= 0 {
-		t.Errorf("двойные линии рамки фокуса вернулись: %q", string(row1))
+	for y := 1; y <= 2; y++ {
+		row := simRow(sim, y)
+		if runeIndex(row, "╔") >= 0 || runeIndex(row, "═") >= 0 || runeIndex(row, "║") >= 0 {
+			t.Errorf("двойные линии рамки фокуса вернулись (строка %d): %q", y, string(row))
+		}
 	}
 	// Разделители: на строке 1 ровно две тонкие вертикальные линии,
-	// не совпадающие с краями рамок.
+	// не совпадающие с краями рамок. Рамки неактивных панелей красит в цвет
+	// поверхности paintFocusFrames (RD-2) — их символы на экране невидимы,
+	// поэтому считаем только видимые (V-16: рамка панели теперь на строке 1).
+	w, _ := sim.Size()
 	divs := 0
-	for _, r := range row1 {
+	for x := 0; x < w; x++ {
+		r, _, style, _ := sim.GetContent(x, 1)
+		if fg, _, _ := style.Decompose(); fg == colorPanelBg {
+			continue
+		}
 		if r == '│' {
 			divs++
 		}
 	}
 	if divs != 2 {
-		t.Errorf("разделителей на строке 1: %d, хочу 2: %q", divs, string(row1))
+		t.Errorf("видимых разделителей на строке 1: %d, хочу 2", divs)
 	}
 	a.tapp.Stop()
 	<-done

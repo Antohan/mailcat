@@ -12,8 +12,8 @@ import (
 	"github.com/rivo/tview"
 )
 
-// panelHeader — строка «ПАПКИ ─────────» над панелью; справа может быть
-// вторая часть (счётчик списка писем, V-2).
+// panelHeader — строка «ПИСЬМА ─────────» над панелью; справа может быть
+// вторая часть (счётчик списка писем, V-2). У ПАПОК и ПРОСМОТРА её нет (V-16).
 type panelHeader struct {
 	*tview.Box
 	title  string
@@ -68,19 +68,23 @@ func (h *panelHeader) Draw(screen tcell.Screen) {
 		color = colorAccent
 	}
 	_, printed := tview.Print(screen, h.title, x, y, w, tview.AlignLeft, color)
-	end, gapR := x+w, 0
+	// WHY (V-16): конец линии — смещение внутри заголовка, а не экранный x+w:
+	// заголовок ПИСЬМА стоит в средней колонке, и абсолютный конец уводил
+	// линию на 20 клеток вправо, поверх разделителя и рамки просмотра.
+	// Не делать: end := x+w и SetContent(x+i) — раньше вылет скрывала строка
+	// заголовка ПРОСМОТР, которая рисовалась после и затирала его.
+	end := w
 	if h.right != "" {
 		// Правая часть — приглушённая всегда: это служебные счётчики, акцент
 		// зарезервирован за активной панелью (RD-1).
 		_, wRight := tview.Print(screen, h.right, x, y, w, tview.AlignRight, colorTextSecondary)
-		end -= wRight
-		gapR = headerGap
+		end -= wRight + headerGap
 	}
 	// WHY: линия — textSecondary, а не hairline: hairline (222,226,230) на
 	// белой поверхности не читается, и разделитель выглядел отсутствующим.
 	// Не делать: возвращать hairline — заголовки снова «висят в воздухе».
 	rule := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
-	for i := printed + headerGap; i < end-gapR; i++ {
+	for i := printed + headerGap; i < end; i++ {
 		screen.SetContent(x+i, y, tview.Borders.Horizontal, nil, rule)
 	}
 }

@@ -174,9 +174,9 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	// (сетка и повестка) и все три панели почты; карточки и модалы —
 	// полноэкранные, остаются с обычной серой рамкой.
 	a.focusPanels = []focusPanel{
-		{a.mail.folders, a.mail.foldersHeader},
+		{a.mail.folders, nil}, // V-16: у папок и просмотра заголовка нет
 		{a.mail.messages, a.mail.messagesHeader},
-		{a.mail.preview, a.mail.previewHeader},
+		{a.mail.preview, nil},
 		{a.calendar.grid, a.calendar.gridHeader},
 		{a.calendar.agenda, a.calendar.agendaHeader},
 	}

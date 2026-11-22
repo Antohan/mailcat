@@ -42,10 +42,9 @@ type mailScreen struct {
 	messages *tview.Table
 	preview  *tview.TextView
 
-	// Строки-заголовки панелей (RD-2): цвет/капс переключает paintFocusFrames.
-	foldersHeader  *panelHeader
+	// Заголовок списка писем (RD-2, V-2): цвет/капс переключает
+	// paintFocusFrames. У панелей ПАПКИ и ПРОСМОТР заголовка нет (V-16).
 	messagesHeader *panelHeader
-	previewHeader  *panelHeader
 
 	// Состояние экрана.
 	folder     ews.FolderID // выбранная папка (пустая = distinguished inbox)
@@ -158,13 +157,11 @@ func newMailScreen(a *App) *mailScreen {
 		return x + 1, y + 1, w - 2, h - 2
 	})
 
-	// WHY (RD-2): рамки у неактивных панелей нет — её роль играет строка
-	// заголовка с hairline-разделителем. Пропорции — константы pct*.
+	// WHY (RD-2): рамки у неактивных панелей нет — у папок и просмотра
+	// заголовка тоже нет (V-16): назначение очевидно, фокус показывает рамка.
 	// Не делать: возвращать заголовки в рамку (Box.SetTitle) — у неактивной
 	// панели рамки нет, и заголовок был бы не виден.
-	s.foldersHeader = newPanelHeader("Папки")
 	s.messagesHeader = newPanelHeader("Письма")
-	s.previewHeader = newPanelHeader("Просмотр")
 	// WHY (V-12): футер сайдбара — две строки: «● Connected» и username под
 	// ним; длинный username обрезается «…» по ширине панели. Обрезка — в
 	// DrawFunc, а не при setConn: ширина панели меняется при resize, а
@@ -176,20 +173,19 @@ func newMailScreen(a *App) *mailScreen {
 		return x, y, w, h
 	})
 	foldersCol := tview.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(s.foldersHeader, 1, 0, false).
 		AddItem(s.folders, 0, 1, true).
 		AddItem(s.conn, 2, 0, false)
 	// WHY (V-3, П.4б): разделители между колонками — по одной тонкой линии,
-	// той же толщины и цвета, что линии заголовков (ПАПКИ ↔ ПИСЬМА и
-	// ПИСЬМА ↔ ПРОСМОТР согласованы). Рамки панелей при этом остаются
-	// невидимыми у неактивных (RD-2) — двойных линий между колонками нет.
+	// той же толщины и цвета, что линия заголовка ПИСЬМА. Рамки панелей при
+	// этом остаются невидимыми у неактивных (RD-2) — двойных линий между
+	// колонками нет.
 	d1, d2 := newDivider(), newDivider()
 	s.root = tview.NewFlex().
 		AddItem(foldersCol, 0, pctFolders, false).
 		AddItem(d1, 1, 0, false).
 		AddItem(panelColumn(s.messagesHeader, s.messages), 0, pctMessages, false).
 		AddItem(d2, 1, 0, false).
-		AddItem(panelColumn(s.previewHeader, s.preview), 0, pctPreview, true)
+		AddItem(s.preview, 0, pctPreview, true)
 
 	s.folders.SetChangedFunc(func(i int, _, _ string, _ rune) {
 		// «Ещё ▸/▾» и разделители — не папки: их нет в rowByItem, имя текущей
