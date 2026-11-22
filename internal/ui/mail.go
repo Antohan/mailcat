@@ -101,11 +101,21 @@ type mailScreen struct {
 	// от ширины она не зависит. reading=false — в панели черновик строки.
 	reading bool
 
+	// V-17: полосы прокрутки списка и просмотра (tview своей полосы не имеет):
+	// offset/total знают Table и TextView, геометрию — их свежий rect.
+	msgBar     *scrollbar
+	previewBar *scrollbar
+	// Кэш числа строк превью с переносом: GetWrappedLineCount парсит весь
+	// текст, поэтому пересчёт — только после SetText (dirty) или смены ширины.
+	previewLines      int
+	previewLinesW     int
+	previewLinesDirty bool
+
 	pageSize int
 }
 
 func newMailScreen(a *App) *mailScreen {
-	s := &mailScreen{app: a, pageSize: a.cfg.PageSize, selRow: -1}
+	s := &mailScreen{app: a, pageSize: a.cfg.PageSize, selRow: -1, previewLinesDirty: true}
 	if s.pageSize < 1 || s.pageSize > pageSizeCap {
 		s.pageSize = 50
 	}
@@ -147,6 +157,31 @@ func newMailScreen(a *App) *mailScreen {
 	s.preview.SetBorder(true)
 	s.preview.SetText(mutedText(previewEmptyHint))
 
+	// Полосы прокрутки: рисуются в своей колонке после панели, поэтому geom
+	// берёт её свежий rect (колонка — сразу за рамкой панели).
+	s.msgBar = newScrollbar()
+	s.msgBar.geom = func() (int, int, int) {
+		// Колонка полосы — своя; строки — внутренняя область таблицы (без
+		// рамки), поэтому трек совпадает с текстом.
+		x, _, _, _ := s.msgBar.GetRect()
+		_, y, _, h := s.messages.GetInnerRect()
+		return x, y, h
+	}
+	s.msgBar.track = func() (int, int) {
+		off, _ := s.messages.GetOffset()
+		return off, s.messages.GetRowCount()
+	}
+	s.previewBar = newScrollbar()
+	s.previewBar.geom = func() (int, int, int) {
+		x, _, _, _ := s.previewBar.GetRect()
+		_, y, _, h := s.preview.GetInnerRect()
+		return x, y, h
+	}
+	s.previewBar.track = func() (int, int) {
+		off, _ := s.preview.GetScrollOffset()
+		return off, s.wrappedLines()
+	}
+
 	// WHY (RD-2): рамки у неактивных панелей нет — у папок и просмотра
 	// заголовка тоже нет (V-16): назначение очевидно, фокус показывает рамка.
 	// Не делать: возвращать заголовки в рамку (Box.SetTitle) — у неактивной
@@ -170,12 +205,20 @@ func newMailScreen(a *App) *mailScreen {
 	// этом остаются невидимыми у неактивных (RD-2) — двойных линий между
 	// колонками нет.
 	d1, d2 := newDivider(), newDivider()
+	// Полоса — отдельная колонка справа от панели (1 клетка), чтобы она не
+	// наезжала на текст и рамку; заголовок ПИСЬМА тоже ужимается на клетку.
+	messagesCol := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(panelColumn(s.messagesHeader, s.messages), 0, 1, true).
+		AddItem(s.msgBar, 1, 0, false)
+	previewCol := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(s.preview, 0, 1, true).
+		AddItem(s.previewBar, 1, 0, false)
 	s.root = tview.NewFlex().
 		AddItem(foldersCol, 0, pctFolders, false).
 		AddItem(d1, 1, 0, false).
-		AddItem(panelColumn(s.messagesHeader, s.messages), 0, pctMessages, false).
+		AddItem(messagesCol, 0, pctMessages, false).
 		AddItem(d2, 1, 0, false).
-		AddItem(s.preview, 0, pctPreview, true)
+		AddItem(previewCol, 0, pctPreview, true)
 
 	s.folders.SetChangedFunc(func(i int, _, _ string, _ rune) {
 		// «Ещё ▸/▾» и разделители — не папки: их нет в rowByItem, имя текущей
@@ -302,6 +345,7 @@ func (s *mailScreen) showReading(m mail.Message) {
 	tail, links := messageView(m)
 	s.reading = true
 	s.preview.SetText(FormatMessageHeader(m) + "\n" + tail)
+	s.previewLinesDirty = true
 	s.app.currentLinks = links
 	s.app.currentAttachments = m.Attachments
 	s.preview.ScrollToBeginning()
@@ -502,6 +546,19 @@ func (s *mailScreen) setConn(ok bool) {
 	s.conn.SetText(s.connText(s.connWidth()))
 }
 
+// wrappedLines — число строк превью с учётом переноса (для бегунка).
+// WHY: GetWrappedLineCount парсит весь текст — кэшируем до смены текста
+// (previewLinesDirty) или ширины панели.
+func (s *mailScreen) wrappedLines() int {
+	_, _, w, _ := s.preview.GetInnerRect()
+	if s.previewLinesDirty || w != s.previewLinesW {
+		s.previewLines = s.preview.GetWrappedLineCount()
+		s.previewLinesW = w
+		s.previewLinesDirty = false
+	}
+	return s.previewLines
+}
+
 // connWidth — текущая ширина футера; 0 до первой раскладки.
 func (s *mailScreen) connWidth() int {
 	_, _, w, _ := s.conn.GetRect()
@@ -549,6 +606,7 @@ func (s *mailScreen) selectFolder(id ews.FolderID, name string) {
 	s.rebuildPending = true
 	s.reading = false // V-15: смена папки — панель снова пустая, не старое письмо
 	s.preview.SetText(mutedText(previewEmptyHint))
+	s.previewLinesDirty = true
 	s.loadMessages()
 }
 
@@ -869,6 +927,7 @@ func (s *mailScreen) showPreview(row int) {
 	text := FormatMessageHeader(mail.Message{MessageSummary: m}) + "\n" +
 		mutedText("Enter — прочитать письмо…")
 	s.preview.SetText(text)
+	s.previewLinesDirty = true
 	s.preview.ScrollToBeginning()
 }
 

@@ -306,6 +306,30 @@ func TestFolderArrows(t *testing.T) {
 	})
 }
 
+// TestScrollThumb (V-17): геометрия бегунка полосы прокрутки — нет
+// прокрутки → пусто; высота — доля видимого (округление вверх); offset
+// прижимается к краям; минимум одна клетка.
+func TestScrollThumb(t *testing.T) {
+	cases := []struct {
+		offset, total, visible, top, h int
+	}{
+		{0, 5, 10, 0, 0},    // всё видно
+		{0, 40, 10, 0, 3},   // сверху
+		{30, 40, 10, 7, 3},  // в конце — прижат к низу
+		{15, 40, 10, 3, 3},  // середина
+		{-4, 40, 10, 0, 3},  // отрицательный offset — сверху
+		{99, 40, 10, 7, 3},  // за концом — к низу
+		{0, 1000, 10, 0, 1}, // минимум клетка
+	}
+	for _, c := range cases {
+		top, h := scrollThumb(c.offset, c.total, c.visible)
+		if top != c.top || h != c.h {
+			t.Errorf("scrollThumb(%d,%d,%d) = (%d,%d), хочу (%d,%d)",
+				c.offset, c.total, c.visible, top, h, c.top, c.h)
+		}
+	}
+}
+
 // TestV3ThinFrame — сторож каркаса V-3: рамка панели с фокусом одинарная
 // (не двойные focus-линии tview), между колонками — по одному тонкому
 // вертикальному разделителю.
