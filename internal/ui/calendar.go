@@ -323,8 +323,9 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 	s.agendaHeader.SetListTitle(AgendaTitle(day), meetingsCount(len(s.dayEvents)))
 }
 
-// restyleAgenda пересобирает блоки повестки под выбор sel (V-34/V-42):
-// сегменты каждого события через AgendaSegments, выбранное — onAccent. Реестр
+// restyleAgenda пересобирает блоки повестки под выбор sel (V-34/V-42/V-51):
+// две строки каждого события через AgendaSegments (время+тема / место),
+// выбранное — onAccent, прошедшее — muted. Реестр
 // ссылок новый, но порядок тот же — маркеры [N] не меняются; прокрутка не
 // сбрасывается (строки те же, меняются только стили).
 func (s *calendarScreen) restyleAgenda(sel int) {
@@ -332,9 +333,10 @@ func (s *calendarScreen) restyleAgenda(sel int) {
 		return
 	}
 	reg := mail.NewLinkRegistry()
-	items := make([][]agendaSeg, len(s.dayEvents))
+	now := agendaNow()
+	items := make([][][]agendaSeg, len(s.dayEvents))
 	for i, ev := range s.dayEvents {
-		items[i] = AgendaSegments(ev, reg, i == sel)
+		items[i] = AgendaSegments(ev, reg, i == sel, now)
 	}
 	s.dayLinks = reg.List()
 	s.agenda.SetItems(items, sel)

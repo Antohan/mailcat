@@ -150,32 +150,38 @@ func responseStatus(responseType string) (mark string, color tcell.Color) {
 	}
 }
 
-// AgendaSegments — блок повестки выбранного дня в стиле списка писем (V-34):
-// «14:30–15:00 ✓ Тема (Место)». Время и место — muted, статус — роль
-// (responseStatus), тема — primary. В выбранном событии всё onAccent: на
-// акцентной заливке primary тёмный, а ★ совпал бы с фоном.
+// AgendaSegments — блок повестки выбранного дня в стиле списка писем
+// (V-34/V-51): две строки — «14:30–15:00 ✓ Тема» (время и тема primary,
+// статус — роль ответа) и «(Место)» muted. Прошедшая встреча (End < now) — всё
+// muted; выбранная — onAccent: на акцентной заливке primary тёмный, а ★ совпал
+// бы с фоном. Вторая строка пустая, если места нет (строка остаётся — ритм
+// двухстрочных событий V-51).
 // Длинные URL из «Места» уходят в реестр reg (модал g), вместо них — маркер
 // [N] host; обычное место остаётся текстом в скобках.
 // WHY (V-42): сегменты {текст, стиль}, а не строка с тегами tview — повестка
 // рисуется собственным Draw через tcell, теги там не разбираются. Поэтому
 // tview.Escape не нужен, обязателен только Sanitize (SECURITY.md §3).
 // Не делать: возврат к tview.List и тегам — перенос строк тогда невозможен.
-func AgendaSegments(ev mail.Event, reg *mail.LinkRegistry, selected bool) []agendaSeg {
+func AgendaSegments(ev mail.Event, reg *mail.LinkRegistry, selected bool, now time.Time) [][]agendaSeg {
 	subject, muted := colorTextPrimary, colorTextSecondary
 	mark, status := responseStatus(ev.MyResponseType)
-	if selected {
+	switch {
+	case selected:
 		subject, muted, status = colorOnAccent, colorOnAccent, colorOnAccent
+	case ev.End.Before(now): // прошедшая — только по локальному времени (V-51)
+		subject, muted, status = colorTextSecondary, colorTextSecondary, colorTextSecondary
 	}
-	segs := []agendaSeg{
+	head := []agendaSeg{
 		{fmt.Sprintf("%s–%s ", ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04")),
-			tcell.StyleDefault.Foreground(muted)},
+			tcell.StyleDefault.Foreground(subject)},
 		{mark + " ", tcell.StyleDefault.Foreground(status)},
 		{security.Sanitize(ev.Subject), tcell.StyleDefault.Foreground(subject)},
 	}
+	var place []agendaSeg
 	if loc := reg.RenderBody(ev.Location); loc != "" {
-		segs = append(segs, agendaSeg{"(" + security.Sanitize(loc) + ")", tcell.StyleDefault.Foreground(muted)})
+		place = []agendaSeg{{"(" + security.Sanitize(loc) + ")", tcell.StyleDefault.Foreground(muted)}}
 	}
-	return segs
+	return [][]agendaSeg{head, place}
 }
 
 // AgendaTitle — левая часть заголовка повестки: «Повестка · 18.11».

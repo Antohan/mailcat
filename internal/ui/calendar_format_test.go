@@ -188,6 +188,20 @@ func segText(segs []agendaSeg) string {
 	return b.String()
 }
 
+// agendaSegs — все сегменты блока события (обе строки) одним срезом.
+func agendaSegs(lines [][]agendaSeg) []agendaSeg {
+	var out []agendaSeg
+	for _, line := range lines {
+		out = append(out, line...)
+	}
+	return out
+}
+
+// agendaText — текст блока события (обе строки) одной строкой.
+func agendaText(lines [][]agendaSeg) string {
+	return segText(agendaSegs(lines))
+}
+
 // segFg — цвет первого сегмента, содержащего part.
 func segFg(t *testing.T, segs []agendaSeg, part string) tcell.Color {
 	t.Helper()
@@ -201,29 +215,37 @@ func segFg(t *testing.T, segs []agendaSeg, part string) tcell.Color {
 	return 0
 }
 
-// TestAgendaSegments: блок повестки в стиле списка писем (V-34) — время,
-// статус и место цветными ролями, тема primary; в выбранном событии всё
-// onAccent. URL из «Места» уходит в реестр, маркер [N] — обычным текстом.
+// TestAgendaSegments: блок повестки в стиле списка писем (V-34/V-51) — две
+// строки: время primary, статус и тема цветными ролями; место muted отдельной
+// строкой. Прошедшая встреча (End < now) — всё muted, выбранная — onAccent.
+// URL из «Места» уходит в реестр, маркер [N] — обычным текстом.
 func TestAgendaSegments(t *testing.T) {
 	ev := mail.Event{
 		Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30), Subject: "Синк команды",
 		Location: "https://zoom.example/j/987654321?pwd=abcdef", MyResponseType: "Accept",
 	}
 	reg := mail.NewLinkRegistry()
-	segs := AgendaSegments(ev, reg, false)
+	blocks := AgendaSegments(ev, reg, false, nov(t, 17, 9, 0))
+	if len(blocks) != 2 {
+		t.Fatalf("строк в блоке = %d, хочу 2", len(blocks))
+	}
+	segs, place := blocks[0], blocks[1]
 	line := segText(segs)
-	for _, want := range []string{"10:00–10:30", "✓", "Синк команды", "([1] zoom.example)"} {
+	for _, want := range []string{"10:00–10:30", "✓", "Синк команды"} {
 		if !strings.Contains(line, want) {
-			t.Errorf("в строке повестки нет %q: %s", want, line)
+			t.Errorf("в первой строке повестки нет %q: %s", want, line)
 		}
 	}
-	if strings.Contains(line, "987654321") {
-		t.Errorf("полный URL не убран из строки: %s", line)
+	if got := segText(place); got != "([1] zoom.example)" {
+		t.Errorf("вторая строка (место) = %q, хочу «([1] zoom.example)»", got)
+	}
+	if strings.Contains(agendaText(blocks), "987654321") {
+		t.Errorf("полный URL не убран из блока: %s", agendaText(blocks))
 	}
 	for part, want := range map[string]tcell.Color{
-		"10:00": colorTextSecondary, "✓": colorConnected, "Синк": colorTextPrimary, "zoom": colorTextSecondary,
+		"10:00": colorTextPrimary, "✓": colorConnected, "Синк": colorTextPrimary, "zoom": colorTextSecondary,
 	} {
-		if got := segFg(t, segs, part); got != want {
+		if got := segFg(t, agendaSegs(blocks), part); got != want {
 			t.Errorf("цвет %q = %v, хочу %v", part, got, want)
 		}
 	}
@@ -231,29 +253,45 @@ func TestAgendaSegments(t *testing.T) {
 		t.Fatalf("в реестре %d ссылок, хочу 1", len(reg.List()))
 	}
 
-	// Обычное место остаётся текстом в скобках, muted.
+	// Обычное место остаётся текстом в скобках, muted, во второй строке.
 	reg = mail.NewLinkRegistry()
 	plain := AgendaSegments(mail.Event{
 		Start: nov(t, 17, 14, 30), End: nov(t, 17, 15, 0), Subject: "Планирование",
 		Location: "Переговорная 3", MyResponseType: "Tentative",
-	}, reg, false)
-	if got := segFg(t, plain, "~"); got != colorWeekend {
+	}, reg, false, nov(t, 17, 9, 0))
+	if got := segFg(t, plain[0], "~"); got != colorWeekend {
 		t.Errorf("статус «~» не в weekend-роли: %v", got)
 	}
-	if got := segFg(t, plain, "Переговорная"); got != colorTextSecondary {
+	if got := segFg(t, plain[1], "Переговорная"); got != colorTextSecondary {
 		t.Errorf("обычное место не muted: %v", got)
 	}
-	if text := segText(plain); !strings.Contains(text, "(Переговорная 3)") {
+	if text := segText(plain[1]); !strings.Contains(text, "(Переговорная 3)") {
 		t.Errorf("обычное место не в скобках: %q", text)
 	}
 	if len(reg.List()) != 0 {
 		t.Errorf("обычное место попало в реестр ссылок: %d", len(reg.List()))
 	}
 
-	// Выбранное событие: время/статус/тема — onAccent (на акцентной заливке
-	// primary тёмный, ★ совпал бы с фоном).
-	sel := AgendaSegments(ev, mail.NewLinkRegistry(), true)
-	for _, seg := range sel {
+	// Событие без места: вторая строка пустая, но остаётся (двухстрочный ритм).
+	noPlace := AgendaSegments(mail.Event{
+		Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30), Subject: "Без места",
+	}, mail.NewLinkRegistry(), false, nov(t, 17, 9, 0))
+	if len(noPlace) != 2 || len(noPlace[1]) != 0 {
+		t.Errorf("блок без места = %q, хочу две строки, вторая пустая", agendaText(noPlace))
+	}
+
+	// Прошедшая встреча: всё muted (конец раньше now).
+	past := AgendaSegments(ev, mail.NewLinkRegistry(), false, nov(t, 17, 11, 0))
+	for _, seg := range agendaSegs(past) {
+		if got, _, _ := seg.style.Decompose(); got != colorTextSecondary {
+			t.Errorf("прошедший сегмент %q не muted: %v", seg.text, got)
+		}
+	}
+
+	// Выбранное событие: всё onAccent (на акцентной заливке primary тёмный,
+	// ★ совпал бы с фоном).
+	sel := AgendaSegments(ev, mail.NewLinkRegistry(), true, nov(t, 17, 11, 0))
+	for _, seg := range agendaSegs(sel) {
 		if got, _, _ := seg.style.Decompose(); got != colorOnAccent {
 			t.Errorf("сегмент %q не onAccent: %v", seg.text, got)
 		}
@@ -264,8 +302,8 @@ func TestAgendaSegments(t *testing.T) {
 	dirty := AgendaSegments(mail.Event{
 		Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30),
 		Subject: "Синк\x1b[31m", Location: "Зал\x07",
-	}, mail.NewLinkRegistry(), false)
-	if text := segText(dirty); strings.ContainsAny(text, "\x1b\x07") {
+	}, mail.NewLinkRegistry(), false, nov(t, 17, 9, 0))
+	if text := agendaText(dirty); strings.ContainsAny(text, "\x1b\x07") {
 		t.Errorf("управляющие символы дошли до повестки: %q", text)
 	}
 }
@@ -273,21 +311,22 @@ func TestAgendaSegments(t *testing.T) {
 // TestAgendaWrap: блок события переносится по словам под ширину панели
 // (V-42), длинное слово режется принудительно, текст не теряется.
 func TestAgendaWrap(t *testing.T) {
-	segs := AgendaSegments(mail.Event{
+	blocks := AgendaSegments(mail.Event{
 		Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30),
 		Subject:  "Синк по релизу с командой платформы и поддержкой",
 		Location: "Переговорная 3", MyResponseType: "Accept",
-	}, mail.NewLinkRegistry(), false)
-	full := strings.Join(strings.Fields(segText(segs)), "")
+	}, mail.NewLinkRegistry(), false, nov(t, 17, 9, 0))
+	full := strings.Join(strings.Fields(agendaText(blocks)), "")
 	for _, width := range []int{20, 40, 80, 100, 220} {
-		lines := wrapSegments(segs, width)
 		var got strings.Builder
-		for _, line := range lines {
-			if n := len([]rune(segText(line))); n > width {
-				t.Errorf("ширина %d: строка %d рун", width, n)
+		for _, segs := range blocks {
+			for _, line := range wrapSegments(segs, width) {
+				if n := len([]rune(segText(line))); n > width {
+					t.Errorf("ширина %d: строка %d рун", width, n)
+				}
+				got.WriteString(segText(line))
+				got.WriteByte(' ')
 			}
-			got.WriteString(segText(line))
-			got.WriteByte(' ')
 		}
 		if got := strings.Join(strings.Fields(got.String()), ""); got != full {
 			t.Errorf("ширина %d: текст потерян:\n%q\nхочу %q", width, got, full)
@@ -302,23 +341,43 @@ func TestAgendaWrap(t *testing.T) {
 	}
 }
 
-// TestAgendaClick: клик выбирает событие под курсором и передаёт фокус.
+// fixAgendaNow закрепляет часы повестки (V-51): иначе стили прошедших встреч
+// зависят от даты прогона тестов.
+func fixAgendaNow(t *testing.T, now time.Time) {
+	t.Helper()
+	prev := agendaNow
+	agendaNow = func() time.Time { return now }
+	t.Cleanup(func() { agendaNow = prev })
+}
+
+// TestAgendaClick: клик выбирает событие под курсором и передаёт фокус;
+// клик по зазору между событиями только фокусирует панель (V-51).
 func TestAgendaClick(t *testing.T) {
 	l := newAgendaList()
 	l.SetRect(0, 0, 40, 10)
-	items := [][]agendaSeg{
-		{{text: "10:00–10:30 Синк"}},
-		{{text: "12:00–13:00 Разбор"}},
+	items := [][][]agendaSeg{
+		{{{text: "10:00–10:30 Синк"}}},
+		{{{text: "12:00–13:00 Разбор"}}},
 	}
 	l.SetItems(items, 0)
 	focused := false
 	handler := l.MouseHandler()
-	handled, _ := handler(tview.MouseLeftClick,
-		tcell.NewEventMouse(1, 1, tcell.Button1, tcell.ModNone),
-		func(tview.Primitive) { focused = true })
-	if !handled || !focused {
-		t.Fatalf("клик не обработан или фокус не передан: %v/%v", handled, focused)
+	click := func(y int) {
+		t.Helper()
+		handled, _ := handler(tview.MouseLeftClick,
+			tcell.NewEventMouse(1, y, tcell.Button1, tcell.ModNone),
+			func(tview.Primitive) { focused = true })
+		if !handled || !focused {
+			t.Fatalf("клик не обработан или фокус не передан: %v/%v", handled, focused)
+		}
 	}
+	// У событий теста по одной строке: событие 0 — строка 0, зазор — 1,
+	// событие 1 — строка 2.
+	click(1) // зазор
+	if got := l.Selected(); got != 0 {
+		t.Errorf("клик по зазору выбрал %d, хочу 0", got)
+	}
+	click(2)
 	if got := l.Selected(); got != 1 {
 		t.Errorf("после клика выбрано %d, хочу 1", got)
 	}
@@ -357,6 +416,7 @@ func TestAgendaTitle(t *testing.T) {
 // Enter без действия.
 func TestOnDaySelectedAgenda(t *testing.T) {
 	a := newTestApp(t)
+	fixAgendaNow(t, nov(t, 17, 9, 0))
 	s := a.calendar
 	s.year, s.month = 2026, time.November
 	s.events = []mail.Event{
@@ -375,14 +435,14 @@ func TestOnDaySelectedAgenda(t *testing.T) {
 	if s.agenda.Selected() != 0 {
 		t.Fatalf("выбрано %d, хочу первое событие", s.agenda.Selected())
 	}
-	first := segText(s.agenda.items[0])
+	first := agendaText(s.agenda.items[0])
 	if !strings.Contains(first, "✓") || !strings.Contains(first, "[1] meet.example") {
 		t.Errorf("выбранный блок без маркеров: %q", first)
 	}
-	if got := segFg(t, s.agenda.items[0], "Синк"); got != colorOnAccent {
+	if got := segFg(t, agendaSegs(s.agenda.items[0]), "Синк"); got != colorOnAccent {
 		t.Errorf("выбранный блок не onAccent: %v", got)
 	}
-	if got := segFg(t, s.agenda.items[1], "Разбор"); got != colorTextPrimary {
+	if got := segFg(t, agendaSegs(s.agenda.items[1]), "Разбор"); got != colorTextPrimary {
 		t.Errorf("невыбранный блок не primary: %v", got)
 	}
 	if len(s.dayLinks) != 1 {
@@ -413,11 +473,13 @@ func TestOnDaySelectedAgenda(t *testing.T) {
 	s.openEventDetails(s.agenda.Selected()) // Enter на пустом дне — без действия
 }
 
-// TestAgendaListStyles: sim — повестка в стиле писем (V-34): выбранная строка
-// залита на всю ширину акцентом, время второй строки muted, тема primary,
-// полоса прокрутки — колонка справа за рамкой панели (30 встреч > видимых).
+// TestAgendaListStyles: sim — повестка в стиле писем (V-34/V-51): событие —
+// две строки с зазором, выбранный блок залит на всю ширину акцентом, время
+// будущей встречи primary, прошедшая — muted, полоса прокрутки — колонка
+// справа за рамкой панели (30 встреч > видимых).
 func TestAgendaListStyles(t *testing.T) {
 	a := newTestApp(t)
+	fixAgendaNow(t, nov(t, 22, 9, 1))
 	s := a.calendar
 	s.year, s.month = 2026, time.November
 	day := time.Date(2026, time.November, 22, 0, 0, 0, 0, time.Local)
@@ -458,7 +520,10 @@ func TestAgendaListStyles(t *testing.T) {
 	}
 
 	ix, iy, iw, ih := s.agenda.GetInnerRect()
-	// Выбранный блок первой встречи: заливка на всю ширину, текст onAccent.
+	// Раскладка V-51: событие — 2 строки (шапка, место), между событиями зазор.
+	// Событие 0 — строки iy/iy+1, зазор iy+2, событие 1 — iy+3/iy+4, ...
+	// Выбранный блок первой встречи: заливка на всю ширину (обе строки), текст
+	// onAccent.
 	if _, bg, _ := styleAt(ix, iy).Decompose(); !same(bg, colorSelectedBg) {
 		t.Errorf("выбранная строка: bg=%v, хочу %v", bg, colorSelectedBg)
 	}
@@ -477,22 +542,40 @@ func TestAgendaListStyles(t *testing.T) {
 	if _, bg, _ := styleAt(ix+iw-1, iy).Decompose(); !same(bg, colorSelectedBg) {
 		t.Errorf("выбранная строка залита не целиком: правый край bg=%v", bg)
 	}
-	// Вторая строка: время muted.
-	if fg, bg, _ := styleAt(ix+listPadLeft, iy+1).Decompose(); !same(fg, colorTextSecondary) || same(bg, colorSelectedBg) {
-		t.Errorf("время невыбранной строки: fg/bg=%v/%v, хочу %v", fg, bg, colorTextSecondary)
+	// Пустая строка места выбранного события остаётся в блоке (заливка accent).
+	if _, bg, _ := styleAt(ix, iy+1).Decompose(); !same(bg, colorSelectedBg) {
+		t.Errorf("пустая строка места не в блоке: bg=%v, хочу %v", bg, colorSelectedBg)
 	}
-	found := false
+	// Зазор: пустая строка на фоне панели, без текста.
+	if _, bg, _ := styleAt(ix, iy+2).Decompose(); !same(bg, colorPanelBg) {
+		t.Errorf("зазор: bg=%v, хочу %v", bg, colorPanelBg)
+	}
 	for x := ix; x < ix+iw; x++ {
-		if r, _, st, _ := sim.GetContent(x, iy+1); r == 'В' {
-			if fg, _, _ := st.Decompose(); !same(fg, colorTextPrimary) {
-				t.Errorf("тема невыбранной строки: fg=%v, хочу primary", fg)
-			}
-			found = true
+		if r, _, _, _ := sim.GetContent(x, iy+2); r != ' ' {
+			t.Errorf("в зазоре между событиями есть текст: %q", r)
 			break
 		}
 	}
-	if !found {
-		t.Error("темы второй встречи нет в повестке")
+	// Прошедшая встреча (1, 8:30–9:00 при now=9:01) — всё muted.
+	if fg, bg, _ := styleAt(ix+listPadLeft, iy+3).Decompose(); !same(fg, colorTextSecondary) || same(bg, colorSelectedBg) {
+		t.Errorf("время прошедшей встречи: fg/bg=%v/%v, хочу %v", fg, bg, colorTextSecondary)
+	}
+	sawPast := false
+	for x := ix; x < ix+iw; x++ {
+		if r, _, st, _ := sim.GetContent(x, iy+3); r == 'В' {
+			if fg, _, _ := st.Decompose(); !same(fg, colorTextSecondary) {
+				t.Errorf("тема прошедшей встречи: fg=%v, хочу muted", fg)
+			}
+			sawPast = true
+			break
+		}
+	}
+	if !sawPast {
+		t.Error("прошедшей встречи нет в повестке")
+	}
+	// Будущая встреча (2, 9:00–9:30) — время ярче (primary).
+	if fg, _, _ := styleAt(ix+listPadLeft, iy+6).Decompose(); !same(fg, colorTextPrimary) {
+		t.Errorf("время будущей встречи: fg=%v, хочу primary", fg)
 	}
 	// Полоса прокрутки: колонка за рамкой панели, бегунок залит secondary.
 	bx, _, _, _ := s.agendaBar.GetRect()

@@ -1,16 +1,23 @@
 package ui
 
 // Повестка дня (V-42): вместо tview.List — собственный Box + Draw, чтобы
-// событие было блоком строк, обёрнутых по ширине панели (tview.List обрезает
-// длинную строку). Выделение — весь блок акцентом; ↑↓ двигают события, Enter
-// открывает детали, клик выбирает событие; полоса прокрутки — scrollbar.go.
+// событие было блоком строк (V-51: две строки — время+тема / место), обёрнутых
+// по ширине панели (tview.List обрезает длинную строку). Между событиями —
+// пустая строка; прошедшие muted, выделение — весь блок акцентом; ↑↓ двигают
+// события, Enter открывает детали, клик выбирает событие; полоса прокрутки —
+// scrollbar.go.
 
 import (
 	"strings"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
+
+// agendaNow — текущее время повестки: по нему прошедшие встречи становятся
+// muted (V-51); тесты закрепляют часы, чтобы стили не зависели от даты прогона.
+var agendaNow = time.Now
 
 // agendaSeg — кусок строки повестки одним стилем. Текст уже прошёл Sanitize;
 // tview.Escape не применяется: сегменты рисуются через tcell, а не парсятся
@@ -26,11 +33,12 @@ type agendaRow struct {
 	ev   int
 }
 
-// agendaList — повестка дня: items — сегменты событий без переноса, раскладка
-// по строкам считается под текущую ширину панели (Draw и ScrollTrack).
+// agendaList — повестка дня: items — строки событий без переноса (V-51: две
+// строки на событие), раскладка по строкам считается под текущую ширину панели
+// (Draw и ScrollTrack).
 type agendaList struct {
 	*tview.Box
-	items  [][]agendaSeg
+	items  [][][]agendaSeg
 	sel    int
 	offset int // первая видимая строка раскладки
 
@@ -45,10 +53,10 @@ func newAgendaList() *agendaList {
 	return l
 }
 
-// SetItems задаёт события дня (сегменты каждого) и выбранное. Прокрутка не
+// SetItems задаёт события дня (строки каждого) и выбранное. Прокрутка не
 // сбрасывается: смена выбора пересобирает те же строки, а на новый день
 // scrollToSel в Draw всё равно приведёт её к первой строке выбранного блока.
-func (l *agendaList) SetItems(items [][]agendaSeg, sel int) {
+func (l *agendaList) SetItems(items [][][]agendaSeg, sel int) {
 	l.items, l.sel = items, sel
 	if l.sel >= len(items) {
 		l.sel = len(items) - 1
@@ -95,13 +103,24 @@ func contentWidth(w int) int {
 	return w
 }
 
-// layout раскладывает сегменты событий в строки под ширину width.
+// layout раскладывает строки событий в строки экрана под ширину width: между
+// событиями — пустая строка (ev -1, не выбирается), пустая вторая строка
+// события остаётся строкой (двухстрочный ритм V-51).
 func (l *agendaList) layout(width int) {
 	l.rowW = width
 	l.rows = l.rows[:0]
-	for i, segs := range l.items {
-		for _, line := range wrapSegments(segs, width) {
-			l.rows = append(l.rows, agendaRow{segs: line, ev: i})
+	for i, lines := range l.items {
+		if i > 0 {
+			l.rows = append(l.rows, agendaRow{ev: -1})
+		}
+		for _, segs := range lines {
+			wrapped := wrapSegments(segs, width)
+			if len(wrapped) == 0 {
+				wrapped = [][]agendaSeg{nil}
+			}
+			for _, line := range wrapped {
+				l.rows = append(l.rows, agendaRow{segs: line, ev: i})
+			}
 		}
 	}
 }
@@ -270,10 +289,13 @@ func (l *agendaList) MouseHandler() func(action tview.MouseAction, event *tcell.
 		}
 		setFocus(l)
 		l.layout(contentWidth(w))
-		if row := my - y + l.offset; row >= 0 && row < len(l.rows) && l.rows[row].ev != l.sel {
-			l.sel = l.rows[row].ev
-			if l.onSel != nil {
-				l.onSel(l.sel)
+		if row := my - y + l.offset; row >= 0 && row < len(l.rows) {
+			// Зазор между событиями (ev -1) только фокусирует панель.
+			if ev := l.rows[row].ev; ev >= 0 && ev != l.sel {
+				l.sel = ev
+				if l.onSel != nil {
+					l.onSel(l.sel)
+				}
 			}
 		}
 		return true, nil
