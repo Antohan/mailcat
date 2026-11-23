@@ -15,7 +15,7 @@ import (
 // weekdayNames — шапка сетки, Пн — первая колонка.
 var weekdayNames = [...]string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 
-// weekColWidth — ширина колонки номеров недель (V-52): «Нед» и две цифры.
+// weekColWidth — ширина колонки номеров недель (V-52): отступ 1 и две цифры.
 const weekColWidth = 3
 
 // monthGrid — месячная сетка: данные ([][]DayCell), ISO-номера недель строк и
@@ -149,8 +149,6 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 	}
 	headStyle := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
 	mx, my := gridMargins(w, h)
-	// Колонка номеров недель: шапка «Нед» — как дни недели, muted.
-	gridText(screen, x+mx, y+my, weekColWidth, "Нед", headStyle)
 	for col, name := range weekdayNames {
 		cx, _, cw, _ := dayCellRect(0, col, w, h)
 		gridText(screen, x+cx, y+my, cw, name, headStyle)
@@ -159,7 +157,7 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 	for row := 0; row < 6 && row < len(g.cells); row++ {
 		if row < len(g.weeks) {
 			// V-52: ISO-номер недели строки — muted, текущая неделя акцентом;
-			// выровнен по правому краю колонки (двузначные стоят в одну линию).
+			// отступ как у числа дня: слева 1 клетка, вниз 1 при ch>1.
 			weekStyle := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
 			if row == todayRow {
 				weekStyle = weekStyle.Foreground(colorAccent)
@@ -170,11 +168,7 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			if ch > 1 {
 				ty = cy + 1
 			}
-			pad := weekColWidth - len([]rune(label))
-			if pad < 0 {
-				pad = 0
-			}
-			gridText(screen, x+mx+pad, y+ty, weekColWidth-pad, label, weekStyle)
+			gridText(screen, x+mx+1, y+ty, weekColWidth-1, label, weekStyle)
 		}
 		for col := 0; col < 7; col++ {
 			cell := g.cells[row][col]

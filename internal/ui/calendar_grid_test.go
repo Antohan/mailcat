@@ -229,8 +229,9 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 
 	// Шапка дней недели — второстепенный текст.
-	mx, my := gridMargins(iw, ih)
-	if fg, _, _ := styleAt(ix+mx, iy+my).Decompose(); fg != colorTextSecondary {
+	_, my := gridMargins(iw, ih)
+	hx, _, _, _ := dayCellRect(0, 0, iw, ih)
+	if fg, _, _ := styleAt(ix+hx, iy+my).Decompose(); fg != colorTextSecondary {
 		t.Errorf("дни недели: fg=%v, хочу colorTextSecondary", fg)
 	}
 
@@ -301,8 +302,9 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 }
 
-// TestMonthGridWeekNumbers (V-52): слева — колонка «Нед» шириной 3, ISO-номера
-// недель muted, неделя «сегодня» — акцентом; клик по колонке день не выбирает.
+// TestMonthGridWeekNumbers (V-52): слева — колонка недель шириной 3 без
+// шапки, ISO-номера muted с отступом как у чисел дня, неделя «сегодня» —
+// акцентом; клик по колонке день не выбирает.
 func TestMonthGridWeekNumbers(t *testing.T) {
 	const w, h = 100, 30
 	g := newMonthGrid()
@@ -317,13 +319,14 @@ func TestMonthGridWeekNumbers(t *testing.T) {
 	g.Draw(sim)
 
 	ix, iy, iw, ih := g.GetInnerRect()
-	mx, my := gridMargins(iw, ih)
+	mx, _ := gridMargins(iw, ih)
 	weekCol := func(y int) string {
 		row := simRow(sim, iy+y)
 		return strings.TrimSpace(string(row[ix+mx : ix+mx+weekColWidth]))
 	}
-	if got := weekCol(my); !strings.Contains(got, "Нед") {
-		t.Errorf("шапки «Нед» нет: %q", got)
+	_, my := gridMargins(iw, ih)
+	if got := weekCol(my); got != "" {
+		t.Errorf("шапка колонки недель не пуста: %q", got)
 	}
 	weekY := func(row int) int {
 		_, cy, _, ch := dayCellRect(row, 0, iw, ih)
@@ -335,6 +338,10 @@ func TestMonthGridWeekNumbers(t *testing.T) {
 	for row, want := range []int{44, 45, 46, 47, 48, 49} {
 		if got := weekCol(weekY(row)); got != fmt.Sprint(want) {
 			t.Errorf("строка %d: номер недели %q, ждали %d", row, got, want)
+		}
+		// Отступ как у числа дня: первая клетка колонки пустая.
+		if r := simRow(sim, iy+weekY(row))[ix+mx]; r != ' ' {
+			t.Errorf("строка %d: номер недели без отступа 1: %q", row, r)
 		}
 	}
 	// Неделя с 17-м (строка 3, 47) — акцент; соседняя — muted.
