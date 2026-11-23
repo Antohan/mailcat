@@ -1,9 +1,8 @@
 # mailcat — HANDOFF
 
 ## Дальше
-**V-9** (доки, `docs/PLAN-ITER3.1.md`): README (скриншоты/структура),
-HANDOFF «Не трогать» — инвариант «цвета/стили — только theme.go/константы UI-6»;
-policy_test не задет (чтение Body в whitelist). Читать: `README.md`, план V-9.
+**V-43** (волна 7, `docs/PLAN-ITER3.1.md`): линии сетки — светлее (`theme.go` —
+`colorGridLine`); далее V-44…V-47 по плану.
 
 ## Сделано
 - iter31 V-42 (b712081): повестка — `agendaList` (Box+Draw), блоки с переносом, клик/скролл/бар.
