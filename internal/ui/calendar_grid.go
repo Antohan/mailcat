@@ -127,8 +127,8 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 
 // Draw рисует шапку дней недели и дни: число (жирным) и «·N» — с отступом
 // 1 клетка от левого/верхнего края ячейки; выбранный день залит
-// colorSelectedBg от линии до линии, «сегодня» — tint colorTodayBg
-// (V-33, V-39, V-44).
+// colorSelectedBg от линии до линии, «сегодня» — акцентный номер без заливки
+// (V-33, V-39, V-44, V-45).
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
@@ -185,8 +185,8 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 }
 
 // drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
-// строку шапки), горизонтали под шапкой дней недели и между неделями. Заливки
-// выбранного/«сегодня» лежат внутри dayCellRect, поэтому линии их не затирают.
+// строку шапки), горизонтали под шапкой дней недели и между неделями. Заливка
+// выбранного лежит внутри dayCellRect, поэтому линии её не затирают.
 // WHY: отдельная роль colorGridLine (V-43) — hairline на белой поверхности
 // не читается, а textSecondary (цвет чисел и подписей) слишком тяжёлый:
 // линии спорили с числами. Роль светлее чисел и темнее hairline; пустые и
@@ -232,13 +232,13 @@ func (g *monthGrid) cellStyles(row, col int) (day, count tcell.Style) {
 		day = day.Foreground(colorWeekend) // Сб/Вс
 	}
 	if g.cells[row][col].Day == g.today {
-		// О-3/V-40: «сегодня» — акцентный номер на tint-фоне; сплошной акцент
-		// занят выбором.
-		// WHY: фон остаётся tint, а не colorAccent — иначе «сегодня» и выбранный
-		// день выглядели бы одинаково и выбор терял бы единственный акцент.
-		// Не делать: заливать «сегодня» акцентом — О-3 и V-40 держат tint.
-		day = day.Foreground(colorAccent).Bold(true).Background(colorTodayBg)
-		count = count.Background(colorTodayBg)
+		// О-3/V-45: «сегодня» — акцентный номер на фоне панели; сплошной
+		// акцент занят выбором (после совпадения выбор перекрывает этот стиль).
+		// WHY: tint-подложка под номером читалась как second selection и
+		// спорила с сеткой; без фона «сегодня» держится цветом и жирностью.
+		// Не делать: возвращать заливку colorTodayBg — два залитых дня подряд.
+		day = day.Foreground(colorAccent).Bold(true).Background(colorPanelBg)
+		count = count.Foreground(colorTextSecondary).Background(colorPanelBg)
 	}
 	if g.hasSel && row == g.selRow && col == g.selCol {
 		day = tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg).Bold(true)

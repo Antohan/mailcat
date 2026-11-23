@@ -185,9 +185,9 @@ func TestCalendarGridFillsPanel(t *testing.T) {
 	<-done
 }
 
-// TestMonthGridStyles: палитра ячеек (V-33, V-40) — выбранный день залит
-// целиком colorSelectedBg, «сегодня» — акцентный номер на tint colorTodayBg,
-// Сб/Вс — colorWeekend, «·N» — colorTextSecondary (на акценте —
+// TestMonthGridStyles: палитра ячеек (V-33, V-40, V-45) — выбранный день залит
+// целиком colorSelectedBg, «сегодня» — акцентный номер на фоне панели (без
+// заливки), Сб/Вс — colorWeekend, «·N» — colorTextSecondary (на акценте —
 // colorSelectedFg). Цвета — RGB-роли, поэтому на 256-цветном терминале
 // и в truecolor они одни и те же.
 func TestMonthGridStyles(t *testing.T) {
@@ -249,17 +249,21 @@ func TestMonthGridStyles(t *testing.T) {
 			fg, cattr&tcell.AttrBold != 0, colorSelectedFg)
 	}
 
-	// «Сегодня»: акцентный номер на tint-фоне; счётчик остаётся secondary.
-	x, y, _ = cell(17)
+	// «Сегодня»: акцентный номер на фоне панели (V-45), счётчик — secondary;
+	// заливки нет — угловая клетка остаётся цветом панели.
+	x, y, cw = cell(17)
 	fg, bg, attr = styleAt(x+1, y).Decompose()
-	if fg != colorAccent || bg != colorTodayBg || attr&tcell.AttrBold == 0 {
+	if fg != colorAccent || bg != colorPanelBg || attr&tcell.AttrBold == 0 {
 		t.Errorf("сегодня: fg=%v bg=%v bold=%v, хочу %v/%v/bold",
-			fg, bg, attr&tcell.AttrBold != 0, colorAccent, colorTodayBg)
+			fg, bg, attr&tcell.AttrBold != 0, colorAccent, colorPanelBg)
+	}
+	if _, blankBg, _ := styleAt(x+cw-1, y).Decompose(); blankBg != colorPanelBg {
+		t.Errorf("«сегодня» с заливкой: фон пустой клетки %v", blankBg)
 	}
 	fg, bg, cattr := styleAt(x+3, y).Decompose()
-	if fg != colorTextSecondary || bg != colorTodayBg || cattr&tcell.AttrBold != 0 {
+	if fg != colorTextSecondary || bg != colorPanelBg || cattr&tcell.AttrBold != 0 {
 		t.Errorf("счётчик сегодня: fg=%v bg=%v bold=%v, хочу secondary/%v/regular",
-			fg, bg, cattr&tcell.AttrBold != 0, colorTodayBg)
+			fg, bg, cattr&tcell.AttrBold != 0, colorPanelBg)
 	}
 
 	// Выходной (21 ноября — суббота) — цвет выходного, номер тоже жирный.
@@ -280,8 +284,8 @@ func TestMonthGridStyles(t *testing.T) {
 		}
 	}
 
-	// V-40: при совпадении «сегодня» и выбора побеждает выбранный — сплошной
-	// акцент/onAccent, а не tint «сегодня».
+	// V-45: при совпадении «сегодня» и выбора побеждает выбранный — сплошной
+	// акцент/onAccent, а не акцентный номер на фоне панели.
 	g.SelectDay(17)
 	g.Draw(sim)
 	x, y, _ = cell(17)
