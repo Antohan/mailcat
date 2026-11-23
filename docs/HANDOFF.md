@@ -1,9 +1,8 @@
 # mailcat — HANDOFF
 
 ## Дальше
-**V-9** (`docs/PLAN-ITER3.1.md`, доки): README — скриншоты/структура; в «Не
-трогать» — инвариант «цвета и стили только через theme.go/константы UI-6».
-policy_test не трогать (новых EWS-операций нет).
+**V-37** (волна 6, `docs/PLAN-ITER3.1.md`): одинаковые ячейки сетки —
+`calendar_grid.go` (`dayCellRect`/`dayAt`); далее V-38…V-42 по плану.
 
 ## Сделано
 - iter31 V-36 (efb0b8c): детали встречи — `FormatEventHeader` + описание GetItem с кэшем.
