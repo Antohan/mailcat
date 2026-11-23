@@ -435,6 +435,138 @@ func TestAgendaTitle(t *testing.T) {
 	}
 }
 
+// TestNearestEvent: самое раннее событие с Start > now; прошедшие и Start ==
+// now не берутся; пустой список — false (V-53).
+func TestNearestEvent(t *testing.T) {
+	at := nov(t, 17, 12, 0)
+	events := []mail.Event{
+		{Start: nov(t, 17, 9, 0), End: nov(t, 17, 9, 30), Subject: "Прошло"},
+		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30), Subject: "Позже"},
+		{Start: at, End: at.Add(30 * time.Minute), Subject: "Сейчас"},
+		{Start: nov(t, 17, 14, 0), End: nov(t, 17, 14, 30), Subject: "Скоро"},
+	}
+	ev, ok := NearestEvent(events, at)
+	if !ok || ev.Subject != "Скоро" {
+		t.Errorf("NearestEvent = %q/%v, хочу «Скоро»", ev.Subject, ok)
+	}
+	if _, ok := NearestEvent(events[:1], at); ok {
+		t.Error("NearestEvent взял прошедшее событие")
+	}
+	if _, ok := NearestEvent(nil, at); ok {
+		t.Error("NearestEvent пустого списка вернул событие")
+	}
+}
+
+// TestNearestLine: «Ближайшее: 15:00–15:30 Тема» — подпись muted, время и тема
+// primary; будущих нет — muted «Больше событий нет»; тема через Sanitize.
+func TestNearestLine(t *testing.T) {
+	now := nov(t, 17, 14, 30)
+	segs := NearestLine([]mail.Event{
+		{Start: nov(t, 17, 15, 0), End: nov(t, 17, 15, 30), Subject: "Digital\x1b[31m Corp. Daily"},
+		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30), Subject: "Позже"},
+	}, now)
+	text := segText(segs)
+	if want := "Ближайшее: 15:00–15:30 Digital Corp. Daily"; text != want {
+		t.Errorf("текст футера = %q, хочу %q", text, want)
+	}
+	if strings.ContainsRune(text, '\x1b') {
+		t.Errorf("в футер прошёл ESC: %q", text)
+	}
+	for _, c := range []struct {
+		part string
+		want tcell.Color
+	}{
+		{"Ближайшее", colorTextSecondary},
+		{"15:00", colorTextPrimary},
+		{"Digital", colorTextPrimary},
+	} {
+		if got := segFg(t, segs, c.part); got != c.want {
+			t.Errorf("%q: fg=%v, хочу %v", c.part, got, c.want)
+		}
+	}
+
+	empty := NearestLine(nil, now)
+	if got := segText(empty); got != "Больше событий нет" {
+		t.Errorf("пустой футер = %q", got)
+	}
+	if got := segFg(t, empty, "Больше"); got != colorTextSecondary {
+		t.Errorf("пустой футер: fg=%v, хочу muted", got)
+	}
+}
+
+// TestCalendarNearestFooter (V-53): sim — под сеткой одна строка «Ближайшее:
+// …», сетка отдаёт ей нижнюю строку; подпись muted, время primary; месяц без
+// будущих событий — «Больше событий нет».
+func TestCalendarNearestFooter(t *testing.T) {
+	prev := agendaNow
+	at := nov(t, 18, 14, 30)
+	agendaNow = func() time.Time { return at }
+	t.Cleanup(func() { agendaNow = prev })
+
+	a := newTestApp(t)
+	s := a.calendar
+	s.year, s.month = 2026, time.November
+	s.events = []mail.Event{
+		{Start: nov(t, 18, 15, 0), End: nov(t, 18, 15, 30), Subject: "Digital Corp. Daily"},
+	}
+	s.render()
+	a.pages.SwitchToPage(pageCalendar)
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	const w, h = 100, 30
+	a.tapp.SetScreen(sim)
+	sim.SetSize(w, h)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	a.tapp.QueueUpdateDraw(func() {})
+	defer func() { a.tapp.Stop(); <-done }()
+
+	x, y, _, _ := s.gridFooter.GetRect()
+	if w <= 0 || y <= 0 {
+		t.Fatalf("у футера нет места: x=%d y=%d", x, y)
+	}
+	// Сетка отдала футеру нижнюю строку: её рамка кончается строкой выше.
+	if r, _, _, _ := sim.GetContent(x, y-1); r != '└' {
+		t.Errorf("над футером не низ сетки: %q", r)
+	}
+	row := simRow(sim, y)
+	if runeIndex(row, "Ближайшее: 15:00–15:30 Digital Corp. Daily") < 0 {
+		t.Errorf("строки «Ближайшее» нет: %q", string(row))
+	}
+	same := func(c1, c2 tcell.Color) bool {
+		r1, g1, b1 := c1.RGB()
+		r2, g2, b2 := c2.RGB()
+		return r1 == r2 && g1 == g2 && b1 == b2
+	}
+	styleAt := func(ix int) tcell.Style {
+		_, _, st, _ := sim.GetContent(ix, y)
+		return st
+	}
+	if fg, _, _ := styleAt(x + 1).Decompose(); !same(fg, colorTextSecondary) {
+		t.Errorf("подпись футера: fg=%v, хочу muted", fg)
+	}
+	if fg, _, _ := styleAt(x + 1 + len([]rune("Ближайшее: "))).Decompose(); !same(fg, colorTextPrimary) {
+		t.Errorf("время футера: fg=%v, хочу primary", fg)
+	}
+
+	// Месяц без будущих событий — muted-заглушка (пересчёт в render).
+	past := mail.Event{Start: nov(t, 18, 8, 0), End: nov(t, 18, 8, 30), Subject: "Прошло"}
+	a.tapp.QueueUpdateDraw(func() {
+		s.events = []mail.Event{past}
+		s.render()
+	})
+	row = simRow(sim, y)
+	if runeIndex(row, "Больше событий нет") < 0 {
+		t.Errorf("нет заглушки пустого футера: %q", string(row))
+	}
+	if fg, _, _ := styleAt(x + 1).Decompose(); !same(fg, colorTextSecondary) {
+		t.Errorf("заглушка футера: fg=%v, хочу muted", fg)
+	}
+}
+
 // TestOnDaySelectedAgenda: повестка дня собирается через AgendaSegments —
 // выбранный блок onAccent, остальные primary, маркеры и реестр ссылок видны
 // в блоках, dayLinks наполняется для модала g; пустой день — без выбора,

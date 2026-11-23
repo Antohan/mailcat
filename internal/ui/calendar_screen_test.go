@@ -67,9 +67,10 @@ func TestCalendarWithoutBanner(t *testing.T) {
 	if row := simRow(sim, iy+my); runeIndex(row, "Пн") < 0 || runeIndex(row, "Вс") < runeIndex(row, "Пт") {
 		t.Errorf("дни недели не в первой строке сетки: %q", string(row))
 	}
-	// Сетка тянется до низа страницы (над строкой сообщений).
-	if r, _, _, _ := sim.GetContent(0, h-3); r != '└' {
-		t.Errorf("низ сетки не у нижней границы страницы: (%d, %d) = %q", 0, h-3, r)
+	// V-53: сетка отдаёт нижнюю строку футеру «Ближайшее» — рамка кончается
+	// строкой выше (footer на h-3).
+	if r, _, _, _ := sim.GetContent(0, h-4); r != '└' {
+		t.Errorf("низ сетки не над футером: (%d, %d) = %q", 0, h-4, r)
 	}
 
 	a.tapp.Stop()

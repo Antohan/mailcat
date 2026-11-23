@@ -203,6 +203,40 @@ func AgendaTitle(day time.Time) string {
 	return "Повестка · " + day.Format("02.01")
 }
 
+// NearestEvent — ближайшее будущее событие месяца (V-53): Start строго после
+// now, самое раннее из подходящих. Прошедшие (Start ≤ now) не берём.
+func NearestEvent(events []mail.Event, now time.Time) (mail.Event, bool) {
+	var best mail.Event
+	found := false
+	for _, ev := range events {
+		if !ev.Start.After(now) {
+			continue
+		}
+		if !found || ev.Start.Before(best.Start) {
+			best, found = ev, true
+		}
+	}
+	return best, found
+}
+
+// NearestLine — строка «Ближайшее: 14:30–15:00 Тема» под сеткой (V-53):
+// подпись muted, время и тема primary; если будущих событий нет — muted
+// «Больше событий нет». Тема — через Sanitize: сегменты рисуются tcell,
+// tview.Escape не нужен (как у AgendaSegments).
+func NearestLine(events []mail.Event, now time.Time) []agendaSeg {
+	muted := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+	ev, ok := NearestEvent(events, now)
+	if !ok {
+		return []agendaSeg{{"Больше событий нет", muted}}
+	}
+	primary := tcell.StyleDefault.Foreground(colorTextPrimary).Background(colorPanelBg)
+	return []agendaSeg{
+		{"Ближайшее: ", muted},
+		{fmt.Sprintf("%s–%s ", ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04")), primary},
+		{security.Sanitize(ev.Subject), primary},
+	}
+}
+
 // meetingsCount — правая часть шапки панели: «3 встречи» (месяц/повестка).
 // WHY: формы множественного числа нужны и сетке месяца, и повестке; без
 // капса — счётчик стоит рядом с данными, а не UI-подписью.

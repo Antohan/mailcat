@@ -27,6 +27,9 @@ type calendarScreen struct {
 	gridHeader   *panelHeader
 	agendaHeader *panelHeader
 
+	// V-53: строка «Ближайшее: …» под сеткой месяца.
+	gridFooter *calendarFooter
+
 	year      int
 	month     time.Month
 	events    []mail.Event // кэш текущего месяца
@@ -73,8 +76,16 @@ func newCalendarScreen(a *App) *calendarScreen {
 		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 1, false).
 		AddItem(s.agendaBar, 1, 0, false)
 
+	// V-53: колонка сетки — заголовок, сетка и строка «Ближайшее» под ней;
+	// сетка отдаёт футеру 1 строку (высота недель уменьшается).
+	s.gridFooter = newCalendarFooter()
+	gridCol := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(s.gridHeader, 1, 0, false).
+		AddItem(s.grid, 0, 1, true).
+		AddItem(s.gridFooter, 1, 0, false)
+
 	s.root = tview.NewFlex().
-		AddItem(panelColumn(s.gridHeader, s.grid), 0, 55, true).
+		AddItem(gridCol, 0, 55, true).
 		AddItem(newDivider(), 1, 0, false).
 		AddItem(agendaCol, 0, 45, false)
 
@@ -294,6 +305,10 @@ func (s *calendarScreen) render() {
 		today = now.Day()
 	}
 	s.grid.SetCells(grid, MonthWeeks(s.year, s.month), today)
+	// V-53: ближайшее будущее месяца — пересчёт при каждой загрузке/смене
+	// месяца (render зовётся после ответа и смены месяца); часы — agendaNow,
+	// чтобы тесты не зависели от даты прогона.
+	s.gridFooter.SetSegments(NearestLine(s.events, agendaNow()))
 	// Выбор: сегодняшний день месяца, иначе 1-е — onSelect сам обновит повестку.
 	pick := 1
 	if inMonth {
@@ -379,6 +394,40 @@ func (s *calendarScreen) openEventDetails(idx int) {
 			s.app.showEventDetails(ev, body)
 		})
 	}()
+}
+
+// calendarFooter — одна строка под сеткой месяца (V-53): «Ближайшее: …».
+// Сегменты приходят уже с Sanitize и рисуются через tcell (tview.Escape не
+// нужен — теги не разбираются), как в повестке.
+type calendarFooter struct {
+	*tview.Box
+	segs []agendaSeg
+}
+
+func newCalendarFooter() *calendarFooter {
+	f := &calendarFooter{Box: tview.NewBox()}
+	f.SetBackgroundColor(colorPanelBg)
+	return f
+}
+
+// SetSegments задаёт текст строки; пересобирает его render при загрузке месяца.
+func (f *calendarFooter) SetSegments(segs []agendaSeg) { f.segs = segs }
+
+// Draw печатает сегменты с отступом 1 (как содержимое рамки сетки) и обрезает
+// по ширине колонки: строка всегда одна.
+func (f *calendarFooter) Draw(screen tcell.Screen) {
+	f.Box.DrawForSubclass(screen, f)
+	x, y, w, _ := f.GetInnerRect()
+	cx := x + 1
+	for _, seg := range f.segs {
+		for _, r := range []rune(seg.text) {
+			if cx >= x+w {
+				return
+			}
+			screen.SetContent(cx, y, r, nil, seg.style)
+			cx++
+		}
+	}
 }
 
 func cellOf(grid [][]DayCell, day int) (int, int) {
