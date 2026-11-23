@@ -217,8 +217,12 @@ func (g *monthGrid) cellStyles(row, col int) (day, count tcell.Style) {
 		day = day.Foreground(colorWeekend) // Сб/Вс
 	}
 	if g.cells[row][col].Day == g.today {
-		// О-3: «сегодня» — светлый оттенок акцента, сплошной занят выбором.
-		day = day.Bold(true).Background(colorTodayBg)
+		// О-3/V-40: «сегодня» — акцентный номер на tint-фоне; сплошной акцент
+		// занят выбором.
+		// WHY: фон остаётся tint, а не colorAccent — иначе «сегодня» и выбранный
+		// день выглядели бы одинаково и выбор терял бы единственный акцент.
+		// Не делать: заливать «сегодня» акцентом — О-3 и V-40 держат tint.
+		day = day.Foreground(colorAccent).Bold(true).Background(colorTodayBg)
 		count = count.Background(colorTodayBg)
 	}
 	if g.hasSel && row == g.selRow && col == g.selCol {

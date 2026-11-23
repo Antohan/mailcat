@@ -185,10 +185,11 @@ func TestCalendarGridFillsPanel(t *testing.T) {
 	<-done
 }
 
-// TestMonthGridStyles: палитра ячеек (V-33) — выбранный день залит целиком
-// colorSelectedBg, «сегодня» — tint colorTodayBg + bold, Сб/Вс — colorWeekend,
-// «·N» — colorTextSecondary (на акценте — colorSelectedFg). Цвета — RGB-роли,
-// поэтому на 256-цветном терминале и в truecolor они одни и те же.
+// TestMonthGridStyles: палитра ячеек (V-33, V-40) — выбранный день залит
+// целиком colorSelectedBg, «сегодня» — акцентный номер на tint colorTodayBg,
+// Сб/Вс — colorWeekend, «·N» — colorTextSecondary (на акценте —
+// colorSelectedFg). Цвета — RGB-роли, поэтому на 256-цветном терминале
+// и в truecolor они одни и те же.
 func TestMonthGridStyles(t *testing.T) {
 	g := newMonthGrid()
 	g.SetBorder(true)
@@ -244,12 +245,12 @@ func TestMonthGridStyles(t *testing.T) {
 			fg, cattr&tcell.AttrBold != 0, colorSelectedFg)
 	}
 
-	// «Сегодня»: tint-фон и жирный номер; счётчик остаётся secondary и обычным.
+	// «Сегодня»: акцентный номер на tint-фоне; счётчик остаётся secondary.
 	x, y, _ = cell(17)
 	fg, bg, attr = styleAt(x, y).Decompose()
-	if fg != colorTextPrimary || bg != colorTodayBg || attr&tcell.AttrBold == 0 {
-		t.Errorf("сегодня: fg=%v bg=%v bold=%v, хочу primary/%v/bold",
-			fg, bg, attr&tcell.AttrBold != 0, colorTodayBg)
+	if fg != colorAccent || bg != colorTodayBg || attr&tcell.AttrBold == 0 {
+		t.Errorf("сегодня: fg=%v bg=%v bold=%v, хочу %v/%v/bold",
+			fg, bg, attr&tcell.AttrBold != 0, colorAccent, colorTodayBg)
 	}
 	fg, bg, cattr := styleAt(x+2, y).Decompose()
 	if fg != colorTextSecondary || bg != colorTodayBg || cattr&tcell.AttrBold != 0 {
@@ -272,6 +273,15 @@ func TestMonthGridStyles(t *testing.T) {
 		if r != []rune(fmt.Sprint(day))[0] || bold() == 0 {
 			t.Errorf("день %d: первый символ %q bold=%v, ждали цифру у левого края жирным", day, r, bold() != 0)
 		}
+	}
+
+	// V-40: при совпадении «сегодня» и выбора побеждает выбранный — сплошной
+	// акцент/onAccent, а не tint «сегодня».
+	g.SelectDay(17)
+	g.Draw(sim)
+	x, y, _ = cell(17)
+	if fg, bg, attr := styleAt(x, y).Decompose(); fg != colorSelectedFg || bg != colorSelectedBg || attr&tcell.AttrBold == 0 {
+		t.Errorf("сегодня+выбор: fg/bg=%v/%v, хочу %v/%v", fg, bg, colorSelectedFg, colorSelectedBg)
 	}
 }
 
