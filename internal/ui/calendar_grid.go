@@ -125,9 +125,10 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 	return 0, 0, false
 }
 
-// Draw рисует шапку дней недели и дни: число (жирным) и «·N» — с левого края
-// ячейки; выбранный день залит colorSelectedBg целиком, «сегодня» — tint
-// colorTodayBg (V-33, V-39).
+// Draw рисует шапку дней недели и дни: число (жирным) и «·N» — с отступом
+// 1 клетка от левого/верхнего края ячейки; выбранный день залит
+// colorSelectedBg от линии до линии, «сегодня» — tint colorTodayBg
+// (V-33, V-39, V-44).
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
@@ -161,10 +162,22 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			}
 			label := FormatDayCell(cell)
 			dayText, count, _ := strings.Cut(label, "·")
-			gridText(screen, x+cx, y+cy, cw, dayText, dayStyle)
+			// WHY: заливка — весь dayCellRect (до линий), а текст с отступом 1:
+			// вплотную к линии число сливалось с сеткой, выбранный блок
+			// выглядел обрезанным. Отступ общий для всех дней — числа в одной
+			// колонке стоят ровно.
+			// Не делать: заливать только под текстом — «сегодня»/выбор теряли
+			// форму дня между линиями.
+			tx, ty := cx+1, cy
+			// Ячейка высотой в 1 клетку: отступ вниз пришёлся бы на линию
+			// недели, поэтому текст остаётся в единственной строке.
+			if ch > 1 {
+				ty = cy + 1
+			}
+			gridText(screen, x+tx, y+ty, cw-1, dayText, dayStyle)
 			if count != "" {
 				dx := len([]rune(dayText))
-				gridText(screen, x+cx+dx, y+cy, cw-dx, "·"+count, countStyle)
+				gridText(screen, x+tx+dx, y+ty, cw-1-dx, "·"+count, countStyle)
 			}
 		}
 	}

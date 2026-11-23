@@ -177,8 +177,8 @@ func TestCalendarGridFillsPanel(t *testing.T) {
 	_, iy, iw, ih := a.calendar.grid.GetInnerRect()
 	row, col := cellOf(a.calendar.grid.cells, 30)
 	_, cy, _, _ := dayCellRect(row, col, iw, ih)
-	if runeIndex(simRow(sim, iy+cy), "30") < 0 {
-		t.Errorf("последняя неделя не у низа панели: %q", string(simRow(sim, iy+cy)))
+	if runeIndex(simRow(sim, iy+cy+1), "30") < 0 {
+		t.Errorf("последняя неделя не у низа панели: %q", string(simRow(sim, iy+cy+1)))
 	}
 
 	a.tapp.Stop()
@@ -227,12 +227,16 @@ func TestMonthGridStyles(t *testing.T) {
 		t.Errorf("дни недели: fg=%v, хочу colorTextSecondary", fg)
 	}
 
-	// Выбранный день: сплошная заливка на всю ширину, текст — onAccent, жирный.
+	// Выбранный день: сплошная заливка на всю ширину до линий, текст — с
+	// отступом 1 от края, onAccent, жирный (V-44).
 	x, y, cw := cell(20)
-	if r, _, _, _ := sim.GetContent(x, y); r != '2' {
+	if r, _, _, _ := sim.GetContent(x, y); r != ' ' {
+		t.Errorf("в углу выбранной ячейки %q, ждали заливку без текста", r)
+	}
+	if r, _, _, _ := sim.GetContent(x+1, y); r != '2' {
 		t.Errorf("в выбранной ячейке %q, ждали число 20", r)
 	}
-	fg, bg, attr := styleAt(x, y).Decompose()
+	fg, bg, attr := styleAt(x+1, y).Decompose()
 	if fg != colorSelectedFg || bg != colorSelectedBg || attr&tcell.AttrBold == 0 {
 		t.Errorf("выбранный день: fg/bg/bold=%v/%v/%v, хочу %v/%v/bold",
 			fg, bg, attr&tcell.AttrBold != 0, colorSelectedFg, colorSelectedBg)
@@ -240,19 +244,19 @@ func TestMonthGridStyles(t *testing.T) {
 	if _, blankBg, _ := styleAt(x+cw-1, y).Decompose(); blankBg != colorSelectedBg {
 		t.Errorf("выбранный день залит не целиком: пустая клетка bg=%v", blankBg)
 	}
-	if fg, _, cattr := styleAt(x+2, y).Decompose(); fg != colorSelectedFg || cattr&tcell.AttrBold != 0 {
+	if fg, _, cattr := styleAt(x+3, y).Decompose(); fg != colorSelectedFg || cattr&tcell.AttrBold != 0 {
 		t.Errorf("счётчик на акценте: fg=%v bold=%v, хочу %v/regular",
 			fg, cattr&tcell.AttrBold != 0, colorSelectedFg)
 	}
 
 	// «Сегодня»: акцентный номер на tint-фоне; счётчик остаётся secondary.
 	x, y, _ = cell(17)
-	fg, bg, attr = styleAt(x, y).Decompose()
+	fg, bg, attr = styleAt(x+1, y).Decompose()
 	if fg != colorAccent || bg != colorTodayBg || attr&tcell.AttrBold == 0 {
 		t.Errorf("сегодня: fg=%v bg=%v bold=%v, хочу %v/%v/bold",
 			fg, bg, attr&tcell.AttrBold != 0, colorAccent, colorTodayBg)
 	}
-	fg, bg, cattr := styleAt(x+2, y).Decompose()
+	fg, bg, cattr := styleAt(x+3, y).Decompose()
 	if fg != colorTextSecondary || bg != colorTodayBg || cattr&tcell.AttrBold != 0 {
 		t.Errorf("счётчик сегодня: fg=%v bg=%v bold=%v, хочу secondary/%v/regular",
 			fg, bg, cattr&tcell.AttrBold != 0, colorTodayBg)
@@ -260,18 +264,19 @@ func TestMonthGridStyles(t *testing.T) {
 
 	// Выходной (21 ноября — суббота) — цвет выходного, номер тоже жирный.
 	x, y, _ = cell(21)
-	if fg, _, attr := styleAt(x, y).Decompose(); fg != colorWeekend || attr&tcell.AttrBold == 0 {
+	if fg, _, attr := styleAt(x+1, y).Decompose(); fg != colorWeekend || attr&tcell.AttrBold == 0 {
 		t.Errorf("выходной: fg=%v bold=%v, хочу colorWeekend/bold", fg, attr&tcell.AttrBold != 0)
 	}
 
-	// V-39: номер любого дня жирный и прижат к левому краю ячейки — без
-	// %2d-паддинга однозначное и двузначное число начинаются одинаково.
+	// V-39/V-44: номер любого дня жирный и с отступом в 1 клетку от левого
+	// края — без %2d-паддинга однозначное и двузначное число начинаются
+	// одинаково.
 	for _, day := range []int{5, 12} {
 		x, y, _ := cell(day)
-		r, _, st, _ := sim.GetContent(x, y)
+		r, _, st, _ := sim.GetContent(x+1, y)
 		bold := func() tcell.AttrMask { _, _, a := st.Decompose(); return a & tcell.AttrBold }
 		if r != []rune(fmt.Sprint(day))[0] || bold() == 0 {
-			t.Errorf("день %d: первый символ %q bold=%v, ждали цифру у левого края жирным", day, r, bold() != 0)
+			t.Errorf("день %d: первый символ %q bold=%v, ждали цифру с отступом 1 жирным", day, r, bold() != 0)
 		}
 	}
 
@@ -280,7 +285,7 @@ func TestMonthGridStyles(t *testing.T) {
 	g.SelectDay(17)
 	g.Draw(sim)
 	x, y, _ = cell(17)
-	if fg, bg, attr := styleAt(x, y).Decompose(); fg != colorSelectedFg || bg != colorSelectedBg || attr&tcell.AttrBold == 0 {
+	if fg, bg, attr := styleAt(x+1, y).Decompose(); fg != colorSelectedFg || bg != colorSelectedBg || attr&tcell.AttrBold == 0 {
 		t.Errorf("сегодня+выбор: fg/bg=%v/%v, хочу %v/%v", fg, bg, colorSelectedFg, colorSelectedBg)
 	}
 }
@@ -323,15 +328,30 @@ func TestMonthGridSeparators(t *testing.T) {
 				t.Fatalf("%dx%d: горизонталь (%d,%d) = %q/%v", w, h, xx, my+1, r, fg)
 			}
 		}
-		// Выбранный день залит внутри линий, число на месте; слева от ячейки —
-		// вертикальная линия, а не заливка выбора.
+		// V-44: выбранный день залит от линии до линии — левый верхний угол
+		// ячейки тоже заливка (пробел), число — с отступом 1 вправо/вниз;
+		// слева от ячейки — вертикальная линия, а не заливка выбора.
 		row, col := cellOf(g.cells, 20)
-		cx, cy, _, _ := dayCellRect(row, col, iw, ih)
-		if r, fg := content(cx, cy); r != '2' || fg != colorSelectedFg {
-			t.Fatalf("%dx%d: число выбранного (%d,%d) = %q/%v", w, h, cx, cy, r, fg)
+		cx, cy, cw2, ch2 := dayCellRect(row, col, iw, ih)
+		textY := cy + 1 // высота ячейки здесь > 1
+		if r, _, st, _ := sim.GetContent(ix+cx, iy+cy); r != ' ' || !isSelectedBg(st) {
+			t.Fatalf("%dx%d: угол выбранной ячейки (%d,%d) = %q/%v, ждали заливку",
+				w, h, cx, cy, r, st)
+		}
+		if r, fg := content(cx+1, textY); r != '2' || fg != colorSelectedFg {
+			t.Fatalf("%dx%d: число выбранного (%d,%d) = %q/%v", w, h, cx+1, textY, r, fg)
+		}
+		if _, _, st, _ := sim.GetContent(ix+cx+cw2-1, iy+cy+ch2-1); !isSelectedBg(st) {
+			t.Fatalf("%dx%d: низ-право выбранной ячейки не залит", w, h)
 		}
 		if r, fg := content(cx-1, cy); r != tview.Borders.Vertical || fg != colorGridLine {
 			t.Fatalf("%dx%d: слева от выбранной ячейки не линия: %q/%v", w, h, r, fg)
 		}
 	}
+}
+
+// isSelectedBg — фон ячейки равен colorSelectedBg (V-44).
+func isSelectedBg(st tcell.Style) bool {
+	_, bg, _ := st.Decompose()
+	return bg == colorSelectedBg
 }
