@@ -88,6 +88,31 @@ func TestMonthGridStructure(t *testing.T) {
 	}
 }
 
+// TestMonthWeeks (V-52): ISO-номера недель строк сетки — пн-первая, номер
+// недели понедельника, включая переход через год (2026-W53 → 2027-W01).
+func TestMonthWeeks(t *testing.T) {
+	cases := []struct {
+		year  int
+		month time.Month
+		want  []int
+	}{
+		{2026, time.November, []int{44, 45, 46, 47, 48, 49}},
+		{2027, time.January, []int{53, 1, 2, 3, 4, 5}},
+	}
+	for _, c := range cases {
+		got := MonthWeeks(c.year, c.month)
+		if len(got) != len(c.want) {
+			t.Fatalf("%d-%02d: недель %d, ждали %d", c.year, c.month, len(got), len(c.want))
+		}
+		for i := range c.want {
+			if got[i] != c.want[i] {
+				t.Errorf("%d-%02d: строка %d — неделя %d, ждали %d",
+					c.year, c.month, i, got[i], c.want[i])
+			}
+		}
+	}
+}
+
 // TestMonthTitle: заголовок панели месяца — русское имя и год (UI-5).
 func TestMonthTitle(t *testing.T) {
 	cases := []struct {
@@ -426,7 +451,7 @@ func TestOnDaySelectedAgenda(t *testing.T) {
 			MyResponseType: "Accept"},
 	}
 	grid := MonthGrid(2026, time.November, s.events)
-	s.grid.SetCells(grid, 0) // V-32: onDaySelected читает выбранную ячейку из сетки
+	s.grid.SetCells(grid, MonthWeeks(2026, time.November), 0) // V-32: onDaySelected читает выбранную ячейку из сетки
 	row, col := cellOf(grid, 17)
 	s.onDaySelected(row, col)
 	if got := len(s.agenda.items); got != 2 {

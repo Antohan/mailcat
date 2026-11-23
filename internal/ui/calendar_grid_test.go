@@ -5,6 +5,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -20,8 +21,13 @@ func TestDayCellRectGeometry(t *testing.T) {
 			t.Errorf("%dx%d: поля сетки вне допуска: mx=%d my=%d", w, h, mx, my)
 		}
 		// Шапка дней недели — в строке my, первая неделя — через линию под ней.
+		// Слева от дней — колонка номеров недель и вертикальная линия (V-52).
 		if _, top, _, _ := dayCellRect(0, 0, w, h); top != my+2 {
 			t.Errorf("%dx%d: шапка не под полем: top=%d, ждали %d", w, h, top, my+2)
+		}
+		if x, _, _, _ := dayCellRect(0, 0, w, h); x != mx+weekColWidth+1 {
+			t.Errorf("%dx%d: колонка дней не после колонки недель: x=%d, ждали %d",
+				w, h, x, mx+weekColWidth+1)
 		}
 		prevBottom, weekHeight := my+2, -1
 		for row := 0; row < 6; row++ {
@@ -38,7 +44,7 @@ func TestDayCellRectGeometry(t *testing.T) {
 		if bottom := h - (prevBottom - 1); bottom != my && bottom != my+1 {
 			t.Errorf("%dx%d: низ не сходится: поле %d при верхнем %d", w, h, bottom, my)
 		}
-		x, width := mx, -1
+		x, width := mx+weekColWidth+1, -1
 		for col := 0; col < 7; col++ {
 			cx, _, cw, _ := dayCellRect(0, col, w, h)
 			if cx != x || cw <= 0 {
@@ -72,24 +78,25 @@ func TestDayAtMargins(t *testing.T) {
 		{mx, my, "строка шапки"},
 		{mx, my + 1, "линия под шапкой"},
 		{mx + 1, h - 1, "нижнее поле"},
+		{mx + weekColWidth - 1, my + 2, "колонка номеров недель"},
 	} {
 		if _, _, ok := dayAt(p.x, p.y, w, h); ok {
 			t.Errorf("%s: точка (%d,%d) попала в ячейку", p.name, p.x, p.y)
 		}
 	}
-	if _, _, ok := dayAt(mx, my+2, w, h); !ok {
+	if _, _, ok := dayAt(mx+weekColWidth+1, my+2, w, h); !ok {
 		t.Errorf("первая ячейка сетки не находится")
 	}
 	// Вертикальная линия между колонками — не ячейка (V-38).
 	cw, _ := gridCellSize(w, h)
-	if _, _, ok := dayAt(mx+cw, my+2, w, h); ok {
+	if _, _, ok := dayAt(mx+weekColWidth+1+cw, my+2, w, h); ok {
 		t.Errorf("вертикальная линия попала в ячейку")
 	}
 }
 
 func TestMonthGridMoveClamped(t *testing.T) {
 	g := newMonthGrid()
-	g.SetCells(MonthGrid(2026, time.November, nil), 0) // 1 ноября — воскресенье
+	g.SetCells(MonthGrid(2026, time.November, nil), MonthWeeks(2026, time.November), 0) // 1 ноября — воскресенье
 	g.SelectDay(1)
 	for _, delta := range []int{-1, -7} {
 		g.Move(delta)
@@ -118,7 +125,7 @@ func TestMonthGridMouseSelectsOnlyDays(t *testing.T) {
 	g := newMonthGrid()
 	g.SetBorder(true)
 	g.SetRect(0, 0, 40, 20)
-	g.SetCells(MonthGrid(2026, time.November, nil), 0)
+	g.SetCells(MonthGrid(2026, time.November, nil), MonthWeeks(2026, time.November), 0)
 	g.SelectDay(1)
 	x0, y0, w, h := g.GetInnerRect()
 	click := func(row, col int) (bool, bool) {
@@ -200,8 +207,8 @@ func TestMonthGridStyles(t *testing.T) {
 		row, col := cellOf(cells, ev.day)
 		cells[row][col].Events = ev.events
 	}
-	g.SetCells(cells, 17) // «сегодня» — 17 ноября
-	g.SelectDay(20)       // выбранный — 20 ноября (пятница)
+	g.SetCells(cells, MonthWeeks(2026, time.November), 17) // «сегодня» — 17 ноября
+	g.SelectDay(20)                                        // выбранный — 20 ноября (пятница)
 
 	sim := tcell.NewSimulationScreen("UTF-8")
 	if err := sim.Init(); err != nil {
@@ -294,6 +301,68 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 }
 
+// TestMonthGridWeekNumbers (V-52): слева — колонка «Нед» шириной 3, ISO-номера
+// недель muted, неделя «сегодня» — акцентом; клик по колонке день не выбирает.
+func TestMonthGridWeekNumbers(t *testing.T) {
+	const w, h = 100, 30
+	g := newMonthGrid()
+	g.SetBorder(true)
+	g.SetRect(0, 0, w, h)
+	g.SetCells(MonthGrid(2026, time.November, nil), MonthWeeks(2026, time.November), 17) // сегодня — 17 ноября
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatalf("инициализация симуляции: %v", err)
+	}
+	sim.SetSize(w, h)
+	g.Draw(sim)
+
+	ix, iy, iw, ih := g.GetInnerRect()
+	mx, my := gridMargins(iw, ih)
+	weekCol := func(y int) string {
+		row := simRow(sim, iy+y)
+		return strings.TrimSpace(string(row[ix+mx : ix+mx+weekColWidth]))
+	}
+	if got := weekCol(my); !strings.Contains(got, "Нед") {
+		t.Errorf("шапки «Нед» нет: %q", got)
+	}
+	weekY := func(row int) int {
+		_, cy, _, ch := dayCellRect(row, 0, iw, ih)
+		if ch > 1 {
+			return cy + 1
+		}
+		return cy
+	}
+	for row, want := range []int{44, 45, 46, 47, 48, 49} {
+		if got := weekCol(weekY(row)); got != fmt.Sprint(want) {
+			t.Errorf("строка %d: номер недели %q, ждали %d", row, got, want)
+		}
+	}
+	// Неделя с 17-м (строка 3, 47) — акцент; соседняя — muted.
+	fgAt := func(row int) tcell.Color {
+		_, _, st, _ := sim.GetContent(ix+mx+weekColWidth-1, iy+weekY(row))
+		fg, _, _ := st.Decompose()
+		return fg
+	}
+	if fg := fgAt(3); fg != colorAccent {
+		t.Errorf("номер текущей недели: fg=%v, ждали colorAccent", fg)
+	}
+	if fg := fgAt(2); fg != colorTextSecondary {
+		t.Errorf("номер соседней недели: fg=%v, ждали colorTextSecondary", fg)
+	}
+	// Клик по колонке недель не выбирает день и не забирает фокус.
+	g.SelectDay(1)
+	_, cy, _, ch := dayCellRect(0, 0, iw, ih)
+	ev := tcell.NewEventMouse(ix+mx+1, iy+cy+ch/2, tcell.Button1, tcell.ModNone)
+	focused := false
+	consumed, _ := g.MouseHandler()(tview.MouseLeftClick, ev, func(p tview.Primitive) { focused = p == g })
+	if consumed || focused {
+		t.Error("клик по колонке недель обработан как выбор дня")
+	}
+	if day := g.cells[g.selRow][g.selCol].Day; day != 1 {
+		t.Errorf("клик по колонке недель сменил день: %d", day)
+	}
+}
+
 // TestMonthGridSeparators (V-38, V-43): линии между колонками и неделями и под
 // шапкой дней недели — colorGridLine (светлее чисел, темнее hairline);
 // заливка выбранного лежит внутри линий и не затирает число дня.
@@ -303,7 +372,7 @@ func TestMonthGridSeparators(t *testing.T) {
 		g := newMonthGrid()
 		g.SetBorder(true)
 		g.SetRect(0, 0, w, h)
-		g.SetCells(MonthGrid(2026, time.November, nil), 0)
+		g.SetCells(MonthGrid(2026, time.November, nil), MonthWeeks(2026, time.November), 0)
 		g.SelectDay(20) // пятница, 4-я колонка
 		sim := tcell.NewSimulationScreen("UTF-8")
 		if err := sim.Init(); err != nil {
@@ -322,12 +391,18 @@ func TestMonthGridSeparators(t *testing.T) {
 		}
 		// Вертикаль между 1-й и 2-й колонками — на всю высоту сетки, включая шапку.
 		for yy := my; yy < my+6*ch+7; yy++ {
-			if r, fg := content(mx+cw, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorGridLine {
-				t.Fatalf("%dx%d: вертикаль (%d,%d) = %q/%v", w, h, mx+cw, yy, r, fg)
+			if r, fg := content(mx+weekColWidth+1+cw, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorGridLine {
+				t.Fatalf("%dx%d: вертикаль (%d,%d) = %q/%v", w, h, mx+weekColWidth+1+cw, yy, r, fg)
+			}
+		}
+		// Линия после колонки номеров недель — тоже на всю высоту сетки (V-52).
+		for yy := my; yy < my+6*ch+7; yy++ {
+			if r, fg := content(mx+weekColWidth, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorGridLine {
+				t.Fatalf("%dx%d: линия колонки недель (%d,%d) = %q/%v", w, h, mx+weekColWidth, yy, r, fg)
 			}
 		}
 		// Горизонталь под шапкой дней недели — на всю ширину сетки.
-		for xx := mx; xx < mx+7*cw+6; xx++ {
+		for xx := mx; xx < mx+weekColWidth+7*cw+7; xx++ {
 			if r, fg := content(xx, my+1); (r != tview.Borders.Horizontal && r != tview.Borders.Cross) || fg != colorGridLine {
 				t.Fatalf("%dx%d: горизонталь (%d,%d) = %q/%v", w, h, xx, my+1, r, fg)
 			}

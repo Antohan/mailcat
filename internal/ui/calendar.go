@@ -293,7 +293,7 @@ func (s *calendarScreen) render() {
 	if inMonth {
 		today = now.Day()
 	}
-	s.grid.SetCells(grid, today)
+	s.grid.SetCells(grid, MonthWeeks(s.year, s.month), today)
 	// Выбор: сегодняшний день месяца, иначе 1-е — onSelect сам обновит повестку.
 	pick := 1
 	if inMonth {

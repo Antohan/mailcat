@@ -76,6 +76,19 @@ func MonthGrid(year int, month time.Month, events []mail.Event) [][]DayCell {
 	return grid
 }
 
+// MonthWeeks — ISO-номера недель (пн-первая, time.ISOWeek) строк сетки месяца:
+// weeks[row] — номер недели понедельника этой строки. Считается по дате, а не
+// по числу дня, поэтому строка соседнего месяца получает свой номер.
+func MonthWeeks(year int, month time.Month) []int {
+	first := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
+	monday := first.AddDate(0, 0, -((int(first.Weekday()) + 6) % 7))
+	weeks := make([]int, 6)
+	for row := range weeks {
+		_, weeks[row] = monday.AddDate(0, 0, 7*row).ISOWeek()
+	}
+	return weeks
+}
+
 // russianMonths — именительный падеж для заголовка панели («Ноябрь 2026»);
 // time.Month из time.Date всегда 1–12, выход за границы исключён.
 var russianMonths = [...]string{

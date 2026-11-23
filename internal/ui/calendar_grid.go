@@ -5,6 +5,7 @@ package ui
 // и счётчик встреч стояли в левом верхнем углу ячейки.
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
@@ -14,11 +15,16 @@ import (
 // weekdayNames — шапка сетки, Пн — первая колонка.
 var weekdayNames = [...]string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
 
-// monthGrid — месячная сетка: данные ([][]DayCell) и состояние выбора.
-// onSelect зовётся при каждой смене выбранного дня — повестка перестраивается.
+// weekColWidth — ширина колонки номеров недель (V-52): «Нед» и две цифры.
+const weekColWidth = 3
+
+// monthGrid — месячная сетка: данные ([][]DayCell), ISO-номера недель строк и
+// состояние выбора. onSelect зовётся при каждой смене выбранного дня —
+// повестка перестраивается.
 type monthGrid struct {
 	*tview.Box
 	cells    [][]DayCell
+	weeks    []int
 	today    int // день месяца, если открыт текущий месяц; иначе 0
 	selRow   int
 	selCol   int
@@ -32,10 +38,11 @@ func newMonthGrid() *monthGrid {
 	return g
 }
 
-// SetCells раскладывает новую сетку; today — число месяца для маркера
-// «сегодня» (0 — месяц не текущий).
-func (g *monthGrid) SetCells(cells [][]DayCell, today int) {
+// SetCells раскладывает новую сетку; weeks — ISO-номера недель её строк,
+// today — число месяца для маркера «сегодня» (0 — месяц не текущий).
+func (g *monthGrid) SetCells(cells [][]DayCell, weeks []int, today int) {
 	g.cells = cells
+	g.weeks = weeks
 	g.today = today
 }
 
@@ -87,29 +94,31 @@ func (g *monthGrid) maxDay() int {
 	return max
 }
 
-// gridCellSize — размер ячейки: 7 колонок разделены 6 вертикальными линиями,
-// а по высоте — шапка дней недели, линия под ней и 5 линий между неделями.
+// gridCellSize — размер ячейки: колонка номеров недель (V-52) и 7 колонок
+// дней разделены 7 вертикальными линиями, а по высоте — шапка дней недели,
+// линия под ней и 5 линий между неделями.
 func gridCellSize(w, h int) (cw, ch int) {
-	return (w - 6) / 7, (h - 7) / 6
+	return (w - weekColWidth - 7) / 7, (h - 7) / 6
 }
 
 // gridMargins — внешние поля сетки: остаток ширины/высоты делится поровну
-// по краям, чтобы все 7 колонок и 6 недель были одного размера.
+// по краям, чтобы колонка недель, все 7 колонок и 6 недель были одного размера.
 func gridMargins(w, h int) (mx, my int) {
 	cw, ch := gridCellSize(w, h)
-	return (w - (7*cw + 6)) / 2, (h - (6*ch + 7)) / 2
+	return (w - (weekColWidth + 7*cw + 7)) / 2, (h - (6*ch + 7)) / 2
 }
 
 // dayCellRect — внутренний прямоугольник ячейки недели row (0–5) и колонки
 // col (0–6) в координатах сетки: над неделями — поле my, строка шапки дней
-// недели и линия под ней; между неделями и колонками — по клетке линии (V-38).
+// недели и линия под ней; слева — колонка номеров недель и линия после неё;
+// между неделями и колонками — по клетке линии (V-38, V-52).
 // WHY: остаток ширины/высоты уходит в поля, а не в седьмую колонку/низ —
 // иначе ячейки разного размера и число дня стоит в разных точках.
 // Не делать: отдавать остаток последней колонке/неделе (так было до V-37).
 func dayCellRect(row, col, w, h int) (x, y, cw, ch int) {
 	cw, ch = gridCellSize(w, h)
 	mx, my := gridMargins(w, h)
-	return mx + col*(cw+1), my + 2 + row*(ch+1), cw, ch
+	return mx + weekColWidth + 1 + col*(cw+1), my + 2 + row*(ch+1), cw, ch
 }
 
 // dayAt — ячейка под точкой (px, py) в координатах сетки.
@@ -139,12 +148,34 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 		return
 	}
 	headStyle := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
-	_, my := gridMargins(w, h)
+	mx, my := gridMargins(w, h)
+	// Колонка номеров недель: шапка «Нед» — как дни недели, muted.
+	gridText(screen, x+mx, y+my, weekColWidth, "Нед", headStyle)
 	for col, name := range weekdayNames {
 		cx, _, cw, _ := dayCellRect(0, col, w, h)
 		gridText(screen, x+cx, y+my, cw, name, headStyle)
 	}
+	todayRow := g.todayWeekRow()
 	for row := 0; row < 6 && row < len(g.cells); row++ {
+		if row < len(g.weeks) {
+			// V-52: ISO-номер недели строки — muted, текущая неделя акцентом;
+			// выровнен по правому краю колонки (двузначные стоят в одну линию).
+			weekStyle := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+			if row == todayRow {
+				weekStyle = weekStyle.Foreground(colorAccent)
+			}
+			label := fmt.Sprintf("%d", g.weeks[row])
+			_, cy, _, ch := dayCellRect(row, 0, w, h)
+			ty := cy
+			if ch > 1 {
+				ty = cy + 1
+			}
+			pad := weekColWidth - len([]rune(label))
+			if pad < 0 {
+				pad = 0
+			}
+			gridText(screen, x+mx+pad, y+ty, weekColWidth-pad, label, weekStyle)
+		}
 		for col := 0; col < 7; col++ {
 			cell := g.cells[row][col]
 			if cell.Day == 0 {
@@ -184,9 +215,10 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.drawGridLines(screen, x, y, w, h)
 }
 
-// drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
-// строку шапки), горизонтали под шапкой дней недели и между неделями. Заливка
-// выбранного лежит внутри dayCellRect, поэтому линии её не затирают.
+// drawGridLines — разделители сетки (V-38): вертикали после колонки номеров
+// недель и между колонками дней (включая строку шапки), горизонтали под
+// шапкой дней недели и между неделями. Заливка выбранного лежит внутри
+// dayCellRect, поэтому линии её не затирают.
 // WHY: отдельная роль colorGridLine (V-43) — hairline на белой поверхности
 // не читается, а textSecondary (цвет чисел и подписей) слишком тяжёлый:
 // линии спорили с числами. Роль светлее чисел и темнее hairline; пустые и
@@ -197,9 +229,13 @@ func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
 	cw, ch := gridCellSize(w, h)
 	rule := tcell.StyleDefault.Foreground(colorGridLine).Background(colorPanelBg)
 	bottom := my + 6*ch + 7
-	right := mx + 7*cw + 6
-	for col := 0; col < 6; col++ {
-		lx := mx + (col+1)*cw + col
+	right := mx + weekColWidth + 7*cw + 7
+	// Семь вертикалей: после колонки недель и шесть между днями.
+	verts := make([]int, 7)
+	for i := range verts {
+		verts[i] = mx + weekColWidth + i*(cw+1)
+	}
+	for _, lx := range verts {
 		for yy := my; yy < bottom; yy++ {
 			screen.SetContent(x+lx, y+yy, tview.Borders.Vertical, nil, rule)
 		}
@@ -211,12 +247,29 @@ func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
 		}
 	}
 	// Пересечения — крестиком, иначе линия недели рвёт вертикаль.
-	for col := 0; col < 6; col++ {
-		lx := mx + (col+1)*cw + col
+	for _, lx := range verts {
 		for i := 0; i <= 5; i++ {
 			screen.SetContent(x+lx, y+my+1+i*(ch+1), tview.Borders.Cross, nil, rule)
 		}
 	}
+}
+
+// todayWeekRow — строка сетки, в которой стоит «сегодня», или -1 (месяц не
+// текущий): акцентом красится номер именно её недели (V-52).
+// WHY: сравнивать номер недели с time.Now().ISOWeek() нельзя — в чужом году
+// неделя 44 тоже бывает; искать строку по today детерминированно.
+func (g *monthGrid) todayWeekRow() int {
+	if g.today == 0 {
+		return -1
+	}
+	for row, cells := range g.cells {
+		for _, c := range cells {
+			if c.InMonth && c.Day == g.today {
+				return row
+			}
+		}
+	}
+	return -1
 }
 
 // cellStyles — стили числа и счётчика «·N» одной ячейки. Состояния
