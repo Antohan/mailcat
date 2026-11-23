@@ -17,6 +17,16 @@ Exchange) для macOS. Go + TUI (tview). Ничего не отправляет
 - Уведомления macOS о новых письмах (по правилам из конфига)
 - Диагностика: `mailcat doctor` — TCP → TLS → аутентификация → папки
 
+## Скриншоты
+
+Почта: папки, двухстрочный список писем и открытое письмо в правой панели.
+
+![Почта: список и просмотр](docs/screenshots/mail.png)
+
+Календарь: месячная сетка с номерами недель, «Ближайшее» и повестка дня.
+
+![Календарь: сетка и повестка](docs/screenshots/calendar.png)
+
 ## Запуск
 
 Порядок действий (нужен Go ≥ 1.24 и macOS; команды — из корня репозитория):
@@ -83,6 +93,21 @@ Exchange) для macOS. Go + TUI (tview). Ничего не отправляет
 Подробности — `docs/SECURITY.md` (обязательный чек-лист проекта): изоляция
 TLS-доверия, санитизация всего текста из EWS, пароль только в Keychain,
 read-only whitelist операций EWS.
+
+## Структура
+
+```
+cmd/mailcat/        точка входа: run (TUI), doctor, folders
+internal/config/    TOML-конфиг, значения по умолчанию, валидация
+internal/ews/       SOAP-клиент Exchange (только чтение) и фикстуры
+internal/mail/      доменные модели почты и календаря, конвертация из EWS
+internal/security/  санитизация текста из EWS и анти-фишинг
+internal/notify/    правила уведомлений и фоновый watcher
+internal/platform/  обвязка macOS: /usr/bin/open, файловый лог
+internal/ui/        экраны tview (почта, календарь), палитра — theme.go
+docs/               планы итераций, архитектура, EWS, безопасность, тесты
+scripts/check.sh    gofmt, vet, build, test
+```
 
 ## Разработка
 
