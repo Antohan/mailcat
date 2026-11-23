@@ -285,9 +285,9 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 }
 
-// TestMonthGridSeparators (V-38): линии между колонками и неделями и под
-// шапкой дней недели — textSecondary; заливка выбранного лежит внутри линий
-// и не затирает число дня.
+// TestMonthGridSeparators (V-38, V-43): линии между колонками и неделями и под
+// шапкой дней недели — colorGridLine (светлее чисел, темнее hairline);
+// заливка выбранного лежит внутри линий и не затирает число дня.
 func TestMonthGridSeparators(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{100, 30}, {220, 60}} {
 		w, h := size.w, size.h
@@ -313,13 +313,13 @@ func TestMonthGridSeparators(t *testing.T) {
 		}
 		// Вертикаль между 1-й и 2-й колонками — на всю высоту сетки, включая шапку.
 		for yy := my; yy < my+6*ch+7; yy++ {
-			if r, fg := content(mx+cw, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorTextSecondary {
+			if r, fg := content(mx+cw, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorGridLine {
 				t.Fatalf("%dx%d: вертикаль (%d,%d) = %q/%v", w, h, mx+cw, yy, r, fg)
 			}
 		}
 		// Горизонталь под шапкой дней недели — на всю ширину сетки.
 		for xx := mx; xx < mx+7*cw+6; xx++ {
-			if r, fg := content(xx, my+1); (r != tview.Borders.Horizontal && r != tview.Borders.Cross) || fg != colorTextSecondary {
+			if r, fg := content(xx, my+1); (r != tview.Borders.Horizontal && r != tview.Borders.Cross) || fg != colorGridLine {
 				t.Fatalf("%dx%d: горизонталь (%d,%d) = %q/%v", w, h, xx, my+1, r, fg)
 			}
 		}
@@ -330,7 +330,7 @@ func TestMonthGridSeparators(t *testing.T) {
 		if r, fg := content(cx, cy); r != '2' || fg != colorSelectedFg {
 			t.Fatalf("%dx%d: число выбранного (%d,%d) = %q/%v", w, h, cx, cy, r, fg)
 		}
-		if r, fg := content(cx-1, cy); r != tview.Borders.Vertical || fg != colorTextSecondary {
+		if r, fg := content(cx-1, cy); r != tview.Borders.Vertical || fg != colorGridLine {
 			t.Fatalf("%dx%d: слева от выбранной ячейки не линия: %q/%v", w, h, r, fg)
 		}
 	}

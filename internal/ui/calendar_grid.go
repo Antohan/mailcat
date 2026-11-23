@@ -174,13 +174,15 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 // drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
 // строку шапки), горизонтали под шапкой дней недели и между неделями. Заливки
 // выбранного/«сегодня» лежат внутри dayCellRect, поэтому линии их не затирают.
-// WHY: цвет textSecondary, не hairline — hairline на белой поверхности не
-// читается (подробно — panel.go); линии те же, что у разделителей почты.
-// Не делать: hairline — линии сетки снова «исчезнут».
+// WHY: отдельная роль colorGridLine (V-43) — hairline на белой поверхности
+// не читается, а textSecondary (цвет чисел и подписей) слишком тяжёлый:
+// линии спорили с числами. Роль светлее чисел и темнее hairline; пустые и
+// соседние ячейки получают те же тихие линии — без отдельного акцента.
+// Не делать: возвращать textSecondary — сетка снова перевесит числа.
 func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
 	mx, my := gridMargins(w, h)
 	cw, ch := gridCellSize(w, h)
-	rule := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+	rule := tcell.StyleDefault.Foreground(colorGridLine).Background(colorPanelBg)
 	bottom := my + 6*ch + 7
 	right := mx + 7*cw + 6
 	for col := 0; col < 6; col++ {

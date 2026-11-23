@@ -2,6 +2,11 @@
 
 > Формат записи — «Журнал решений» в docs/PLAN-ITER3.1.md. Новые записи — сверху.
 
+## 2026-11-23 · iter31:V-43 · линии сетки календаря — светлее
+- Сделано: роль `colorGridLine` в `theme.go` (светлая 198,203,211 / тёмная 80,84,92) — светлее `colorTextSecondary`, темнее `colorHairline`; `drawGridLines` рисует линии только ею; WHY обновлён. Тесты: `TestMonthGridSeparators` ждёт `colorGridLine` на 100×30/220×60, `TestGridLineIsQuiet` — линии между hairline и textSecondary по удалённости от фона в обеих темах.
+- Решения: линии — отдельная theme-роль, а не hairline и не textSecondary: hairline на белой поверхности не читается, textSecondary перевешивал числа.
+- Отклонения от плана/золотых правил: нет. Скриншоты — дампы `tcell.SimulationScreen` 100×30/220×60: `/tmp/v43_{before,after}_{100x30,220x60}.txt` (+ `.ans` с цветом, тёмная — `/tmp/v43_after_dark_100x30.txt`). Нужен «ок» юзера по V-43 (висят V-35–V-42).
+
 ## 2026-11-23 · iter31:V-42 · повестка: блоки событий с переносом строк
 - Сделано: вместо `tview.List` — `agendaList` (`Box`+`Draw`): событие блоком строк, перенос по словам под ширину панели (длинное слово режется), выделение — весь блок акцентом на всю ширину панели, ↑↓ двигают события, Enter — детали, клик выбирает блок и забирает фокус, Esc/←/Tab — как в V-35; прокрутка — offset по строкам раскладки + полоса `scrollbar.go` (`ScrollTrack`), пустой день — muted «Встреч нет» без выбора. `FormatAgendaLine` → `AgendaSegments(ev, reg, selected) []agendaSeg` (сегменты {текст, стиль}: Sanitize, без tview.Escape — рисует tcell); `restyleAgenda` собирает блоки через `SetItems`, `SetItemText` ушёл. Тесты: `TestAgendaWrap` (20/40/80/100/220 + длинное слово), `TestAgendaClick`, `TestOnDaySelectedAgenda` (выбор/пустой день/ссылки/шапка), sim `TestAgendaListStyles` (заливка на всю ширину, muted-время, primary-тема, бегунок), Sanitize управляющих символов в `TestAgendaSegments`.
 - Решения: раскладка по строкам считается в `Draw`/`ScrollTrack` под текущую ширину, а не хранится как готовые строки — resize не требует пересборки данных; выбор и прокрутка живут в индексах событий/строк, поэтому смена стиля (`restyleAgenda`) не сбрасывает позицию. Сегменты вместо tview-тегов — единственный способ переносить текст без разметки (WHY в `calendar_format.go`).
