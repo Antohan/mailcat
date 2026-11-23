@@ -125,9 +125,9 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 	return 0, 0, false
 }
 
-// Draw рисует шапку дней недели и дни: число и «·N» — в левом верхнем углу
+// Draw рисует шапку дней недели и дни: число (жирным) и «·N» — с левого края
 // ячейки; выбранный день залит colorSelectedBg целиком, «сегодня» — tint
-// colorTodayBg + bold, Сб/Вс — colorWeekend (V-33).
+// colorTodayBg (V-33, V-39).
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
@@ -206,11 +206,12 @@ func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
 
 // cellStyles — стили числа и счётчика «·N» одной ячейки. Состояния
 // накладываются по порядку: выходной → «сегодня» → выбранный.
-// WHY: счётчик — второстепенный текст, но на акцентной заливке он берёт
-// colorSelectedFg: colorTextSecondary на акценте нечитаем.
+// WHY: номер дня жирный у всех дней (V-39) — шрифт терминала не масштабируется.
+// Счётчик — обычный: «·N» второстепенен; на акценте берёт colorSelectedFg
+// (colorTextSecondary на акценте нечитаем).
 // Не делать: один стиль на всю строку — счётчик перестал бы отличаться.
 func (g *monthGrid) cellStyles(row, col int) (day, count tcell.Style) {
-	day = tcell.StyleDefault.Foreground(colorTextPrimary).Background(colorPanelBg)
+	day = tcell.StyleDefault.Foreground(colorTextPrimary).Background(colorPanelBg).Bold(true)
 	count = tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
 	if col >= 5 {
 		day = day.Foreground(colorWeekend) // Сб/Вс
@@ -221,7 +222,7 @@ func (g *monthGrid) cellStyles(row, col int) (day, count tcell.Style) {
 		count = count.Background(colorTodayBg)
 	}
 	if g.hasSel && row == g.selRow && col == g.selCol {
-		day = tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
+		day = tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg).Bold(true)
 		count = tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
 	}
 	return day, count

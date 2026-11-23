@@ -4,6 +4,7 @@ package ui
 // навигация зажата границами месяца, клик выбирает только день месяца.
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -225,38 +226,52 @@ func TestMonthGridStyles(t *testing.T) {
 		t.Errorf("дни недели: fg=%v, хочу colorTextSecondary", fg)
 	}
 
-	// Выбранный день: сплошная заливка на всю ширину, текст — onAccent.
+	// Выбранный день: сплошная заливка на всю ширину, текст — onAccent, жирный.
 	x, y, cw := cell(20)
 	if r, _, _, _ := sim.GetContent(x, y); r != '2' {
 		t.Errorf("в выбранной ячейке %q, ждали число 20", r)
 	}
-	fg, bg, _ := styleAt(x, y).Decompose()
-	if fg != colorSelectedFg || bg != colorSelectedBg {
-		t.Errorf("выбранный день: fg/bg=%v/%v, хочу %v/%v", fg, bg, colorSelectedFg, colorSelectedBg)
+	fg, bg, attr := styleAt(x, y).Decompose()
+	if fg != colorSelectedFg || bg != colorSelectedBg || attr&tcell.AttrBold == 0 {
+		t.Errorf("выбранный день: fg/bg/bold=%v/%v/%v, хочу %v/%v/bold",
+			fg, bg, attr&tcell.AttrBold != 0, colorSelectedFg, colorSelectedBg)
 	}
 	if _, blankBg, _ := styleAt(x+cw-1, y).Decompose(); blankBg != colorSelectedBg {
 		t.Errorf("выбранный день залит не целиком: пустая клетка bg=%v", blankBg)
 	}
-	if fg, _, _ := styleAt(x+2, y).Decompose(); fg != colorSelectedFg {
-		t.Errorf("счётчик на акценте: fg=%v, хочу colorSelectedFg", fg)
+	if fg, _, cattr := styleAt(x+2, y).Decompose(); fg != colorSelectedFg || cattr&tcell.AttrBold != 0 {
+		t.Errorf("счётчик на акценте: fg=%v bold=%v, хочу %v/regular",
+			fg, cattr&tcell.AttrBold != 0, colorSelectedFg)
 	}
 
-	// «Сегодня»: tint-фон и жирный номер; счётчик остаётся secondary.
+	// «Сегодня»: tint-фон и жирный номер; счётчик остаётся secondary и обычным.
 	x, y, _ = cell(17)
-	fg, bg, attr := styleAt(x, y).Decompose()
+	fg, bg, attr = styleAt(x, y).Decompose()
 	if fg != colorTextPrimary || bg != colorTodayBg || attr&tcell.AttrBold == 0 {
 		t.Errorf("сегодня: fg=%v bg=%v bold=%v, хочу primary/%v/bold",
 			fg, bg, attr&tcell.AttrBold != 0, colorTodayBg)
 	}
-	fg, bg, _ = styleAt(x+2, y).Decompose()
-	if fg != colorTextSecondary || bg != colorTodayBg {
-		t.Errorf("счётчик сегодня: fg=%v bg=%v, хочу secondary/%v", fg, bg, colorTodayBg)
+	fg, bg, cattr := styleAt(x+2, y).Decompose()
+	if fg != colorTextSecondary || bg != colorTodayBg || cattr&tcell.AttrBold != 0 {
+		t.Errorf("счётчик сегодня: fg=%v bg=%v bold=%v, хочу secondary/%v/regular",
+			fg, bg, cattr&tcell.AttrBold != 0, colorTodayBg)
 	}
 
-	// Выходной (21 ноября — суббота).
+	// Выходной (21 ноября — суббота) — цвет выходного, номер тоже жирный.
 	x, y, _ = cell(21)
-	if fg, _, _ := styleAt(x, y).Decompose(); fg != colorWeekend {
-		t.Errorf("выходной: fg=%v, хочу colorWeekend", fg)
+	if fg, _, attr := styleAt(x, y).Decompose(); fg != colorWeekend || attr&tcell.AttrBold == 0 {
+		t.Errorf("выходной: fg=%v bold=%v, хочу colorWeekend/bold", fg, attr&tcell.AttrBold != 0)
+	}
+
+	// V-39: номер любого дня жирный и прижат к левому краю ячейки — без
+	// %2d-паддинга однозначное и двузначное число начинаются одинаково.
+	for _, day := range []int{5, 12} {
+		x, y, _ := cell(day)
+		r, _, st, _ := sim.GetContent(x, y)
+		bold := func() tcell.AttrMask { _, _, a := st.Decompose(); return a & tcell.AttrBold }
+		if r != []rune(fmt.Sprint(day))[0] || bold() == 0 {
+			t.Errorf("день %d: первый символ %q bold=%v, ждали цифру у левого края жирным", day, r, bold() != 0)
+		}
 	}
 }
 

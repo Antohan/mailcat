@@ -89,7 +89,7 @@ func FormatDayCell(cell DayCell) string {
 	if cell.Day == 0 {
 		return ""
 	}
-	text := fmt.Sprintf("%2d", cell.Day)
+	text := fmt.Sprintf("%d", cell.Day)
 	if cell.Events > 0 {
 		text += fmt.Sprintf("·%d", cell.Events)
 	}

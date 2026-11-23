@@ -88,18 +88,19 @@ func TestMonthTitle(t *testing.T) {
 	}
 }
 
-// TestFormatDayCell: маркеры ячейки (V-33) — количество событий «17·2»;
-// скобок нет: «сегодня» и выбранный день показывает стиль ячейки.
+// TestFormatDayCell: маркеры ячейки (V-33, V-39) — количество событий «17·2»;
+// без %2d-паддинга (число выровнено влево); скобок нет: «сегодня» и выбранный
+// день показывает стиль ячейки.
 func TestFormatDayCell(t *testing.T) {
 	cases := []struct {
 		name string
 		cell DayCell
 		want string
 	}{
-		{"без событий", DayCell{Day: 5}, " 5"},
+		{"без событий", DayCell{Day: 5}, "5"},
 		{"двузначный день", DayCell{Day: 17}, "17"},
 		{"одно событие", DayCell{Day: 17, Events: 1}, "17·1"},
-		{"три события", DayCell{Day: 5, Events: 3}, " 5·3"},
+		{"три события", DayCell{Day: 5, Events: 3}, "5·3"},
 		{"пустая ячейка", DayCell{}, ""},
 	}
 	for _, c := range cases {
