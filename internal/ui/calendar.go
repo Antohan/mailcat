@@ -109,6 +109,9 @@ func newCalendarScreen(a *App) *calendarScreen {
 			case 'p', 'P':
 				s.shiftMonth(-1)
 				return nil
+			case 't', 'T':
+				s.jumpToToday()
+				return nil
 			case 'g', 'G':
 				// WHY: фокус запоминаем до модала: Esc из модала ссылок
 				// должен вернуть фокус той панели, с которой нажали g.
@@ -229,6 +232,21 @@ func (s *calendarScreen) shiftMonth(delta int) {
 	s.year, s.month = t.Year(), t.Month()
 	// V-41: верхний бар календаря не зависит от месяца — не пересобираем.
 	s.loadMonth()
+}
+
+// jumpToToday выбирает сегодняшний день (V-47). Если показан другой месяц —
+// переходим на текущий и грузим его (monthStale — как у n/p); выбор сегодня
+// сделает render после ответа, как при обычной загрузке месяца.
+// WHY: не дублируем SelectDay для чужого месяца — сетки под него ещё нет.
+// Not to do: переключать месяц без загрузки — в сетке остались бы старые дни.
+func (s *calendarScreen) jumpToToday() {
+	now := time.Now()
+	if now.Year() != s.year || now.Month() != s.month {
+		s.year, s.month = now.Year(), now.Month()
+		s.loadMonth()
+		return
+	}
+	s.grid.SelectDay(now.Day())
 }
 
 // monthStale сообщает, устарел ли ответ запроса месяца keyAtRequest

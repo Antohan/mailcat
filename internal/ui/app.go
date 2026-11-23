@@ -60,9 +60,9 @@ var (
 	// 100 колонок без opt (проверяет тест), иначе терялась бы «q».
 	hintFolders = []hintSeg{{"↑↓", "выбор", false}, {"Enter", "открыть", false}, {"→", "панели", false}, {"u", "обновить", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	// V-35: у календаря два набора — по фокусу (сетка/повестка), как у почты.
-	// Оба укладываются в 100 колонок без opt (проверяет тест).
-	hintCalendarGrid   = []hintSeg{{"←→↑↓", "день", false}, {"n/p", "месяц", false}, {"Enter", "повестка", false}, {"1/2", "экран", false}, {"q", "выход", false}}
-	hintCalendarAgenda = []hintSeg{{"↑↓", "встреча", false}, {"Enter", "детали", false}, {"Esc", "к сетке", false}, {"g", "ссылки", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	// V-47: «t сегодня» — opt: на 100 колонках влезает, уже — снимает formatHintFit.
+	hintCalendarGrid   = []hintSeg{{"←→↑↓", "день", false}, {"n/p", "месяц", false}, {"t", "сегодня", true}, {"Enter", "повестка", false}, {"1/2", "экран", false}, {"q", "выход", false}}
+	hintCalendarAgenda = []hintSeg{{"↑↓", "встреча", false}, {"Enter", "детали", false}, {"Esc", "к сетке", false}, {"g", "ссылки", false}, {"t", "сегодня", true}, {"1/2", "экран", false}, {"q", "выход", false}}
 	hintDetails        = []hintSeg{{"Esc", "к списку", false}, {"g", "ссылки", false}, {"v", "вложения", false}, {"1/2", "экран", false}, {"q", "выход", false}}
 	// V-15: панель чтения — стрелки листают тело, v/g работают без ухода
 	// на отдельную страницу.

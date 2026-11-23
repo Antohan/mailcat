@@ -74,20 +74,21 @@ func TestCalendarFocusKeys(t *testing.T) {
 	}
 }
 
-// TestCalendarHintsFit: оба набора укладываются в 100 колонок без opt —
-// иначе на узком терминале пропала бы обязательная клавиша (V-17).
+// TestCalendarHintsFit: оба набора целиком укладываются в 100 колонок —
+// opt-сегмент «t сегодня» (V-47) там не снимается, иначе пропала бы
+// обязательная клавиша (V-17).
 func TestCalendarHintsFit(t *testing.T) {
 	for name, segs := range map[string][]hintSeg{
 		"сетка":    hintCalendarGrid,
 		"повестка": hintCalendarAgenda,
 	} {
-		if w := tview.TaggedStringWidth(formatHint(segs)); w > 100 {
+		full := formatHint(segs)
+		if w := tview.TaggedStringWidth(full); w > 100 {
 			t.Errorf("подсказки (%s) шире 100 колонок: %d", name, w)
 		}
-		for _, s := range segs {
-			if s.opt {
-				t.Errorf("сегмент %q (%s) помечен opt — на 100 колонках пропадёт", s.key, name)
-			}
+		// На 100 колонках formatHintFit не должен ронять ни одного сегмента.
+		if got := formatHintFit(segs, 100); got != full {
+			t.Errorf("на 100 колонках снят сегмент (%s): %q", name, got)
 		}
 	}
 }
