@@ -353,16 +353,18 @@ func (a *App) Run() error {
 }
 
 // updateTopBar пересобирает верхний бар (V-6, V-11): «mailcat · <папка>» на
-// почте и «mailcat · <месяц>» на календаре (V-31) — по фронт-странице.
+// почте и «mailcat · календарь» на календаре (V-41) — по фронт-странице.
 // Имя папки из EWS: Sanitize + Escape (инвариант escape). Дата/время и точка
 // связи убраны: статус связи живёт в футере сайдбара (V-4, V-12).
-// Зовётся при старте, смене папки (selectFolder), 1/2 (globalKeys) и смене
-// месяца (shiftMonth).
+// Зовётся при старте, смене папки (selectFolder) и 1/2 (globalKeys).
+// WHY: на календаре — подпись страницы, а не месяц.
+// Why: месяц уже в шапке сетки; на смену месяца бар не перерисовывается.
+// Not to do: возвращать MonthTitle — это дубль строки заголовка.
 func (a *App) updateTopBar() {
 	left := "[::b]mailcat[-::-]"
 	name := a.mail.folderName
 	if page, _ := a.pages.GetFrontPage(); page == pageCalendar {
-		name = MonthTitle(a.calendar.year, a.calendar.month)
+		name = "календарь"
 	}
 	if name != "" {
 		left += mutedText(" · ") + tview.Escape(security.Sanitize(name))
@@ -443,7 +445,7 @@ func (a *App) globalKeys(event *tcell.EventKey) *tcell.EventKey {
 			// V-35: 1/2 фокус не переносит — иначе стрелки уходят в скрытый
 			// список писем. Фокус повестки календаря сохраняется.
 			a.calendar.ensureFocus()
-			a.updateTopBar() // V-31: на календаре — месяц
+			a.updateTopBar() // V-41: на календаре — «календарь»
 			a.showHint()
 			a.calendar.ensureLoaded()
 			return nil

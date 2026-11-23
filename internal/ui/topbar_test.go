@@ -44,15 +44,17 @@ func TestTopBar(t *testing.T) {
 	<-done
 }
 
-// TestTopBarCalendarMonth (V-31): на календаре верхний бар показывает месяц,
-// после 1 — снова имя папки. ensureLoaded не ходит в сеть: месяц «загружен».
+// TestTopBarCalendarMonth (V-41): на календаре верхний бар показывает
+// «календарь», месяц остаётся только в шапке сетки; после 1 — имя папки.
+// ensureLoaded не ходит в сеть: месяц «загружен».
 func TestTopBarCalendarMonth(t *testing.T) {
 	a := newTestApp(t)
 	a.mail.folderName = "Входящие"
 	a.calendar.year, a.calendar.month = 2026, time.November
 	a.calendar.loadedKey = a.calendar.monthKey()
 	a.globalKeys(tcell.NewEventKey(tcell.KeyRune, '2', tcell.ModNone))
-	if got := a.topLeft.GetText(true); !strings.Contains(got, "Ноябрь 2026") {
+	if got := a.topLeft.GetText(true); !strings.Contains(got, "календарь") ||
+		strings.Contains(got, "Ноябрь") || strings.Contains(got, "2026") {
 		t.Errorf("верхний бар календаря: %q", got)
 	}
 	a.globalKeys(tcell.NewEventKey(tcell.KeyRune, '1', tcell.ModNone))

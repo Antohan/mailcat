@@ -230,7 +230,7 @@ func (s *calendarScreen) monthKey() string {
 func (s *calendarScreen) shiftMonth(delta int) {
 	t := time.Date(s.year, s.month+time.Month(delta), 1, 0, 0, 0, 0, time.Local)
 	s.year, s.month = t.Year(), t.Month()
-	s.app.updateTopBar() // V-31: верхний бар календаря — месяц, как шапка сетки
+	// V-41: верхний бар календаря не зависит от месяца — не пересобираем.
 	s.loadMonth()
 }
 
