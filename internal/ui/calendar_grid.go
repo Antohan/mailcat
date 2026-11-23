@@ -129,8 +129,8 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 
 // Draw рисует шапку дней недели и дни: число (жирным) и «·N» — с отступом
 // 1 клетка от левого/верхнего края ячейки; выбранный день залит
-// colorSelectedBg от линии до линии, «сегодня» — акцентный номер без заливки
-// (V-33, V-39, V-44, V-45).
+// colorSelectedBg вплотную к полосам-разделителям, «сегодня» — акцентный
+// номер без заливки (V-33, V-39, V-44, V-45, V-48).
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
@@ -164,8 +164,8 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			}
 			label := FormatDayCell(cell)
 			dayText, count, _ := strings.Cut(label, "·")
-			// WHY: заливка — весь dayCellRect (до линий), а текст с отступом 1:
-			// вплотную к линии число сливалось с сеткой, выбранный блок
+			// WHY: заливка — весь dayCellRect до полос-разделителей, а текст с
+			// отступом 1: вплотную к полосе число сливалось с сеткой, блок
 			// выглядел обрезанным. Отступ общий для всех дней — числа в одной
 			// колонке стоят ровно.
 			// Не делать: заливать только под текстом — «сегодня»/выбор теряли
@@ -183,96 +183,54 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			}
 		}
 	}
-	g.drawGridLines(screen, x, y, w, h)
-	// V-48: обводка выбора — поверх линий, иначе они её затирают.
-	g.fillSelRing(screen, x, y, w, h)
+	g.drawGridBands(screen, x, y, w, h)
+	g.paintSelFrame(screen, x, y, w, h)
 }
 
-// selRing — клетки-линии вокруг выбранного дня, включая пересечения (V-48).
-func (g *monthGrid) selRing(w, h int) (x0, y0, x1, y1 int, ok bool) {
+// paintSelFrame — выбранный день вплотную к рамке панели: её клетка лежит вне
+// inner rect, поэтому заливаем и её, а глиф красим onAccent (V-48).
+// Не делать: оставлять глиф акцентным — на заливке бордюр исчезает.
+func (g *monthGrid) paintSelFrame(screen tcell.Screen, x, y, w, h int) {
 	if !g.hasSel {
-		return 0, 0, 0, 0, false
-	}
-	cx, cy, cw, ch := dayCellRect(g.selRow, g.selCol, w, h)
-	return cx - 1, cy - 1, cx + cw, cy + ch, true
-}
-
-// fillSelRing — обводка выбора «вровень» с линиями (V-48): клетки-линий вокруг
-// выбранной заливаются наполовину, поэтому край заливки проходит там, где стоит
-// глиф линии/рамки, и не наезжает на клетку соседа.
-// WHY: линия живёт в своей клетке и рисуется по центру — целая заливка этой
-// клетки давала выступ, а без неё — полосу фона панели до линии.
-// Не делать: заливать клетки линий целиком — выделение вылезает за рамки.
-func (g *monthGrid) fillSelRing(screen tcell.Screen, x, y, w, h int) {
-	x0, y0, x1, y1, ok := g.selRing(w, h)
-	if !ok {
 		return
 	}
 	cx, cy, cw, ch := dayCellRect(g.selRow, g.selCol, w, h)
-	edge := tcell.StyleDefault.Foreground(colorSelectedBg).Background(colorPanelBg)
-	put := func(xx, yy int, r rune) {
-		if xx < 0 || yy < 0 || xx >= w || yy >= h {
-			return
-		}
-		screen.SetContent(x+xx, y+yy, r, nil, edge)
-	}
-	for xx := cx; xx < cx+cw; xx++ {
-		put(xx, y0, '▄') // верхняя линия: заливка в нижнюю половину
-		put(xx, y1, '▀')
-	}
-	for yy := cy; yy < cy+ch; yy++ {
-		put(x0, yy, '▐') // левая линия: заливка в правую половину
-		put(x1, yy, '▌')
-	}
-	put(x0, y0, '▗')
-	put(x1, y0, '▖')
-	put(x0, y1, '▝')
-	put(x1, y1, '▘')
-	// Рамка панели лежит вне inner rect — её клетку красим так же.
+	frame := tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
 	if cx == 0 {
-		for yy := y0; yy <= y1; yy++ {
-			screen.SetContent(x-1, y+yy, '▐', nil, edge)
+		for yy := cy; yy < cy+ch; yy++ {
+			screen.SetContent(x-1, y+yy, tview.Borders.Vertical, nil, frame)
 		}
 	}
 	if cx+cw == w {
-		for yy := y0; yy <= y1; yy++ {
-			screen.SetContent(x+w, y+yy, '▌', nil, edge)
+		for yy := cy; yy < cy+ch; yy++ {
+			screen.SetContent(x+w, y+yy, tview.Borders.Vertical, nil, frame)
 		}
 	}
 }
 
-// drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
-// строку шапки), горизонтали под шапкой дней недели и между неделями. Заливка
-// выбранного лежит внутри dayCellRect, поэтому линии её не затирают.
-// WHY: отдельная роль colorGridLine (V-43) — hairline на белой поверхности
-// не читается, а textSecondary (цвет чисел и подписей) слишком тяжёлый:
-// линии спорили с числами. Роль светлее чисел и темнее hairline; пустые и
-// соседние ячейки получают те же тихие линии — без отдельного акцента.
-// Не делать: возвращать textSecondary — сетка снова перевесит числа.
-func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
+// drawGridBands — разделители сетки: сплошные полосы в 1 клетку фоном
+// colorHairline. Раньше это были тонкие глифы (V-38, V-43), но глиф линии
+// центрируется в своей клетке — между заливкой дня и линией оставалась
+// половина клетки фона панели (V-48).
+// WHY: полоса — фон, а не глиф, поэтому заливка выбранного примыкает к ней
+// вплотную и без швов (у блочных глифов в терминале швы).
+// Не делать: возвращать тонкие глифы — заливка снова отрывается от линии.
+func (g *monthGrid) drawGridBands(screen tcell.Screen, x, y, w, h int) {
 	mx, my := gridMargins(w, h)
 	cw, ch := gridCellSize(w, h)
-	rule := tcell.StyleDefault.Foreground(colorGridLine).Background(colorPanelBg)
+	band := tcell.StyleDefault.Background(colorHairline)
 	bottom := my + 6*ch + 7
 	right := mx + 7*cw + 6
 	for col := 0; col < 6; col++ {
 		lx := mx + (col+1)*cw + col
 		for yy := my; yy < bottom; yy++ {
-			screen.SetContent(x+lx, y+yy, tview.Borders.Vertical, nil, rule)
+			screen.SetContent(x+lx, y+yy, ' ', nil, band)
 		}
 	}
 	for i := 0; i <= 5; i++ {
 		ly := my + 1 + i*(ch+1)
 		for xx := mx; xx < right; xx++ {
-			screen.SetContent(x+xx, y+ly, tview.Borders.Horizontal, nil, rule)
-		}
-	}
-	// Пересечения — крестиком, иначе линия недели рвёт вертикаль.
-	for col := 0; col < 6; col++ {
-		lx := mx + (col+1)*cw + col
-		for i := 0; i <= 5; i++ {
-			ly := my + 1 + i*(ch+1)
-			screen.SetContent(x+lx, y+ly, tview.Borders.Cross, nil, rule)
+			screen.SetContent(x+xx, y+ly, ' ', nil, band)
 		}
 	}
 }

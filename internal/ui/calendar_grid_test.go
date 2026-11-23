@@ -306,9 +306,9 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 }
 
-// TestMonthGridSeparators (V-38, V-43): линии между колонками и неделями и под
-// шапкой дней недели — colorGridLine (светлее чисел, темнее hairline);
-// заливка выбранного лежит внутри линий и не затирает число дня.
+// TestMonthGridSeparators (V-38, V-43, V-48): разделители между колонками и
+// неделями — сплошные полосы colorHairline; заливка выбранного дня примыкает
+// к ним вплотную и не затирает число дня.
 func TestMonthGridSeparators(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{100, 30}, {220, 60}} {
 		w, h := size.w, size.h
@@ -333,20 +333,26 @@ func TestMonthGridSeparators(t *testing.T) {
 			return r, fg
 		}
 		// Вертикаль между 1-й и 2-й колонками — на всю высоту сетки, включая шапку.
+		// V-48: разделители — сплошные полосы в клетку: заливка дня примыкает
+		// к ним вплотную, без полосы фона панели.
+		bandBg := func(x, y int) tcell.Color {
+			_, _, st, _ := sim.GetContent(ix+x, iy+y)
+			_, bg, _ := st.Decompose()
+			return bg
+		}
 		for yy := my; yy < my+6*ch+7; yy++ {
-			if r, fg := content(mx+cw, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorGridLine {
-				t.Fatalf("%dx%d: вертикаль (%d,%d) = %q/%v", w, h, mx+cw, yy, r, fg)
+			if bg := bandBg(mx+cw, yy); bg != colorHairline {
+				t.Fatalf("%dx%d: вертикальная полоса (%d,%d) = %v", w, h, mx+cw, yy, bg)
 			}
 		}
-		// Горизонталь под шапкой дней недели — на всю ширину сетки.
 		for xx := mx; xx < mx+7*cw+6; xx++ {
-			if r, fg := content(xx, my+1); (r != tview.Borders.Horizontal && r != tview.Borders.Cross) || fg != colorGridLine {
-				t.Fatalf("%dx%d: горизонталь (%d,%d) = %q/%v", w, h, xx, my+1, r, fg)
+			if bg := bandBg(xx, my+1); bg != colorHairline {
+				t.Fatalf("%dx%d: горизонтальная полоса (%d,%d) = %v", w, h, xx, my+1, bg)
 			}
 		}
-		// V-44: выбранный день залит от линии до линии — левый верхний угол
-		// ячейки тоже заливка (пробел), число — с отступом 1 вправо/вниз;
-		// слева от ячейки — вертикальная линия, а не заливка выбора.
+
+		// V-44/V-48: выбранный день залит целиком и примыкает к полосам
+		// разделителей; число — с отступом 1 вправо/вниз.
 		row, col := cellOf(g.cells, 20)
 		cx, cy, cw2, ch2 := dayCellRect(row, col, iw, ih)
 		textY := cy + 1 // высота ячейки здесь > 1
@@ -360,33 +366,20 @@ func TestMonthGridSeparators(t *testing.T) {
 		if _, _, st, _ := sim.GetContent(ix+cx+cw2-1, iy+cy+ch2-1); !isSelectedBg(st) {
 			t.Fatalf("%dx%d: низ-право выбранной ячейки не залит", w, h)
 		}
-		// V-48: край заливки проходит там, где стоит глиф линии: клетки линий
-		// вокруг выбора — полублоки/четвертьблоки, в клетку соседа не лезем.
-		blockAt := func(x, y int) (rune, tcell.Color, tcell.Color) {
-			r, _, st, _ := sim.GetContent(ix+x, iy+y)
-			fg, bg, _ := st.Decompose()
-			return r, fg, bg
-		}
-		for _, p := range []struct {
-			x, y int
-			r    rune
-		}{
-			{cx - 1, cy + 1, '\u2590'}, {cx + cw2, cy + 1, '\u258c'},
-			{cx + 1, cy - 1, '\u2584'}, {cx + 1, cy + ch2, '\u2580'},
-			{cx - 1, cy - 1, '\u2597'}, {cx + cw2, cy - 1, '\u2596'},
-			{cx - 1, cy + ch2, '\u259d'}, {cx + cw2, cy + ch2, '\u2598'},
+		// Между заливкой и линией нет фона панели: сразу за ячейкой — полоса.
+		for _, p := range []struct{ x, y int }{
+			{cx + cw2, cy + 1}, {cx + 1, cy + ch2},
+			{cx - 1, cy + 1}, {cx + 1, cy - 1},
 		} {
-			if r, fg, bg := blockAt(p.x, p.y); r != p.r || fg != colorSelectedBg || bg != colorPanelBg {
-				t.Fatalf("%dx%d: край выбора (%d,%d) = %q/%v/%v, ждали %q",
-					w, h, p.x, p.y, r, fg, bg, p.r)
+			if bg := bandBg(p.x, p.y); bg != colorHairline {
+				t.Fatalf("%dx%d: у выбора (%d,%d) не полоса: %v", w, h, p.x, p.y, bg)
 			}
 		}
-		// Далёкая линия остаётся линией на фоне панели.
-		if r, fg := content(mx+cw, cy+1); r != tview.Borders.Vertical || fg != colorGridLine {
-			t.Fatalf("%dx%d: линия вне выбора задета: %q/%v", w, h, r, fg)
+		// Далёкая полоса не акцентируется.
+		if bg := bandBg(mx+cw, cy+1); bg != colorHairline {
+			t.Fatalf("%dx%d: полоса вне выбора = %v", w, h, bg)
 		}
-		// V-48: крайняя левая колонка залита от самой рамки (поля нет),
-		// заливка занимает все четыре угла ячейки.
+		// Колонка 0: заливка от рамки; клетка рамки примыкает к дню.
 		g.SelectDay(16) // понедельник — колонка 0
 		g.Draw(sim)
 		row, col = cellOf(g.cells, 16)
@@ -402,14 +395,13 @@ func TestMonthGridSeparators(t *testing.T) {
 				t.Fatalf("%dx%d: угол выбранной ячейки (%d,%d) не залит", w, h, p.x, p.y)
 			}
 		}
-		// Клетка рамки вплотную к выбору — тоже половина заливки; глиф рамки
-		// там замещён полублоком (иначе край выбора не совпал бы с рамкой).
-		if r, fg, bg := blockAt(-1, cy+1); r != '\u2590' || fg != colorSelectedBg || bg != colorPanelBg {
-			t.Fatalf("%dx%d: рамка у выбора = %q/%v/%v", w, h, r, fg, bg)
+		// Клетка рамки у выбора залита вместе с днём, глиф читается на акценте.
+		if r, _, st, _ := sim.GetContent(ix-1, iy+cy+1); r != tview.Borders.Vertical || !isSelectedBg(st) {
+			t.Fatalf("%dx%d: рамка у выбора не залита: %q/%v", w, h, r, st)
 		}
 		// Вне выбора рамка не тронута.
-		if r, _, _ := blockAt(-1, 3); r != tview.Borders.Vertical {
-			t.Fatalf("%dx%d: рамка вне выбора испорчена: %q", w, h, r)
+		if r, _, st, _ := sim.GetContent(ix-1, iy+3); r != tview.Borders.Vertical || isSelectedBg(st) {
+			t.Fatalf("%dx%d: рамка вне выбора испорчена: %q/%v", w, h, r, st)
 		}
 	}
 }
