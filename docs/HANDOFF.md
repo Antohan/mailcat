@@ -5,18 +5,16 @@
 «цвета и стили — только theme.go/UI-6»; затем DoD итерации 3.1.
 
 ## Сделано
-- V-48 (d1aa4d8): разделители — полосы `colorHairline`, заливка вплотную;
-  V-47 (261c341): `t`/`T` — сегодня.
+- V-49 (52d21f0): пропорции календаря 45/55; V-48 (d1aa4d8): полосы `colorHairline`.
+- V-47 (261c341): `t`/`T` — сегодня.
 
 ## Открыто
-- «ок» скриншотов: V-48 (`/private/tmp/v48_band/`: `b_d25/b_d16/b_220/b_dark.png`,
-  `.txt/.tsv`), V-47, V-35…V-47.
-- TODO юзера (TESTING.md §5): smoke S3–S7; V-28 на живой почте; О-3; V-25–V-48
-  на живом терминале.
-- НИЗКО (security): attachments.go ~120 — частичный файл при Write; отложено:
-  item:Importance, write, Catppuccin, Preview; скругления — tview только прямоугольник.
+- «ок» скриншотов: V-49 (`/tmp/mc-cal-{100,220}.png`), V-48 (`/private/tmp/v48_band/`: `b_d25/b_d16/b_220/b_dark.png`, `.txt/.tsv`), V-47, V-35…V-47.
+- TODO юзера (TESTING.md §5): smoke S3–S7; V-28 на живой почте; О-3; V-25–V-49 на живом терминале.
+- НИЗКО (security): attachments.go ~120 — частичный файл при Write; отложено: item:Importance, write, Catppuccin, Preview; скругления — tview только прямоугольник.
 
 ## Не трогать
+- V-49: пропорции — 45/55 (`calendar.go`, root Flex); уже 45% ломает 100×30 (ячейка <5 клеток); третью панель не вводить.
 - V-48: `gridMargins` 0,0; разделители — `drawGridBands` фоном `colorHairline`
   (не глифы: глиф центрируется и отрывает заливку); `paintSelFrame` — рамка у
   выбора; роль `colorGridLine` удалена, сетка — `colorHairline`.
