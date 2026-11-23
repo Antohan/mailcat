@@ -66,6 +66,31 @@ Write the smallest complete change (adopted from the ponytail ruleset, MIT):
 - Never cut: validation, error handling against data loss, security,
   accessibility, anything the task explicitly asks for.
 
+## UX/UI work: skills
+
+UX/UI work — layout, panels, palette, typography, key hints, the calendar, any
+visual change — starts with the `tui-fundamentals` skill: it is the main TUI/UX
+skill (architecture, terminal constraints, keyboard-first flows, review). Load
+it before writing the task's plan spec (Work, item 7); the spec names the
+framework primitives and terminal constraints, not browser-style mockups.
+
+`golang-tui` is a supplementary technical reference: use it for terminal
+standards, width/truncation math, and testing/observing techniques where they
+apply — its Charm/Bubble Tea prescriptions do not override this repo's stack:
+mailcat stays on tview/tcell (golden rule 6).
+
+## Terminal limits (requirement)
+
+When developing the terminal interface, account for the real limitations of
+the macOS terminal: ANSI escape sequences, colour capabilities (256 colours vs
+truecolor, light/dark themes), Unicode and character widths (wide East Asian
+characters, combining marks, emoji), and the character-cell grid (one cell =
+one character; no pixel layout, no font size or scaling, no browser-style
+hover/animation). Do not design the interface as if it were a browser. Use the
+capabilities of the existing TUI framework (tview/tcell: widgets, styles, box
+drawing, focus model, layout primitives); do not propose migrating to another
+framework without strong reasons (golden rule 6 still applies).
+
 ## Work
 
 1. Open a session with `/stage <task>` (e.g. `/stage V-1`): it loads the

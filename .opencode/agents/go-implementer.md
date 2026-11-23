@@ -33,6 +33,14 @@ Your loop:
 6. EWS/SOAP/XML work → consult the `ews-specialist` subagent before
    implementing. Security-relevant work → request `security-reviewer` after.
 
+UX/UI-задачи (вёрстка, панели, палитра, типографика, подсказки, календарь)
+начинаются со скилла `tui-fundamentals` — основной TUI/UX-скилл; `golang-tui` —
+дополнительный технический справочник, его Charm/Bubble Tea-предписания не
+отменяют tview/tcell (AGENTS.md, правило 6). Терминал, а не браузер: реальные
+ограничения macOS-терминала (ANSI, 256/truecolor, Unicode и ширины символов,
+клеточная сетка), возможности существующего фреймворка; миграцию на другой
+фреймворк — только с веской причиной (AGENTS.md, «Terminal limits»).
+
 There is no live Exchange in this environment: code against the mock server and
 fixtures (`docs/TESTING.md §2–4`) and mark live checks as TODO for the user.
 
