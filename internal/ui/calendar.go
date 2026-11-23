@@ -74,9 +74,9 @@ func newCalendarScreen(a *App) *calendarScreen {
 		AddItem(s.agendaBar, 1, 0, false)
 
 	s.root = tview.NewFlex().
-		AddItem(panelColumn(s.gridHeader, s.grid), 0, 55, true).
+		AddItem(panelColumn(s.gridHeader, s.grid), 0, 45, true).
 		AddItem(newDivider(), 1, 0, false).
-		AddItem(agendaCol, 0, 45, false)
+		AddItem(agendaCol, 0, 55, false)
 
 	s.grid.SetSelectFunc(func(row, col int) {
 		s.onDaySelected(row, col)
