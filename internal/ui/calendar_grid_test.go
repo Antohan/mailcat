@@ -360,22 +360,30 @@ func TestMonthGridSeparators(t *testing.T) {
 		if _, _, st, _ := sim.GetContent(ix+cx+cw2-1, iy+cy+ch2-1); !isSelectedBg(st) {
 			t.Fatalf("%dx%d: низ-право выбранной ячейки не залит", w, h)
 		}
-		if r, fg := content(cx-1, cy); r != tview.Borders.Vertical || fg != colorGridLine {
-			t.Fatalf("%dx%d: слева от выбранной ячейки не линия: %q/%v", w, h, r, fg)
+		// V-48: край заливки проходит там, где стоит глиф линии: клетки линий
+		// вокруг выбора — полублоки/четвертьблоки, в клетку соседа не лезем.
+		blockAt := func(x, y int) (rune, tcell.Color, tcell.Color) {
+			r, _, st, _ := sim.GetContent(ix+x, iy+y)
+			fg, bg, _ := st.Decompose()
+			return r, fg, bg
 		}
-		// V-48: клетки линий вокруг выбора залиты акцентом — между заливкой и
-		// линией/рамкой не остаётся фона панели; линия рисуется поверх.
-		for _, p := range []struct{ x, y int }{
-			{cx - 1, cy + 1}, {cx + cw2, cy + 1},
-			{cx + 1, cy - 1}, {cx + 1, cy + ch2},
+		for _, p := range []struct {
+			x, y int
+			r    rune
+		}{
+			{cx - 1, cy + 1, '\u2590'}, {cx + cw2, cy + 1, '\u258c'},
+			{cx + 1, cy - 1, '\u2584'}, {cx + 1, cy + ch2, '\u2580'},
+			{cx - 1, cy - 1, '\u2597'}, {cx + cw2, cy - 1, '\u2596'},
+			{cx - 1, cy + ch2, '\u259d'}, {cx + cw2, cy + ch2, '\u2598'},
 		} {
-			if _, _, st, _ := sim.GetContent(ix+p.x, iy+p.y); !isSelectedBg(st) {
-				t.Fatalf("%dx%d: клетка линии (%d,%d) не залита под выбранной", w, h, p.x, p.y)
+			if r, fg, bg := blockAt(p.x, p.y); r != p.r || fg != colorSelectedBg || bg != colorPanelBg {
+				t.Fatalf("%dx%d: край выбора (%d,%d) = %q/%v/%v, ждали %q",
+					w, h, p.x, p.y, r, fg, bg, p.r)
 			}
 		}
-		// Далёкая линия остаётся на фоне панели (заливаем только кольцо).
-		if _, _, st, _ := sim.GetContent(ix+mx+cw, iy+cy+1); isSelectedBg(st) {
-			t.Fatalf("%dx%d: залита линия вне кольца выбора", w, h)
+		// Далёкая линия остаётся линией на фоне панели.
+		if r, fg := content(mx+cw, cy+1); r != tview.Borders.Vertical || fg != colorGridLine {
+			t.Fatalf("%dx%d: линия вне выбора задета: %q/%v", w, h, r, fg)
 		}
 		// V-48: крайняя левая колонка залита от самой рамки (поля нет),
 		// заливка занимает все четыре угла ячейки.
@@ -394,13 +402,14 @@ func TestMonthGridSeparators(t *testing.T) {
 				t.Fatalf("%dx%d: угол выбранной ячейки (%d,%d) не залит", w, h, p.x, p.y)
 			}
 		}
-		// Клетка рамки вплотную к выбору тоже залита, глиф остаётся читаемым.
-		if r, _, st, _ := sim.GetContent(ix-1, iy+cy+1); r != tview.Borders.Vertical || !isSelectedBg(st) {
-			t.Fatalf("%dx%d: рамка у выбранной ячейки не залита: %q/%v", w, h, r, st)
+		// Клетка рамки вплотную к выбору — тоже половина заливки; глиф рамки
+		// там замещён полублоком (иначе край выбора не совпал бы с рамкой).
+		if r, fg, bg := blockAt(-1, cy+1); r != '\u2590' || fg != colorSelectedBg || bg != colorPanelBg {
+			t.Fatalf("%dx%d: рамка у выбора = %q/%v/%v", w, h, r, fg, bg)
 		}
 		// Вне выбора рамка не тронута.
-		if _, _, st, _ := sim.GetContent(ix-1, iy+3); isSelectedBg(st) {
-			t.Fatalf("%dx%d: рамка вне кольца выбора залита", w, h)
+		if r, _, _ := blockAt(-1, 3); r != tview.Borders.Vertical {
+			t.Fatalf("%dx%d: рамка вне выбора испорчена: %q", w, h, r)
 		}
 	}
 }
