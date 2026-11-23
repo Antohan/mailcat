@@ -14,6 +14,7 @@ var (
 	colorTextSecondary = tcell.NewRGBColor(107, 114, 128) // даты, счётчики, подписи
 	colorAccent        = tcell.NewRGBColor(37, 99, 235)   // единственный акцент
 	colorHairline      = tcell.NewRGBColor(222, 226, 230) // тонкие разделители
+	colorGridLine      = tcell.NewRGBColor(198, 203, 211) // линии сетки календаря (V-43)
 	colorError         = tcell.NewRGBColor(201, 64, 58)   // приглушённый красный
 	colorWeekend       = tcell.NewRGBColor(199, 115, 110) // Сб/Вс в календаре
 	colorConnected     = tcell.NewRGBColor(26, 127, 55)   // зелёная точка связи (V-4)
@@ -51,6 +52,7 @@ func applyLightTheme() {
 	colorTextSecondary = tcell.NewRGBColor(107, 114, 128)
 	colorAccent = tcell.NewRGBColor(37, 99, 235)
 	colorHairline = tcell.NewRGBColor(222, 226, 230)
+	colorGridLine = tcell.NewRGBColor(198, 203, 211)
 	colorError = tcell.NewRGBColor(201, 64, 58)
 	colorWeekend = tcell.NewRGBColor(199, 115, 110)
 	colorConnected = tcell.NewRGBColor(26, 127, 55)
@@ -66,6 +68,7 @@ func applyDarkTheme() {
 	colorTextSecondary = tcell.NewRGBColor(161, 161, 170)
 	colorAccent = tcell.NewRGBColor(96, 165, 250)
 	colorHairline = tcell.NewRGBColor(63, 63, 70)
+	colorGridLine = tcell.NewRGBColor(80, 84, 92)
 	colorError = tcell.NewRGBColor(248, 113, 113)
 	colorWeekend = tcell.NewRGBColor(252, 165, 165)
 	colorConnected = tcell.NewRGBColor(63, 185, 80)

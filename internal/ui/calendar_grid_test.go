@@ -16,9 +16,8 @@ func TestDayCellRectGeometry(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{100, 30}, {220, 60}} {
 		w, h := size.w, size.h
 		mx, my := gridMargins(w, h)
-		// V-48: сетка прижата к левому верхнему углу — поля нулевые.
-		if mx != 0 || my != 0 {
-			t.Errorf("%dx%d: сетка не прижата к углу: mx=%d my=%d", w, h, mx, my)
+		if mx < 0 || mx > 6 || my < 0 || my > 5 {
+			t.Errorf("%dx%d: поля сетки вне допуска: mx=%d my=%d", w, h, mx, my)
 		}
 		// Шапка дней недели — в строке my, первая неделя — через линию под ней.
 		if _, top, _, _ := dayCellRect(0, 0, w, h); top != my+2 {
@@ -36,9 +35,8 @@ func TestDayCellRectGeometry(t *testing.T) {
 			weekHeight = ch
 			prevBottom = top + ch + 1 // плюс линия между неделями
 		}
-		// Остаток высоты — снизу, меньше высоты ячейки: сетка прижата к верху.
-		if bottom := h - (prevBottom - 1); bottom < 0 || bottom > 5 {
-			t.Errorf("%dx%d: остаток снизу %d вне 0…5 при верхнем поле %d", w, h, bottom, my)
+		if bottom := h - (prevBottom - 1); bottom != my && bottom != my+1 {
+			t.Errorf("%dx%d: низ не сходится: поле %d при верхнем %d", w, h, bottom, my)
 		}
 		x, width := mx, -1
 		for col := 0; col < 7; col++ {
@@ -52,28 +50,25 @@ func TestDayCellRectGeometry(t *testing.T) {
 			width = cw
 			x += cw + 1 // плюс вертикальная линия
 		}
-		// Остаток ширины — справа, меньше ширины ячейки: сетка прижата влево.
-		if right := w - (x - 1); right < 0 || right > 6 {
-			t.Errorf("%dx%d: остаток справа %d вне 0…6 при левом поле %d", w, h, right, mx)
+		if right := w - (x - 1); right != mx && right != mx+1 {
+			t.Errorf("%dx%d: правое поле %d при левом %d", w, h, right, mx)
 		}
 	}
 }
 
-// TestDayAtMargins: клик в остатке справа/снизу и в строке шапки — мимо ячеек.
+// TestDayAtMargins: клик в внешних полях сетки и в строке шапки — мимо ячеек.
 func TestDayAtMargins(t *testing.T) {
 	const w, h = 100, 30
 	mx, my := gridMargins(w, h)
-	// V-48: сетка прижата к левому верхнему углу, остаток — справа/снизу.
-	if mx != 0 || my != 0 {
-		t.Fatalf("сетка не у угла: mx=%d my=%d", mx, my)
+	if mx == 0 || my == 0 {
+		t.Fatalf("для %dx%d ждали непустые поля: mx=%d my=%d", w, h, mx, my)
 	}
-	cw, ch := gridCellSize(w, h)
 	for _, p := range []struct {
 		x, y int
 		name string
 	}{
-		{w - 1, my + 3, "правое поле"},
-		{w - 1, h - 1, "нижний правый остаток"},
+		{mx - 1, my + 1, "левое поле"},
+		{w - 1, my + 1, "правое поле"},
 		{mx, my, "строка шапки"},
 		{mx, my + 1, "линия под шапкой"},
 		{mx + 1, h - 1, "нижнее поле"},
@@ -85,17 +80,10 @@ func TestDayAtMargins(t *testing.T) {
 	if _, _, ok := dayAt(mx, my+2, w, h); !ok {
 		t.Errorf("первая ячейка сетки не находится")
 	}
-	// Левая колонка начинается от рамки: заливка вплотную к ней (V-48).
-	if x, y, _, _ := dayCellRect(0, 0, w, h); x != 0 || y != 2 {
-		t.Errorf("первая ячейка не у левого верхнего угла: x=%d y=%d", x, y)
-	}
 	// Вертикальная линия между колонками — не ячейка (V-38).
+	cw, _ := gridCellSize(w, h)
 	if _, _, ok := dayAt(mx+cw, my+2, w, h); ok {
 		t.Errorf("вертикальная линия попала в ячейку")
-	}
-	// Первая ячейка второй недели — тоже от рамки, под линией.
-	if _, _, ok := dayAt(0, 2+ch+1, w, h); !ok {
-		t.Errorf("ячейка второй недели не находится")
 	}
 }
 
@@ -184,8 +172,8 @@ func TestCalendarGridFillsPanel(t *testing.T) {
 	}()
 	a.tapp.QueueUpdateDraw(func() {})
 
-	// Последняя неделя (день 30, понедельник) целиком в панели: шесть недель
-	// одного размера, остаток высоты уходит вниз (V-48).
+	// Последняя неделя (день 30, понедельник) — у самого низа внутренней
+	// области сетки: шесть недель одного размера, остаток высоты ушёл в поле.
 	_, iy, iw, ih := a.calendar.grid.GetInnerRect()
 	row, col := cellOf(a.calendar.grid.cells, 30)
 	_, cy, _, _ := dayCellRect(row, col, iw, ih)
@@ -306,9 +294,9 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 }
 
-// TestMonthGridSeparators (V-38, V-43, V-48): разделители между колонками и
-// неделями — сплошные полосы colorHairline; заливка выбранного дня примыкает
-// к ним вплотную и не затирает число дня.
+// TestMonthGridSeparators (V-38, V-43): линии между колонками и неделями и под
+// шапкой дней недели — colorGridLine (светлее чисел, темнее hairline);
+// заливка выбранного лежит внутри линий и не затирает число дня.
 func TestMonthGridSeparators(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{100, 30}, {220, 60}} {
 		w, h := size.w, size.h
@@ -333,26 +321,20 @@ func TestMonthGridSeparators(t *testing.T) {
 			return r, fg
 		}
 		// Вертикаль между 1-й и 2-й колонками — на всю высоту сетки, включая шапку.
-		// V-48: разделители — сплошные полосы в клетку: заливка дня примыкает
-		// к ним вплотную, без полосы фона панели.
-		bandBg := func(x, y int) tcell.Color {
-			_, _, st, _ := sim.GetContent(ix+x, iy+y)
-			_, bg, _ := st.Decompose()
-			return bg
-		}
 		for yy := my; yy < my+6*ch+7; yy++ {
-			if bg := bandBg(mx+cw, yy); bg != colorHairline {
-				t.Fatalf("%dx%d: вертикальная полоса (%d,%d) = %v", w, h, mx+cw, yy, bg)
+			if r, fg := content(mx+cw, yy); (r != tview.Borders.Vertical && r != tview.Borders.Cross) || fg != colorGridLine {
+				t.Fatalf("%dx%d: вертикаль (%d,%d) = %q/%v", w, h, mx+cw, yy, r, fg)
 			}
 		}
+		// Горизонталь под шапкой дней недели — на всю ширину сетки.
 		for xx := mx; xx < mx+7*cw+6; xx++ {
-			if bg := bandBg(xx, my+1); bg != colorHairline {
-				t.Fatalf("%dx%d: горизонтальная полоса (%d,%d) = %v", w, h, xx, my+1, bg)
+			if r, fg := content(xx, my+1); (r != tview.Borders.Horizontal && r != tview.Borders.Cross) || fg != colorGridLine {
+				t.Fatalf("%dx%d: горизонталь (%d,%d) = %q/%v", w, h, xx, my+1, r, fg)
 			}
 		}
-
-		// V-44/V-48: выбранный день залит целиком и примыкает к полосам
-		// разделителей; число — с отступом 1 вправо/вниз.
+		// V-44: выбранный день залит от линии до линии — левый верхний угол
+		// ячейки тоже заливка (пробел), число — с отступом 1 вправо/вниз;
+		// слева от ячейки — вертикальная линия, а не заливка выбора.
 		row, col := cellOf(g.cells, 20)
 		cx, cy, cw2, ch2 := dayCellRect(row, col, iw, ih)
 		textY := cy + 1 // высота ячейки здесь > 1
@@ -366,42 +348,8 @@ func TestMonthGridSeparators(t *testing.T) {
 		if _, _, st, _ := sim.GetContent(ix+cx+cw2-1, iy+cy+ch2-1); !isSelectedBg(st) {
 			t.Fatalf("%dx%d: низ-право выбранной ячейки не залит", w, h)
 		}
-		// Между заливкой и линией нет фона панели: сразу за ячейкой — полоса.
-		for _, p := range []struct{ x, y int }{
-			{cx + cw2, cy + 1}, {cx + 1, cy + ch2},
-			{cx - 1, cy + 1}, {cx + 1, cy - 1},
-		} {
-			if bg := bandBg(p.x, p.y); bg != colorHairline {
-				t.Fatalf("%dx%d: у выбора (%d,%d) не полоса: %v", w, h, p.x, p.y, bg)
-			}
-		}
-		// Далёкая полоса не акцентируется.
-		if bg := bandBg(mx+cw, cy+1); bg != colorHairline {
-			t.Fatalf("%dx%d: полоса вне выбора = %v", w, h, bg)
-		}
-		// Колонка 0: заливка от рамки; клетка рамки примыкает к дню.
-		g.SelectDay(16) // понедельник — колонка 0
-		g.Draw(sim)
-		row, col = cellOf(g.cells, 16)
-		cx, cy, cw2, ch2 = dayCellRect(row, col, iw, ih)
-		if cx != 0 {
-			t.Fatalf("%dx%d: левая колонка не у рамки: x=%d", w, h, cx)
-		}
-		for _, p := range []struct{ x, y int }{
-			{cx, cy}, {cx + cw2 - 1, cy},
-			{cx, cy + ch2 - 1}, {cx + cw2 - 1, cy + ch2 - 1},
-		} {
-			if _, _, st, _ := sim.GetContent(ix+p.x, iy+p.y); !isSelectedBg(st) {
-				t.Fatalf("%dx%d: угол выбранной ячейки (%d,%d) не залит", w, h, p.x, p.y)
-			}
-		}
-		// Клетка рамки у выбора залита вместе с днём, глиф читается на акценте.
-		if r, _, st, _ := sim.GetContent(ix-1, iy+cy+1); r != tview.Borders.Vertical || !isSelectedBg(st) {
-			t.Fatalf("%dx%d: рамка у выбора не залита: %q/%v", w, h, r, st)
-		}
-		// Вне выбора рамка не тронута.
-		if r, _, st, _ := sim.GetContent(ix-1, iy+3); r != tview.Borders.Vertical || isSelectedBg(st) {
-			t.Fatalf("%dx%d: рамка вне выбора испорчена: %q/%v", w, h, r, st)
+		if r, fg := content(cx-1, cy); r != tview.Borders.Vertical || fg != colorGridLine {
+			t.Fatalf("%dx%d: слева от выбранной ячейки не линия: %q/%v", w, h, r, fg)
 		}
 	}
 }

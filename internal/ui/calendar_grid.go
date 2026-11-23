@@ -93,13 +93,11 @@ func gridCellSize(w, h int) (cw, ch int) {
 	return (w - 6) / 7, (h - 7) / 6
 }
 
-// gridMargins — внешние поля сетки: сетка прижата к левому верхнему углу
-// панели, остаток ширины/высоты остаётся справа/снизу.
-// WHY: деление остатка по краям (до V-48) оставляло полосу фона панели между
-// заливкой крайней колонки и рамкой, а сверху — пустые строки.
-// Не делать: возвращать центрирование — выбор снова отрывается от рамки.
+// gridMargins — внешние поля сетки: остаток ширины/высоты делится поровну
+// по краям, чтобы все 7 колонок и 6 недель были одного размера.
 func gridMargins(w, h int) (mx, my int) {
-	return 0, 0
+	cw, ch := gridCellSize(w, h)
+	return (w - (7*cw + 6)) / 2, (h - (6*ch + 7)) / 2
 }
 
 // dayCellRect — внутренний прямоугольник ячейки недели row (0–5) и колонки
@@ -129,8 +127,8 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 
 // Draw рисует шапку дней недели и дни: число (жирным) и «·N» — с отступом
 // 1 клетка от левого/верхнего края ячейки; выбранный день залит
-// colorSelectedBg вплотную к полосам-разделителям, «сегодня» — акцентный
-// номер без заливки (V-33, V-39, V-44, V-45, V-48).
+// colorSelectedBg от линии до линии, «сегодня» — акцентный номер без заливки
+// (V-33, V-39, V-44, V-45).
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
@@ -164,8 +162,8 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			}
 			label := FormatDayCell(cell)
 			dayText, count, _ := strings.Cut(label, "·")
-			// WHY: заливка — весь dayCellRect до полос-разделителей, а текст с
-			// отступом 1: вплотную к полосе число сливалось с сеткой, блок
+			// WHY: заливка — весь dayCellRect (до линий), а текст с отступом 1:
+			// вплотную к линии число сливалось с сеткой, выбранный блок
 			// выглядел обрезанным. Отступ общий для всех дней — числа в одной
 			// колонке стоят ровно.
 			// Не делать: заливать только под текстом — «сегодня»/выбор теряли
@@ -183,54 +181,40 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			}
 		}
 	}
-	g.drawGridBands(screen, x, y, w, h)
-	g.paintSelFrame(screen, x, y, w, h)
+	g.drawGridLines(screen, x, y, w, h)
 }
 
-// paintSelFrame — выбранный день вплотную к рамке панели: её клетка лежит вне
-// inner rect, поэтому заливаем и её, а глиф красим onAccent (V-48).
-// Не делать: оставлять глиф акцентным — на заливке бордюр исчезает.
-func (g *monthGrid) paintSelFrame(screen tcell.Screen, x, y, w, h int) {
-	if !g.hasSel {
-		return
-	}
-	cx, cy, cw, ch := dayCellRect(g.selRow, g.selCol, w, h)
-	frame := tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
-	if cx == 0 {
-		for yy := cy; yy < cy+ch; yy++ {
-			screen.SetContent(x-1, y+yy, tview.Borders.Vertical, nil, frame)
-		}
-	}
-	if cx+cw == w {
-		for yy := cy; yy < cy+ch; yy++ {
-			screen.SetContent(x+w, y+yy, tview.Borders.Vertical, nil, frame)
-		}
-	}
-}
-
-// drawGridBands — разделители сетки: сплошные полосы в 1 клетку фоном
-// colorHairline. Раньше это были тонкие глифы (V-38, V-43), но глиф линии
-// центрируется в своей клетке — между заливкой дня и линией оставалась
-// половина клетки фона панели (V-48).
-// WHY: полоса — фон, а не глиф, поэтому заливка выбранного примыкает к ней
-// вплотную и без швов (у блочных глифов в терминале швы).
-// Не делать: возвращать тонкие глифы — заливка снова отрывается от линии.
-func (g *monthGrid) drawGridBands(screen tcell.Screen, x, y, w, h int) {
+// drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
+// строку шапки), горизонтали под шапкой дней недели и между неделями. Заливка
+// выбранного лежит внутри dayCellRect, поэтому линии её не затирают.
+// WHY: отдельная роль colorGridLine (V-43) — hairline на белой поверхности
+// не читается, а textSecondary (цвет чисел и подписей) слишком тяжёлый:
+// линии спорили с числами. Роль светлее чисел и темнее hairline; пустые и
+// соседние ячейки получают те же тихие линии — без отдельного акцента.
+// Не делать: возвращать textSecondary — сетка снова перевесит числа.
+func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
 	mx, my := gridMargins(w, h)
 	cw, ch := gridCellSize(w, h)
-	band := tcell.StyleDefault.Background(colorHairline)
+	rule := tcell.StyleDefault.Foreground(colorGridLine).Background(colorPanelBg)
 	bottom := my + 6*ch + 7
 	right := mx + 7*cw + 6
 	for col := 0; col < 6; col++ {
 		lx := mx + (col+1)*cw + col
 		for yy := my; yy < bottom; yy++ {
-			screen.SetContent(x+lx, y+yy, ' ', nil, band)
+			screen.SetContent(x+lx, y+yy, tview.Borders.Vertical, nil, rule)
 		}
 	}
 	for i := 0; i <= 5; i++ {
 		ly := my + 1 + i*(ch+1)
 		for xx := mx; xx < right; xx++ {
-			screen.SetContent(x+xx, y+ly, ' ', nil, band)
+			screen.SetContent(x+xx, y+ly, tview.Borders.Horizontal, nil, rule)
+		}
+	}
+	// Пересечения — крестиком, иначе линия недели рвёт вертикаль.
+	for col := 0; col < 6; col++ {
+		lx := mx + (col+1)*cw + col
+		for i := 0; i <= 5; i++ {
+			screen.SetContent(x+lx, y+my+1+i*(ch+1), tview.Borders.Cross, nil, rule)
 		}
 	}
 }
