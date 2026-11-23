@@ -143,28 +143,32 @@ func responseStatus(responseType string) (mark string, color tcell.Color) {
 	}
 }
 
-// FormatAgendaLine — строка повестки выбранного дня в стиле списка писем
-// (V-34): «14:30–15:00 ✓ Тема [1] host». Время и место — muted, статус — роль
-// (responseStatus), тема — primary. В выбранной строке всё onAccent: на
+// AgendaSegments — блок повестки выбранного дня в стиле списка писем (V-34):
+// «14:30–15:00 ✓ Тема (Место)». Время и место — muted, статус — роль
+// (responseStatus), тема — primary. В выбранном событии всё onAccent: на
 // акцентной заливке primary тёмный, а ★ совпал бы с фоном.
 // Длинные URL из «Места» уходят в реестр reg (модал g), вместо них — маркер
-// [N] host; обычное место остаётся текстом в скобках. Строки идут в
-// tview.List — Sanitize + tview.Escape (escapeForList) обязательны.
-func FormatAgendaLine(ev mail.Event, reg *mail.LinkRegistry, selected bool) string {
+// [N] host; обычное место остаётся текстом в скобках.
+// WHY (V-42): сегменты {текст, стиль}, а не строка с тегами tview — повестка
+// рисуется собственным Draw через tcell, теги там не разбираются. Поэтому
+// tview.Escape не нужен, обязателен только Sanitize (SECURITY.md §3).
+// Не делать: возврат к tview.List и тегам — перенос строк тогда невозможен.
+func AgendaSegments(ev mail.Event, reg *mail.LinkRegistry, selected bool) []agendaSeg {
 	subject, muted := colorTextPrimary, colorTextSecondary
 	mark, status := responseStatus(ev.MyResponseType)
 	if selected {
 		subject, muted, status = colorOnAccent, colorOnAccent, colorOnAccent
 	}
-	var b strings.Builder
-	fmt.Fprintf(&b, "[%s]%s–%s[-] ", hexTag(muted),
-		ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04"))
-	fmt.Fprintf(&b, "[%s]%s[-] ", hexTag(status), mark)
-	fmt.Fprintf(&b, "[%s]%s[-]", hexTag(subject), escapeForList(ev.Subject))
-	if loc := reg.RenderBody(ev.Location); loc != "" {
-		fmt.Fprintf(&b, " [%s](%s)[-]", hexTag(muted), escapeForList(loc))
+	segs := []agendaSeg{
+		{fmt.Sprintf("%s–%s ", ev.Start.Local().Format("15:04"), ev.End.Local().Format("15:04")),
+			tcell.StyleDefault.Foreground(muted)},
+		{mark + " ", tcell.StyleDefault.Foreground(status)},
+		{security.Sanitize(ev.Subject), tcell.StyleDefault.Foreground(subject)},
 	}
-	return b.String()
+	if loc := reg.RenderBody(ev.Location); loc != "" {
+		segs = append(segs, agendaSeg{"(" + security.Sanitize(loc) + ")", tcell.StyleDefault.Foreground(muted)})
+	}
+	return segs
 }
 
 // AgendaTitle — левая часть заголовка повестки: «Повестка · 18.11».

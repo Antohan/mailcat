@@ -19,7 +19,7 @@ type calendarScreen struct {
 	app    *App
 	root   *tview.Flex
 	grid   *monthGrid
-	agenda *tview.List
+	agenda *agendaList
 	// V-34: полоса прокрутки повестки — колонка за рамкой панели (как на почте).
 	agendaBar *scrollbar
 
@@ -47,14 +47,9 @@ func newCalendarScreen(a *App) *calendarScreen {
 
 	s.grid = newMonthGrid()
 	s.grid.SetBorder(true)
-	// V-34: повестка — список в стиле писем: заливка на всю строку, тема
-	// primary, выбранная строка — акцент (цвета строк — из FormatAgendaLine).
-	s.agenda = tview.NewList().
-		ShowSecondaryText(false).
-		SetHighlightFullLine(true).
-		SetMainTextColor(colorTextPrimary).
-		SetSelectedBackgroundColor(colorSelectedBg).
-		SetSelectedTextColor(colorSelectedFg)
+	// V-42: повестка — собственный Box+Draw: событие блоком строк, перенос по
+	// ширине панели (tview.List длинную строку обрезал).
+	s.agenda = newAgendaList()
 	s.agenda.SetBorder(true)
 
 	// RD-2: заголовки — отдельные строки над панелями (см. panel.go).
@@ -65,18 +60,15 @@ func newCalendarScreen(a *App) *calendarScreen {
 	// WHY (V-31): разделитель между колонками — как на почте (V-3): правый
 	// счётчик шапки сетки иначе упирается в заголовок «Повестка» соседней
 	// панели. Не делать: отступ пустой колонкой — линия есть у почты.
-	// V-34: полоса прокрутки повестки — своя колонка справа, трек — строки
-	// списка (offset/total знает List, геометрию — свежий rect панели).
+	// V-34/V-42: полоса прокрутки повестки — своя колонка справа; трек —
+	// строки раскладки agendaList (offset/total), геометрия — свежий rect панели.
 	s.agendaBar = newScrollbar()
 	s.agendaBar.geom = func() (int, int, int) {
 		x, _, _, _ := s.agendaBar.GetRect()
 		_, y, _, h := s.agenda.GetInnerRect()
 		return x, y, h
 	}
-	s.agendaBar.track = func() (int, int) {
-		off, _ := s.agenda.GetOffset()
-		return off, s.agenda.GetItemCount()
-	}
+	s.agendaBar.track = s.agenda.ScrollTrack
 	agendaCol := tview.NewFlex().SetDirection(tview.FlexColumn).
 		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 1, false).
 		AddItem(s.agendaBar, 1, 0, false)
@@ -89,13 +81,9 @@ func newCalendarScreen(a *App) *calendarScreen {
 	s.grid.SetSelectFunc(func(row, col int) {
 		s.onDaySelected(row, col)
 	})
-	s.agenda.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
-		s.openEventDetails(idx)
-	})
-	// V-34: при смене курсора строки пересобираются (время/место выбранной —
-	// onAccent), как applyActiveFolderStyle у папок. Индекс — из аргумента:
-	// changed приходит ДО записи currentItem в List.
-	s.agenda.SetChangedFunc(func(idx int, _ string, _ string, _ rune) {
+	// V-34: при смене события пересобираются сегменты (время/место выбранного —
+	// onAccent), как applyActiveFolderStyle у папок; индекс приходит из Move/клика.
+	s.agenda.SetSelectFunc(func(idx int) {
 		s.restyleAgenda(idx)
 	})
 
@@ -166,8 +154,8 @@ func newCalendarScreen(a *App) *calendarScreen {
 		return monthHook(event)
 	}
 	s.grid.SetInputCapture(gridHook)
-	// V-35: Esc и ← (без Ctrl) с повестки возвращают фокус сетке; Enter на
-	// повестке — детали встречи (SetSelectedFunc у List).
+	// V-35: Esc и ← (без Ctrl) с повестки возвращают фокус сетке; V-42: ↑↓ —
+	// события, Enter — детали выбранного.
 	s.agenda.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyTab, tcell.KeyBacktab:
@@ -175,6 +163,15 @@ func newCalendarScreen(a *App) *calendarScreen {
 			return nil
 		case tcell.KeyEsc:
 			s.focusGrid()
+			return nil
+		case tcell.KeyEnter:
+			s.openEventDetails(s.agenda.Selected())
+			return nil
+		case tcell.KeyUp:
+			s.agenda.Move(-1)
+			return nil
+		case tcell.KeyDown:
+			s.agenda.Move(1)
 			return nil
 		case tcell.KeyLeft:
 			if event.Modifiers()&tcell.ModCtrl == 0 {
@@ -287,9 +284,9 @@ func (s *calendarScreen) render() {
 	s.grid.SelectDay(pick)
 }
 
-// onDaySelected обновляет повестку при движении по сетке (UI-4): строки
-// собирает FormatAgendaLine (маркеры статуса + реестр ссылок из «Места»),
-// пустой день — один muted-пункт без действия по Enter.
+// onDaySelected обновляет повестку при движении по сетке (UI-4): блоки
+// событий собирает AgendaSegments (маркеры статуса + реестр ссылок из
+// «Места»), пустой день — muted-заглушка «Встреч нет» без выбора.
 func (s *calendarScreen) onDaySelected(row, col int) {
 	if row < 0 || row >= len(s.grid.cells) || col < 0 || col >= 7 {
 		return
@@ -299,39 +296,30 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 	}
 	day := time.Date(s.year, s.month, s.grid.cells[row][col].Day, 0, 0, 0, 0, time.Local)
 	s.dayEvents = DayEvents(s.events, day)
-	s.agenda.Clear()
 	if len(s.dayEvents) == 0 {
 		s.dayLinks = nil
-		s.agenda.AddItem(mutedText("Встреч нет"), "", 0, nil)
+		s.agenda.SetItems(nil, -1)
 	} else {
-		for range s.dayEvents {
-			s.agenda.AddItem("", "", 0, nil)
-		}
-		s.restyleAgenda(0) // строки заполняет общая формула (курсор — первый)
+		s.restyleAgenda(0) // блоки заполняет общая формула (выбор — первый)
 	}
 	s.agendaHeader.SetListTitle(AgendaTitle(day), meetingsCount(len(s.dayEvents)))
 }
 
-// restyleAgenda пересобирает строки повестки под курсор sel (V-34): только
-// SetItemText — курсор и прокрутка остаются на месте (как applyActiveFolderStyle,
-// V-26). Реестр ссылок новый, но порядок тот же — маркеры [N] не меняются.
+// restyleAgenda пересобирает блоки повестки под выбор sel (V-34/V-42):
+// сегменты каждого события через AgendaSegments, выбранное — onAccent. Реестр
+// ссылок новый, но порядок тот же — маркеры [N] не меняются; прокрутка не
+// сбрасывается (строки те же, меняются только стили).
 func (s *calendarScreen) restyleAgenda(sel int) {
-	// WHY: AddItem/InsertItem тоже дергает changed — при пересборке списка
-	// элементов ещё нет, SetItemText по ним паникует. Не убирать зажим по
-	// GetItemCount: он дешёвый и страхует весь цикл сборки (финал — вызов
-	// после AddItem в onDaySelected).
-	n := len(s.dayEvents)
-	if c := s.agenda.GetItemCount(); n > c {
-		n = c
-	}
-	if sel < 0 || sel >= n {
+	if sel < 0 || sel >= len(s.dayEvents) {
 		return
 	}
 	reg := mail.NewLinkRegistry()
-	for i, ev := range s.dayEvents[:n] {
-		s.agenda.SetItemText(i, FormatAgendaLine(ev, reg, i == sel), "")
+	items := make([][]agendaSeg, len(s.dayEvents))
+	for i, ev := range s.dayEvents {
+		items[i] = AgendaSegments(ev, reg, i == sel)
 	}
 	s.dayLinks = reg.List()
+	s.agenda.SetItems(items, sel)
 }
 
 // openEventDetails показывает детали выбранной встречи: описание догружается
