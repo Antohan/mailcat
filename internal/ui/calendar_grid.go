@@ -183,7 +183,56 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 			}
 		}
 	}
+	g.fillSelRing(screen, x, y, w, h)
 	g.drawGridLines(screen, x, y, w, h)
+}
+
+// selRing — клетки-линии вокруг выбранного дня, включая пересечения (V-48).
+func (g *monthGrid) selRing(w, h int) (x0, y0, x1, y1 int, ok bool) {
+	if !g.hasSel {
+		return 0, 0, 0, 0, false
+	}
+	cx, cy, cw, ch := dayCellRect(g.selRow, g.selCol, w, h)
+	return cx - 1, cy - 1, cx + cw, cy + ch, true
+}
+
+// fillSelRing заливает акцентом клетки линий вокруг выбранного дня и — когда
+// выбор вплотную к рамке — её клетку: иначе между заливкой и линией остаётся
+// полоса фона панели (V-48).
+// WHY: линия живёт в своей клетке и рисуется по центру — половина её клетки
+// читалась как отступ, хотя заливка доходила до dayCellRect.
+// Не делать: заливать только саму ячейку — у линии/рамки снова полоса фона.
+func (g *monthGrid) fillSelRing(screen tcell.Screen, x, y, w, h int) {
+	x0, y0, x1, y1, ok := g.selRing(w, h)
+	if !ok {
+		return
+	}
+	cx, cy, cw, ch := dayCellRect(g.selRow, g.selCol, w, h)
+	bg := tcell.StyleDefault.Background(colorSelectedBg)
+	for yy := y0; yy <= y1; yy++ {
+		for xx := x0; xx <= x1; xx++ {
+			if xx >= cx && xx < cx+cw && yy >= cy && yy < cy+ch {
+				continue
+			}
+			if xx < 0 || yy < 0 || xx >= w || yy >= h {
+				continue
+			}
+			screen.SetContent(x+xx, y+yy, ' ', nil, bg)
+		}
+	}
+	// Клетка рамки лежит вне inner rect: глиф красим onAccent, иначе
+	// акцентная рамка на заливке исчезнет.
+	frame := tcell.StyleDefault.Foreground(colorSelectedFg).Background(colorSelectedBg)
+	if cx == 0 {
+		for yy := y0; yy <= y1; yy++ {
+			screen.SetContent(x-1, y+yy, tview.Borders.Vertical, nil, frame)
+		}
+	}
+	if cx+cw == w {
+		for yy := y0; yy <= y1; yy++ {
+			screen.SetContent(x+w, y+yy, tview.Borders.Vertical, nil, frame)
+		}
+	}
 }
 
 // drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
@@ -198,25 +247,36 @@ func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
 	mx, my := gridMargins(w, h)
 	cw, ch := gridCellSize(w, h)
 	rule := tcell.StyleDefault.Foreground(colorGridLine).Background(colorPanelBg)
+	ruleSel := tcell.StyleDefault.Foreground(colorGridLine).Background(colorSelectedBg)
+	// V-48: клетки линий вокруг выбора залиты акцентом — линия рисуется
+	// поверх заливки, фон под ней остаётся выбором.
+	rx0, ry0, rx1, ry1, hasRing := g.selRing(w, h)
+	style := func(xx, yy int) tcell.Style {
+		if hasRing && xx >= rx0 && xx <= rx1 && yy >= ry0 && yy <= ry1 {
+			return ruleSel
+		}
+		return rule
+	}
 	bottom := my + 6*ch + 7
 	right := mx + 7*cw + 6
 	for col := 0; col < 6; col++ {
 		lx := mx + (col+1)*cw + col
 		for yy := my; yy < bottom; yy++ {
-			screen.SetContent(x+lx, y+yy, tview.Borders.Vertical, nil, rule)
+			screen.SetContent(x+lx, y+yy, tview.Borders.Vertical, nil, style(lx, yy))
 		}
 	}
 	for i := 0; i <= 5; i++ {
 		ly := my + 1 + i*(ch+1)
 		for xx := mx; xx < right; xx++ {
-			screen.SetContent(x+xx, y+ly, tview.Borders.Horizontal, nil, rule)
+			screen.SetContent(x+xx, y+ly, tview.Borders.Horizontal, nil, style(xx, ly))
 		}
 	}
 	// Пересечения — крестиком, иначе линия недели рвёт вертикаль.
 	for col := 0; col < 6; col++ {
 		lx := mx + (col+1)*cw + col
 		for i := 0; i <= 5; i++ {
-			screen.SetContent(x+lx, y+my+1+i*(ch+1), tview.Borders.Cross, nil, rule)
+			ly := my + 1 + i*(ch+1)
+			screen.SetContent(x+lx, y+ly, tview.Borders.Cross, nil, style(lx, ly))
 		}
 	}
 }
