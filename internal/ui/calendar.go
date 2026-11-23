@@ -291,7 +291,7 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 	if row < 0 || row >= len(s.grid.cells) || col < 0 || col >= 7 {
 		return
 	}
-	if s.grid.cells[row][col].Day == 0 {
+	if !s.grid.cells[row][col].InMonth {
 		return
 	}
 	day := time.Date(s.year, s.month, s.grid.cells[row][col].Day, 0, 0, 0, 0, time.Local)
@@ -364,7 +364,8 @@ func (s *calendarScreen) openEventDetails(idx int) {
 func cellOf(grid [][]DayCell, day int) (int, int) {
 	for row := 0; row < len(grid); row++ {
 		for col := 0; col < 7; col++ {
-			if grid[row][col].Day == day {
+			// V-46: у соседних месяцев тоже есть числа — ищем только свой месяц.
+			if grid[row][col].InMonth && grid[row][col].Day == day {
 				return row, col
 			}
 		}

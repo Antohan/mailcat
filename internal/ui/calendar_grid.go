@@ -79,7 +79,7 @@ func (g *monthGrid) maxDay() int {
 	max := 0
 	for _, row := range g.cells {
 		for _, c := range row {
-			if c.Day > max {
+			if c.InMonth && c.Day > max {
 				max = c.Day
 			}
 		}
@@ -231,7 +231,14 @@ func (g *monthGrid) cellStyles(row, col int) (day, count tcell.Style) {
 	if col >= 5 {
 		day = day.Foreground(colorWeekend) // Сб/Вс
 	}
-	if g.cells[row][col].Day == g.today {
+	if !g.cells[row][col].InMonth {
+		// V-46: дни соседних месяцев — только отображение: muted и без
+		// жирности, чтобы числа текущего месяца оставались главными.
+		// Не делать: weekend-цвет для соседних — muted уже заглушает.
+		day = day.Foreground(colorOtherMonth).Bold(false)
+		count = count.Foreground(colorOtherMonth)
+	}
+	if g.cells[row][col].InMonth && g.cells[row][col].Day == g.today {
 		// О-3/V-45: «сегодня» — акцентный номер на фоне панели; сплошной
 		// акцент занят выбором (после совпадения выбор перекрывает этот стиль).
 		// WHY: tint-подложка под номером читалась как second selection и
@@ -258,8 +265,8 @@ func gridText(screen tcell.Screen, x, y, width int, text string, style tcell.Sty
 	}
 }
 
-// MouseHandler — клик выбирает ячейку дня (V-32). Пустые ячейки соседних
-// месяцев невыбираемы; фокус переходит панели сетки.
+// MouseHandler — клик выбирает ячейку дня (V-32). Дни соседних месяцев
+// невыбираемы (V-46); фокус переходит панели сетки.
 func (g *monthGrid) MouseHandler() func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (consumed bool, capture tview.Primitive) {
 	return func(action tview.MouseAction, event *tcell.EventMouse, setFocus func(p tview.Primitive)) (bool, tview.Primitive) {
 		if action != tview.MouseLeftClick {
@@ -268,7 +275,7 @@ func (g *monthGrid) MouseHandler() func(action tview.MouseAction, event *tcell.E
 		mx, my := event.Position()
 		x, y, w, h := g.GetInnerRect()
 		row, col, ok := dayAt(mx-x, my-y, w, h)
-		if !ok || row >= len(g.cells) || g.cells[row][col].Day == 0 {
+		if !ok || row >= len(g.cells) || !g.cells[row][col].InMonth {
 			return false, nil
 		}
 		setFocus(g)

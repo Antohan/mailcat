@@ -18,10 +18,9 @@ import (
 
 // DayCell — ячейка месячной сетки.
 type DayCell struct {
-	Day      int // 0 = пустая ячейка (соседний месяц)
-	InMonth  bool
-	Events   int // число событий дня (многодневная встреча считает каждый свой день)
-	Selected bool
+	Day     int  // число дня; у соседнего месяца — своё число (V-46)
+	InMonth bool // false — день соседнего месяца: только отображение
+	Events  int  // число событий дня (многодневная встреча считает каждый свой день)
 }
 
 // MonthBounds возвращает [первое число месяца 00:00 локально, последнее
@@ -34,7 +33,9 @@ func MonthBounds(year int, month time.Month) (time.Time, time.Time) {
 }
 
 // MonthGrid строит сетку 6×7 (строки-недели, Пн-первая колонка) с числом
-// событий по дням (многодневные считают каждый свой день).
+// событий по дням (многодневные считают каждый свой день). Ячейки соседних
+// месяцев заполнены их числами (V-46) — сетка без пустых квадратов, но такие
+// дни не выбираются и счётчиков не получают.
 func MonthGrid(year int, month time.Month, events []mail.Event) [][]DayCell {
 	// Дни месяца с числом событий.
 	count := map[int]int{}
@@ -51,6 +52,7 @@ func MonthGrid(year int, month time.Month, events []mail.Event) [][]DayCell {
 
 	first := time.Date(year, month, 1, 0, 0, 0, 0, time.Local)
 	daysInMonth := time.Date(year, month+1, 1, 0, 0, 0, 0, time.Local).AddDate(0, 0, -1).Day()
+	prevDays := first.AddDate(0, 0, -1).Day()
 
 	// Сдвиг до первого понедельника: вс=0 → 6, пн=1 → 0, ...
 	lead := int(first.Weekday()+6) % 7
@@ -60,8 +62,13 @@ func MonthGrid(year int, month time.Month, events []mail.Event) [][]DayCell {
 	for row := 0; row < 6; row++ {
 		grid[row] = make([]DayCell, 7)
 		for col := 0; col < 7; col++ {
-			if day >= 1 && day <= daysInMonth {
+			switch {
+			case day < 1:
+				grid[row][col] = DayCell{Day: prevDays + day}
+			case day <= daysInMonth:
 				grid[row][col] = DayCell{Day: day, InMonth: true, Events: count[day]}
+			default:
+				grid[row][col] = DayCell{Day: day - daysInMonth}
 			}
 			day++
 		}

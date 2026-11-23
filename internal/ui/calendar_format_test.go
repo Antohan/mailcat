@@ -35,12 +35,29 @@ func TestMonthGridStructure(t *testing.T) {
 	if grid[0][6].Day != 1 {
 		t.Errorf("первое число не в вс (7-я колонка): %+v", grid[0])
 	}
-	for _, row := range grid[:5] {
+	// V-46: сетка заполнена 42 датами; соседние месяцы — свои числа,
+	// InMonth=false и без счётчиков.
+	inMonth := 0
+	for _, row := range grid {
 		for _, cell := range row {
-			if cell.Day == 0 && (cell.Events > 0 || cell.Selected) {
-				t.Errorf("пустая ячейка с флагами: %+v", cell)
+			if cell.Day < 1 || cell.Day > 31 {
+				t.Errorf("ячейка без числа дня: %+v", cell)
+			}
+			if cell.InMonth {
+				inMonth++
+			} else if cell.Events > 0 {
+				t.Errorf("счётчик у дня соседнего месяца: %+v", cell)
 			}
 		}
+	}
+	if inMonth != 30 {
+		t.Errorf("дней ноября в сетке = %d, хочу 30", inMonth)
+	}
+	if c := grid[0][0]; c.InMonth || c.Day != 26 {
+		t.Errorf("первый понедельник до 1-го: %+v, хочу 26 октября", c)
+	}
+	if c := grid[5][6]; c.InMonth || c.Day != 6 {
+		t.Errorf("последняя ячейка: %+v, хочу 6 декабря", c)
 	}
 	// День с событиями помечен, соседний без — нет.
 	nov17 := findCell(grid, 17)
@@ -114,7 +131,7 @@ func TestFormatDayCell(t *testing.T) {
 func findCell(grid [][]DayCell, day int) *DayCell {
 	for r := range grid {
 		for c := range grid[r] {
-			if grid[r][c].Day == day {
+			if grid[r][c].InMonth && grid[r][c].Day == day {
 				return &grid[r][c]
 			}
 		}
