@@ -45,11 +45,14 @@ func TestCalendarWithoutBanner(t *testing.T) {
 			}
 		}
 	}
-	// Сетка начинается сразу под шапкой: рамка на y=2, дни недели — на y=3.
+	// Сетка начинается сразу под шапкой: рамка на y=2, а дни недели — через
+	// верхнее поле сетки (V-37: остаток высоты уходит в поля, не в недели).
 	if r, _, _, _ := sim.GetContent(0, 2); r != '┌' {
 		t.Errorf("рамка сетки не под шапкой: (%d, 2) = %q", 0, r)
 	}
-	if row := simRow(sim, 3); runeIndex(row, "Пн") < 0 || runeIndex(row, "Вс") < runeIndex(row, "Пт") {
+	_, iy, iw, ih := a.calendar.grid.GetInnerRect()
+	_, my := gridMargins(iw, ih)
+	if row := simRow(sim, iy+my); runeIndex(row, "Пн") < 0 || runeIndex(row, "Вс") < runeIndex(row, "Пт") {
 		t.Errorf("дни недели не в первой строке сетки: %q", string(row))
 	}
 	// Сетка тянется до низа страницы (над строкой сообщений).

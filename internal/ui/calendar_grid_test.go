@@ -14,31 +14,68 @@ import (
 func TestDayCellRectGeometry(t *testing.T) {
 	for _, size := range []struct{ w, h int }{{100, 30}, {220, 60}} {
 		w, h := size.w, size.h
-		if _, top, _, _ := dayCellRect(0, 0, w, h); top != 1 {
-			t.Errorf("%dx%d: шапка выше одной строки: top=%d", w, h, top)
+		mx, my := gridMargins(w, h)
+		if mx < 0 || mx > 6 || my < 0 || my > 5 {
+			t.Errorf("%dx%d: поля сетки вне допуска: mx=%d my=%d", w, h, mx, my)
 		}
-		prevBottom := 1
+		if _, top, _, _ := dayCellRect(0, 0, w, h); top != my+1 {
+			t.Errorf("%dx%d: шапка не под полем: top=%d, ждали %d", w, h, top, my+1)
+		}
+		prevBottom, weekHeight := my+1, -1
 		for row := 0; row < 6; row++ {
 			_, top, _, ch := dayCellRect(row, 0, w, h)
 			if top != prevBottom || ch <= 0 {
 				t.Errorf("%dx%d: неделя %d не стыкуется: top=%d bottom=%d", w, h, row, top, prevBottom)
 			}
+			if weekHeight >= 0 && ch != weekHeight {
+				t.Errorf("%dx%d: недели разной высоты: %d != %d", w, h, ch, weekHeight)
+			}
+			weekHeight = ch
 			prevBottom = top + ch
 		}
-		if prevBottom != h {
-			t.Errorf("%dx%d: недели не доходят до низа: %d != %d", w, h, prevBottom, h)
+		if bottom := h - prevBottom; bottom != my && bottom != my+1 {
+			t.Errorf("%dx%d: низ не сходится: поле %d при верхнем %d", w, h, bottom, my)
 		}
-		x := 0
+		x, width := mx, -1
 		for col := 0; col < 7; col++ {
 			cx, _, cw, _ := dayCellRect(0, col, w, h)
 			if cx != x || cw <= 0 {
 				t.Errorf("%dx%d: колонка %d не стыкуется: x=%d w=%d", w, h, col, cx, cw)
 			}
+			if width >= 0 && cw != width {
+				t.Errorf("%dx%d: колонки разной ширины: %d != %d", w, h, cw, width)
+			}
+			width = cw
 			x += cw
 		}
-		if x != w {
-			t.Errorf("%dx%d: колонки не покрывают ширину: %d != %d", w, h, x, w)
+		if right := w - x; right != mx && right != mx+1 {
+			t.Errorf("%dx%d: правое поле %d при левом %d", w, h, right, mx)
 		}
+	}
+}
+
+// TestDayAtMargins: клик в внешних полях сетки и в строке шапки — мимо ячеек.
+func TestDayAtMargins(t *testing.T) {
+	const w, h = 100, 30
+	mx, my := gridMargins(w, h)
+	if mx == 0 || my == 0 {
+		t.Fatalf("для %dx%d ждали непустые поля: mx=%d my=%d", w, h, mx, my)
+	}
+	for _, p := range []struct {
+		x, y int
+		name string
+	}{
+		{mx - 1, my + 1, "левое поле"},
+		{w - 1, my + 1, "правое поле"},
+		{mx, my, "строка шапки"},
+		{mx + 1, h - 1, "нижнее поле"},
+	} {
+		if _, _, ok := dayAt(p.x, p.y, w, h); ok {
+			t.Errorf("%s: точка (%d,%d) попала в ячейку", p.name, p.x, p.y)
+		}
+	}
+	if _, _, ok := dayAt(mx, my+1, w, h); !ok {
+		t.Errorf("первая ячейка сетки не находится")
 	}
 }
 
@@ -128,9 +165,12 @@ func TestCalendarGridFillsPanel(t *testing.T) {
 	a.tapp.QueueUpdateDraw(func() {})
 
 	// Последняя неделя (день 30, понедельник) — у самого низа внутренней
-	// области сетки: 6 недель делят остаток высоты, а не жмутся к шапке.
-	if runeIndex(simRow(sim, h-7), "30") < 0 {
-		t.Errorf("последняя неделя не у низа панели: %q", string(simRow(sim, h-7)))
+	// области сетки: шесть недель одного размера, остаток высоты ушёл в поле.
+	_, iy, iw, ih := a.calendar.grid.GetInnerRect()
+	row, col := cellOf(a.calendar.grid.cells, 30)
+	_, cy, _, _ := dayCellRect(row, col, iw, ih)
+	if runeIndex(simRow(sim, iy+cy), "30") < 0 {
+		t.Errorf("последняя неделя не у низа панели: %q", string(simRow(sim, iy+cy)))
 	}
 
 	a.tapp.Stop()
@@ -173,7 +213,8 @@ func TestMonthGridStyles(t *testing.T) {
 	}
 
 	// Шапка дней недели — второстепенный текст.
-	if fg, _, _ := styleAt(ix, iy).Decompose(); fg != colorTextSecondary {
+	mx, my := gridMargins(iw, ih)
+	if fg, _, _ := styleAt(ix+mx, iy+my).Decompose(); fg != colorTextSecondary {
 		t.Errorf("дни недели: fg=%v, хочу colorTextSecondary", fg)
 	}
 

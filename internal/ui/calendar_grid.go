@@ -87,18 +87,22 @@ func (g *monthGrid) maxDay() int {
 	return max
 }
 
+// gridMargins — внешние поля сетки: остаток ширины/высоты делится поровну
+// по краям, чтобы все 7 колонок и 6 недель были одного размера.
+func gridMargins(w, h int) (mx, my int) {
+	return (w - 7*(w/7)) / 2, (h - 1 - 6*((h-1)/6)) / 2
+}
+
 // dayCellRect — прямоугольник ячейки недели row (0–5) и колонки col (0–6)
-// в координатах сетки: строка 0 — шапка дней недели, остаток высоты делят
-// шесть недель. Первые шесть колонок равны, седьмая забирает остаток ширины.
+// в координатах сетки: над неделями — поле my и строка шапки дней недели.
+// WHY: остаток ширины/высоты уходит в поля, а не в седьмую колонку/низ —
+// иначе ячейки разного размера и число дня стоит в разных точках.
+// Не делать: отдавать остаток последней колонке/неделе (так было до V-37).
 func dayCellRect(row, col, w, h int) (x, y, cw, ch int) {
 	cw = w / 7
-	x = col * cw
-	if col == 6 {
-		cw = w - x
-	}
-	top := 1 + row*(h-1)/6
-	bottom := 1 + (row+1)*(h-1)/6
-	return x, top, cw, bottom - top
+	ch = (h - 1) / 6
+	mx, my := gridMargins(w, h)
+	return mx + col*cw, my + 1 + row*ch, cw, ch
 }
 
 // dayAt — ячейка под точкой (px, py) в координатах сетки.
@@ -124,9 +128,10 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 		return
 	}
 	headStyle := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+	_, my := gridMargins(w, h)
 	for col, name := range weekdayNames {
 		cx, _, cw, _ := dayCellRect(0, col, w, h)
-		gridText(screen, x+cx, y, cw, name, headStyle)
+		gridText(screen, x+cx, y+my, cw, name, headStyle)
 	}
 	for row := 0; row < 6 && row < len(g.cells); row++ {
 		for col := 0; col < 7; col++ {
