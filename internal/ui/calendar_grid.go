@@ -87,22 +87,29 @@ func (g *monthGrid) maxDay() int {
 	return max
 }
 
+// gridCellSize — размер ячейки: 7 колонок разделены 6 вертикальными линиями,
+// а по высоте — шапка дней недели, линия под ней и 5 линий между неделями.
+func gridCellSize(w, h int) (cw, ch int) {
+	return (w - 6) / 7, (h - 7) / 6
+}
+
 // gridMargins — внешние поля сетки: остаток ширины/высоты делится поровну
 // по краям, чтобы все 7 колонок и 6 недель были одного размера.
 func gridMargins(w, h int) (mx, my int) {
-	return (w - 7*(w/7)) / 2, (h - 1 - 6*((h-1)/6)) / 2
+	cw, ch := gridCellSize(w, h)
+	return (w - (7*cw + 6)) / 2, (h - (6*ch + 7)) / 2
 }
 
-// dayCellRect — прямоугольник ячейки недели row (0–5) и колонки col (0–6)
-// в координатах сетки: над неделями — поле my и строка шапки дней недели.
+// dayCellRect — внутренний прямоугольник ячейки недели row (0–5) и колонки
+// col (0–6) в координатах сетки: над неделями — поле my, строка шапки дней
+// недели и линия под ней; между неделями и колонками — по клетке линии (V-38).
 // WHY: остаток ширины/высоты уходит в поля, а не в седьмую колонку/низ —
 // иначе ячейки разного размера и число дня стоит в разных точках.
 // Не делать: отдавать остаток последней колонке/неделе (так было до V-37).
 func dayCellRect(row, col, w, h int) (x, y, cw, ch int) {
-	cw = w / 7
-	ch = (h - 1) / 6
+	cw, ch = gridCellSize(w, h)
 	mx, my := gridMargins(w, h)
-	return mx + col*cw, my + 1 + row*ch, cw, ch
+	return mx + col*(cw+1), my + 2 + row*(ch+1), cw, ch
 }
 
 // dayAt — ячейка под точкой (px, py) в координатах сетки.
@@ -124,7 +131,10 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 func (g *monthGrid) Draw(screen tcell.Screen) {
 	g.Box.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
-	if w <= 0 || h < 2 || len(g.cells) == 0 {
+	if w <= 0 || len(g.cells) == 0 {
+		return
+	}
+	if cw, ch := gridCellSize(w, h); cw <= 0 || ch <= 0 {
 		return
 	}
 	headStyle := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
@@ -156,6 +166,40 @@ func (g *monthGrid) Draw(screen tcell.Screen) {
 				dx := len([]rune(dayText))
 				gridText(screen, x+cx+dx, y+cy, cw-dx, "·"+count, countStyle)
 			}
+		}
+	}
+	g.drawGridLines(screen, x, y, w, h)
+}
+
+// drawGridLines — разделители сетки (V-38): вертикали между колонками (включая
+// строку шапки), горизонтали под шапкой дней недели и между неделями. Заливки
+// выбранного/«сегодня» лежат внутри dayCellRect, поэтому линии их не затирают.
+// WHY: цвет textSecondary, не hairline — hairline на белой поверхности не
+// читается (подробно — panel.go); линии те же, что у разделителей почты.
+// Не делать: hairline — линии сетки снова «исчезнут».
+func (g *monthGrid) drawGridLines(screen tcell.Screen, x, y, w, h int) {
+	mx, my := gridMargins(w, h)
+	cw, ch := gridCellSize(w, h)
+	rule := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
+	bottom := my + 6*ch + 7
+	right := mx + 7*cw + 6
+	for col := 0; col < 6; col++ {
+		lx := mx + (col+1)*cw + col
+		for yy := my; yy < bottom; yy++ {
+			screen.SetContent(x+lx, y+yy, tview.Borders.Vertical, nil, rule)
+		}
+	}
+	for i := 0; i <= 5; i++ {
+		ly := my + 1 + i*(ch+1)
+		for xx := mx; xx < right; xx++ {
+			screen.SetContent(x+xx, y+ly, tview.Borders.Horizontal, nil, rule)
+		}
+	}
+	// Пересечения — крестиком, иначе линия недели рвёт вертикаль.
+	for col := 0; col < 6; col++ {
+		lx := mx + (col+1)*cw + col
+		for i := 0; i <= 5; i++ {
+			screen.SetContent(x+lx, y+my+1+i*(ch+1), tview.Borders.Cross, nil, rule)
 		}
 	}
 }
