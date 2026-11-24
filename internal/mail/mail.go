@@ -107,6 +107,13 @@ type Event struct {
 	OptionalAttendees []Address
 }
 
+// EventBody — описание встречи (GetItem CalendarItem, EWS-REFERENCE §11).
+// HTML сохраняется отдельно: рендер идёт тем же конвейером, что у письма.
+type EventBody struct {
+	BodyHTML string
+	BodyText string
+}
+
 // Duration возвращает длительность встречи.
 func (e Event) Duration() time.Duration { return e.End.Sub(e.Start) }
 

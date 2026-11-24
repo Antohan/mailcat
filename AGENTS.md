@@ -2,8 +2,9 @@
 
 You are building **mailcat** — a read-only client for corporate mail and calendar
 (on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
-tasks of the current iteration plan, `docs/PLAN-ITER2.md` (`docs/PLAN.md` is
-finished history — do not open or modify it).
+tasks of the current iteration plan, `docs/PLAN-ITER3.1.md` (`docs/PLAN.md`,
+`docs/PLAN-ITER2.md`, `docs/PLAN-ITER3.md` are finished history — do not open
+or modify them).
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
@@ -11,16 +12,17 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 
 ## Where to look (one file at a time)
 
-| File | What it gives you |
-| --- | --- |
-| `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
-| `docs/PLAN-ITER2.md` | **current iteration**: tasks, DoD, the CHANGELOG rule |
-| `docs/PLAN.md` | iteration 1 history — do not open in sessions |
-| `docs/ARCHITECTURE.md` | packages, data flow; §3 is the list of invariants |
-| `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML |
-| `docs/SECURITY.md` | mandatory security checklist |
-| `docs/TESTING.md` | what and how to test; manual smoke in §5 |
-| `config.example.toml` | configuration format |
+| File                    | What it gives you                                                 |
+| ----------------------- | ----------------------------------------------------------------- |
+| `docs/HANDOFF.md`       | **start here**: state after the last stage, next task, open items |
+| `docs/PLAN-ITER3.1.md`  | **current iteration**: tasks, DoD, the CHANGELOG rule             |
+| `docs/PLAN-TEMPLATE.md` | mandatory format for composing a new iteration plan               |
+| `docs/PLAN.md`          | iteration 1 history — do not open in sessions                     |
+| `docs/ARCHITECTURE.md`  | packages, data flow; §3 is the list of invariants                 |
+| `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML                             |
+| `docs/SECURITY.md`      | mandatory security checklist                                      |
+| `docs/TESTING.md`       | what and how to test; manual smoke in §5                          |
+| `config.example.toml`   | configuration format                                              |
 
 ## Golden rules (breaking one means rework)
 
@@ -43,16 +45,60 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 7. **Russian UI.** Key hints, errors, statuses, folder names («Входящие»,
    «Отправленные»).
 8. **Scope is the current iteration plan.** No "for later" features that
-   `docs/PLAN-ITER2.md` does not describe.
+   `docs/PLAN-ITER3.1.md` does not describe.
+
+## Code minimalism
+
+Write the smallest complete change (adopted from the ponytail ruleset, MIT):
+
+- Ladder, in order: already in the codebase? → stdlib/platform feature? →
+  installed dependency (approved list only, rule 6)? → minimum code that works.
+  Never add a dependency for a few lines.
+- No unrequested features, abstractions, wrappers, config or "for later" code —
+  name what you skipped in one line instead.
+- The shortest working diff wins, but it must be complete: update all callers,
+  tests and fixtures the change touches; a bug fix goes to the root cause in
+  shared code, not to each symptom.
+- New non-trivial logic (branches, loops, parsers) needs one small test;
+  trivial changes don't.
+- A deliberate limitation gets a code comment: `shortcut: <the limit>, <when
+to upgrade>` — and one line in `HANDOFF.md → Открыто`.
+- Never cut: validation, error handling against data loss, security,
+  accessibility, anything the task explicitly asks for.
+
+## UX/UI work: skills
+
+UX/UI work — layout, panels, palette, typography, key hints, the calendar, any
+visual change — starts with the `tui-fundamentals` skill: it is the main TUI/UX
+skill (architecture, terminal constraints, keyboard-first flows, review). Load
+it before writing the task's plan spec (Work, item 7); the spec names the
+framework primitives and terminal constraints, not browser-style mockups.
+
+`golang-tui` is a supplementary technical reference: use it for terminal
+standards, width/truncation math, and testing/observing techniques where they
+apply — its Charm/Bubble Tea prescriptions do not override this repo's stack:
+mailcat stays on tview/tcell (golden rule 6).
+
+## Terminal limits (requirement)
+
+When developing the terminal interface, account for the real limitations of
+the macOS terminal: ANSI escape sequences, colour capabilities (256 colours vs
+truecolor, light/dark themes), Unicode and character widths (wide East Asian
+characters, combining marks, emoji), and the character-cell grid (one cell =
+one character; no pixel layout, no font size or scaling, no browser-style
+hover/animation). Do not design the interface as if it were a browser. Use the
+capabilities of the existing TUI framework (tview/tcell: widgets, styles, box
+drawing, focus model, layout primitives); do not propose migrating to another
+framework without strong reasons (golden rule 6 still applies).
 
 ## Work
 
-1. Open a session with `/stage <task>` (e.g. `/stage UI-1`): it loads the
+1. Open a session with `/stage <task>` (e.g. `/stage V-1`): it loads the
    iteration plan and the task.
 2. All work happens on the `dev` branch. `main` is release-only: it receives
    a finished iteration as a single merge commit — a release action performed
    on explicit user request, never inside a task session.
-3. One task = one commit (`iter2:UI-1: short description`) plus its
+3. One task = one commit (`iter31:V-1: short description`) plus its
    CHANGELOG.md entry.
 4. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
    fix the cause.
@@ -61,8 +107,9 @@ English only to spend fewer tokens — that is not permission to answer in Engli
    implementing. Security-relevant work: request `security-reviewer` after —
    once per stage.
 7. New tasks enter an iteration plan only as specs — touched files/symbols and
-   expected behavior written BEFORE the coding session. A task without
-   pointers to code costs exploration tokens on every session that opens it.
+   expected behavior written BEFORE the coding session, in the fixed format of
+   `docs/PLAN-TEMPLATE.md`. A task without pointers to code costs exploration
+   tokens on every session that opens it.
 8. Iteration finished and the user asks for a release → `/release`: it checks
    the DoD, runs the security review over the iteration range and merges
    `dev → main` only after the user explicitly confirms.
@@ -87,8 +134,6 @@ first, then read the specific hunks. Never print a whole file.
 over ~150 lines: use `offset`/`limit`. Do not open `*_test.go` files you are not
 editing. Docs: only the referenced section (`SECURITY.md §3`). While iterating
 use `go test -run <Test>`; the full suite runs once, in `/check`.
-`.superpowers/sdd/PLAN/progress.md` is an archive — never read it at session
-start.
 
 **Do not restate.** No file contents, no doc summaries, no play-by-play of
 commands. The report is: what changed, what was verified, what is next.
@@ -113,11 +158,13 @@ separate conversation; a coding session receives a task and returns a report.
 A ten-message discussion inside a session re-bills its whole context ten
 times.
 
-**Models.** Flash by default — pinned as `opencode/deepseek-v4.1-flash-free`
-(the provider prefix is mandatory: a bare id does not resolve and the agent
-silently disappears from lists — observed). Flagship (via `/models`) for the
-`ews-specialist` subagent and for iteration tasks where layout or
-link-registry design matters. `security-reviewer` inherits the session model —
+**Models.** Flash by default — pinned as `deepseek/deepseek-flash` (deepseek
+provider, pay-as-you-go: авторизуйте `opencode auth login` → DeepSeek до
+первой сессии). The provider prefix is mandatory: a bare id does not resolve
+and the agent silently disappears from lists — observed. Flagship (via
+`/models`) for the
+`ews-specialist` subagent and for iteration tasks where layout design matters
+(V-1, V-5). `security-reviewer` inherits the session model —
 do not pin a `model:` in its file (same silent-disappearance failure mode).
 
 ## Handoff file

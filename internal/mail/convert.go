@@ -72,6 +72,17 @@ func FullMessage(d ews.MessageDetail) Message {
 	}
 }
 
+// FullEventBody конвертирует описание встречи из GetItem. Текст — приоритет у
+// TextBody сервера; если сервер вернул только HTML — конвертация (оффлайн),
+// как у письма (FullMessage).
+func FullEventBody(d ews.EventBody) EventBody {
+	text := d.BodyText
+	if text == "" && d.BodyHTML != "" {
+		text = HTMLToText(d.BodyHTML)
+	}
+	return EventBody{BodyHTML: d.BodyHTML, BodyText: text}
+}
+
 // Events конвертирует встречи из CalendarView.
 func Events(list []ews.CalendarEvent) []Event {
 	if len(list) == 0 {

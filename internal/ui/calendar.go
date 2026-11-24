@@ -18,8 +18,17 @@ import (
 type calendarScreen struct {
 	app    *App
 	root   *tview.Flex
-	grid   *tview.Table
-	agenda *tview.List
+	grid   *monthGrid
+	agenda *agendaList
+	// V-34: полоса прокрутки повестки — колонка за рамкой панели (как на почте).
+	agendaBar *scrollbar
+
+	// Строки-заголовки панелей (RD-2): месяц и повестка дня.
+	gridHeader   *panelHeader
+	agendaHeader *panelHeader
+
+	// V-53: строка «Ближайшее: …» под сеткой месяца.
+	gridFooter *calendarFooter
 
 	year      int
 	month     time.Month
@@ -28,6 +37,10 @@ type calendarScreen struct {
 
 	dayEvents []mail.Event    // события выбранного дня (для повестки)
 	dayLinks  []mail.LinkInfo // ссылки повестки дня (модал g)
+
+	// V-36: описания встреч по ItemId — GetItem один раз на встречу.
+	eventBodies  map[string]mail.EventBody
+	eventLoading map[string]bool
 }
 
 func newCalendarScreen(a *App) *calendarScreen {
@@ -35,20 +48,54 @@ func newCalendarScreen(a *App) *calendarScreen {
 	now := time.Now()
 	s.year, s.month = now.Year(), now.Month()
 
-	s.grid = tview.NewTable().SetSelectable(true, true).SetSeparator(' ')
+	s.grid = newMonthGrid()
 	s.grid.SetBorder(true)
-	s.agenda = tview.NewList().ShowSecondaryText(false)
-	s.agenda.SetBorder(true).SetTitle(" Повестка дня ")
+	// V-42: повестка — собственный Box+Draw: событие блоком строк, перенос по
+	// ширине панели (tview.List длинную строку обрезал).
+	s.agenda = newAgendaList()
+	s.agenda.SetBorder(true)
+
+	// RD-2: заголовки — отдельные строки над панелями (см. panel.go).
+	s.gridHeader = newPanelHeader("Календарь")
+	s.agendaHeader = newPanelHeader("Повестка дня")
+	// V-30: баннера месяца нет — месяц показывает шапка панели (RD-2), сетка
+	// начинается сразу под ней.
+	// WHY (V-31): разделитель между колонками — как на почте (V-3): правый
+	// счётчик шапки сетки иначе упирается в заголовок «Повестка» соседней
+	// панели. Не делать: отступ пустой колонкой — линия есть у почты.
+	// V-34/V-42: полоса прокрутки повестки — своя колонка справа; трек —
+	// строки раскладки agendaList (offset/total), геометрия — свежий rect панели.
+	s.agendaBar = newScrollbar()
+	s.agendaBar.geom = func() (int, int, int) {
+		x, _, _, _ := s.agendaBar.GetRect()
+		_, y, _, h := s.agenda.GetInnerRect()
+		return x, y, h
+	}
+	s.agendaBar.track = s.agenda.ScrollTrack
+	agendaCol := tview.NewFlex().SetDirection(tview.FlexColumn).
+		AddItem(panelColumn(s.agendaHeader, s.agenda), 0, 1, false).
+		AddItem(s.agendaBar, 1, 0, false)
+
+	// V-53: колонка сетки — заголовок, сетка и строка «Ближайшее» под ней;
+	// сетка отдаёт футеру 1 строку (высота недель уменьшается).
+	s.gridFooter = newCalendarFooter()
+	gridCol := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(s.gridHeader, 1, 0, false).
+		AddItem(s.grid, 0, 1, true).
+		AddItem(s.gridFooter, 1, 0, false)
 
 	s.root = tview.NewFlex().
-		AddItem(s.grid, 0, 55, true).
-		AddItem(s.agenda, 0, 45, false)
+		AddItem(gridCol, 0, 55, true).
+		AddItem(newDivider(), 1, 0, false).
+		AddItem(agendaCol, 0, 45, false)
 
-	s.grid.SetSelectionChangedFunc(func(row, col int) {
+	s.grid.SetSelectFunc(func(row, col int) {
 		s.onDaySelected(row, col)
 	})
-	s.agenda.SetSelectedFunc(func(idx int, _ string, _ string, _ rune) {
-		s.openEventDetails(idx)
+	// V-34: при смене события пересобираются сегменты (время/место выбранного —
+	// onAccent), как applyActiveFolderStyle у папок; индекс приходит из Move/клика.
+	s.agenda.SetSelectFunc(func(idx int) {
+		s.restyleAgenda(idx)
 	})
 
 	// Смена месяца: Ctrl-←/→ или n/p (PLAN этап 4); g — модал ссылок
@@ -73,6 +120,9 @@ func newCalendarScreen(a *App) *calendarScreen {
 			case 'p', 'P':
 				s.shiftMonth(-1)
 				return nil
+			case 't', 'T':
+				s.jumpToToday()
+				return nil
 			case 'g', 'G':
 				// WHY: фокус запоминаем до модала: Esc из модала ссылок
 				// должен вернуть фокус той панели, с которой нажали g.
@@ -86,9 +136,94 @@ func newCalendarScreen(a *App) *calendarScreen {
 		}
 		return event
 	}
-	s.grid.SetInputCapture(monthHook)
-	s.agenda.SetInputCapture(monthHook)
+	// V-32: стрелки на сетке двигают выбор на день/неделю с зажимом в месяце;
+	// на повестке те же клавиши остаются списку (hook туда не вешаем).
+	// V-35: Tab/Shift-Tab — сетка↔повестка, Enter — фокус в повестку.
+	gridHook := func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyBacktab:
+			s.cycleFocus()
+			return nil
+		case tcell.KeyEnter:
+			s.app.tapp.SetFocus(s.agenda)
+			s.app.showHint()
+			return nil
+		}
+		if event.Modifiers() == tcell.ModNone {
+			switch event.Key() {
+			case tcell.KeyLeft:
+				s.grid.Move(-1)
+				return nil
+			case tcell.KeyRight:
+				s.grid.Move(1)
+				return nil
+			case tcell.KeyUp:
+				s.grid.Move(-7)
+				return nil
+			case tcell.KeyDown:
+				s.grid.Move(7)
+				return nil
+			}
+		}
+		return monthHook(event)
+	}
+	s.grid.SetInputCapture(gridHook)
+	// V-35: Esc и ← (без Ctrl) с повестки возвращают фокус сетке; V-42: ↑↓ —
+	// события, Enter — детали выбранного.
+	s.agenda.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		switch event.Key() {
+		case tcell.KeyTab, tcell.KeyBacktab:
+			s.cycleFocus()
+			return nil
+		case tcell.KeyEsc:
+			s.focusGrid()
+			return nil
+		case tcell.KeyEnter:
+			s.openEventDetails(s.agenda.Selected())
+			return nil
+		case tcell.KeyUp:
+			s.agenda.Move(-1)
+			return nil
+		case tcell.KeyDown:
+			s.agenda.Move(1)
+			return nil
+		case tcell.KeyLeft:
+			if event.Modifiers()&tcell.ModCtrl == 0 {
+				s.focusGrid()
+				return nil
+			}
+		}
+		return monthHook(event)
+	})
 	return s
+}
+
+// cycleFocus перебирает панели календаря (Tab). Панелей две, поэтому
+// Shift-Tab (как и Tab) ведёт в соседнюю: сетка ↔ повестка.
+func (s *calendarScreen) cycleFocus() {
+	var next tview.Primitive = s.grid
+	if s.app.tapp.GetFocus() == s.grid {
+		next = s.agenda
+	}
+	s.app.tapp.SetFocus(next)
+	// V-23: набор подсказок зависит от фокуса — его пересобирает showHint.
+	s.app.showHint()
+}
+
+// focusGrid возвращает фокус сетке (Esc/← на повестке).
+func (s *calendarScreen) focusGrid() {
+	s.app.tapp.SetFocus(s.grid)
+	s.app.showHint()
+}
+
+// ensureFocus ставит фокус на сетку, если он остался в скрытой панели почты:
+// переключение 1/2 фокус не переносит, иначе стрелки уходили бы в список
+// писем. Фокус, уже стоящий в календаре (повестка), не трогаем.
+func (s *calendarScreen) ensureFocus() {
+	if p := s.app.tapp.GetFocus(); p == s.grid || p == s.agenda {
+		return
+	}
+	s.app.tapp.SetFocus(s.grid)
 }
 
 // ensureLoaded подгружает месяц при входе на экран (кэш — до смены месяца).
@@ -106,7 +241,23 @@ func (s *calendarScreen) monthKey() string {
 func (s *calendarScreen) shiftMonth(delta int) {
 	t := time.Date(s.year, s.month+time.Month(delta), 1, 0, 0, 0, 0, time.Local)
 	s.year, s.month = t.Year(), t.Month()
+	// V-41: верхний бар календаря не зависит от месяца — не пересобираем.
 	s.loadMonth()
+}
+
+// jumpToToday выбирает сегодняшний день (V-47). Если показан другой месяц —
+// переходим на текущий и грузим его (monthStale — как у n/p); выбор сегодня
+// сделает render после ответа, как при обычной загрузке месяца.
+// WHY: не дублируем SelectDay для чужого месяца — сетки под него ещё нет.
+// Not to do: переключать месяц без загрузки — в сетке остались бы старые дни.
+func (s *calendarScreen) jumpToToday() {
+	now := time.Now()
+	if now.Year() != s.year || now.Month() != s.month {
+		s.year, s.month = now.Year(), now.Month()
+		s.loadMonth()
+		return
+	}
+	s.grid.SelectDay(now.Day())
 }
 
 // monthStale сообщает, устарел ли ответ запроса месяца keyAtRequest
@@ -143,90 +294,147 @@ func (s *calendarScreen) loadMonth() {
 }
 
 // render перерисовывает сетку и выбирает текущий день (или 1-е число).
-// UI-5: заголовок «Ноябрь 2026»; «сегодня» — скобки и жирный, выбранный
-// день — инверсия выделения таблицы (разные маркеры).
+// V-32: tview.Table заменён monthGrid — ячейки заполняют панель по высоте.
 func (s *calendarScreen) render() {
-	s.grid.Clear()
-	s.grid.SetTitle(" " + MonthTitle(s.year, s.month) + " ")
-	weekdays := []string{"Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"}
-	for col, name := range weekdays {
-		s.grid.SetCell(0, col, tview.NewTableCell(name).
-			SetTextColor(colorOtherMonth).SetSelectable(false))
-	}
+	s.gridHeader.SetListTitle(MonthTitle(s.year, s.month), meetingsCount(len(s.events)))
 	grid := MonthGrid(s.year, s.month, s.events)
 	now := time.Now()
 	inMonth := now.Year() == s.year && now.Month() == s.month
-	for row := 0; row < 6; row++ {
-		for col := 0; col < 7; col++ {
-			cell := grid[row][col]
-			if cell.Day == 0 {
-				s.grid.SetCell(row+1, col, tview.NewTableCell("").SetSelectable(false))
-				continue
-			}
-			today := inMonth && cell.Day == now.Day()
-			tc := tview.NewTableCell(FormatDayCell(cell, today))
-			if col >= 5 {
-				tc.SetTextColor(colorWeekend) // Сб/Вс
-			}
-			if today {
-				tc.SetAttributes(tcell.AttrBold) // «сегодня» — скобки + жирный
-			}
-			if !cell.InMonth {
-				tc.SetTextColor(colorOtherMonth)
-			}
-			s.grid.SetCell(row+1, col, tc)
-		}
+	today := 0
+	if inMonth {
+		today = now.Day()
 	}
-	// Выбор: сегодняшний дню месяца, иначе 1-е.
+	s.grid.SetCells(grid, MonthWeeks(s.year, s.month), today)
+	// V-53: ближайшее будущее месяца — пересчёт при каждой загрузке/смене
+	// месяца (render зовётся после ответа и смены месяца); часы — agendaNow,
+	// чтобы тесты не зависели от даты прогона.
+	s.gridFooter.SetSegments(NearestLine(s.events, agendaNow()))
+	// Выбор: сегодняшний день месяца, иначе 1-е — onSelect сам обновит повестку.
 	pick := 1
 	if inMonth {
 		pick = now.Day()
 	}
-	if row, col := cellOf(grid, pick); row >= 0 {
-		s.grid.Select(row+1, col)
-	}
+	s.grid.SelectDay(pick)
 }
 
-// onDaySelected обновляет повестку при движении по сетке (UI-4: строки
-// собирает FormatAgenda — маркеры статуса + реестр ссылок из «Места»).
+// onDaySelected обновляет повестку при движении по сетке (UI-4): блоки
+// событий собирает AgendaSegments (маркеры статуса + реестр ссылок из
+// «Места»), пустой день — muted-заглушка «Встреч нет» без выбора.
 func (s *calendarScreen) onDaySelected(row, col int) {
-	if row < 1 {
+	if row < 0 || row >= len(s.grid.cells) || col < 0 || col >= 7 {
 		return
 	}
-	grid := MonthGrid(s.year, s.month, s.events)
-	if row-1 >= len(grid) || col >= 7 || grid[row-1][col].Day == 0 {
+	if !s.grid.cells[row][col].InMonth {
 		return
 	}
-	day := time.Date(s.year, s.month, grid[row-1][col].Day, 0, 0, 0, 0, time.Local)
+	day := time.Date(s.year, s.month, s.grid.cells[row][col].Day, 0, 0, 0, 0, time.Local)
 	s.dayEvents = DayEvents(s.events, day)
-	reg := mail.NewLinkRegistry()
-	lines := FormatAgenda(s.dayEvents, reg)
-	s.dayLinks = reg.List()
-	s.agenda.Clear()
-	if len(lines) == 0 {
-		s.agenda.AddItem("Встреч нет", "", 0, nil)
+	if len(s.dayEvents) == 0 {
+		s.dayLinks = nil
+		s.agenda.SetItems(nil, -1)
 	} else {
-		for _, line := range lines {
-			s.agenda.AddItem(line, "", 0, nil)
-		}
+		s.restyleAgenda(0) // блоки заполняет общая формула (выбор — первый)
 	}
-	s.agenda.SetTitle(" " + AgendaTitle(day, len(s.dayEvents)) + " ")
+	s.agendaHeader.SetListTitle(AgendaTitle(day), meetingsCount(len(s.dayEvents)))
 }
 
-// openEventDetails показывает детали выбранной встречи; ссылки на созвон
-// (в поле «Место») — через реестр ссылок, как в письмах (PLAN этап 4).
+// restyleAgenda пересобирает блоки повестки под выбор sel (V-34/V-42/V-51):
+// две строки каждого события через AgendaSegments (время+тема / место),
+// выбранное — onAccent, прошедшее — muted. Реестр
+// ссылок новый, но порядок тот же — маркеры [N] не меняются; прокрутка не
+// сбрасывается (строки те же, меняются только стили).
+func (s *calendarScreen) restyleAgenda(sel int) {
+	if sel < 0 || sel >= len(s.dayEvents) {
+		return
+	}
+	reg := mail.NewLinkRegistry()
+	now := agendaNow()
+	items := make([][][]agendaSeg, len(s.dayEvents))
+	for i, ev := range s.dayEvents {
+		items[i] = AgendaSegments(ev, reg, i == sel, now)
+	}
+	s.dayLinks = reg.List()
+	s.agenda.SetItems(items, sel)
+}
+
+// openEventDetails показывает детали выбранной встречи: описание догружается
+// GetItem (V-36) один раз на ItemId — повторный Enter берёт кэш; пока идёт
+// запрос, второй Enter ничего не запускает.
 func (s *calendarScreen) openEventDetails(idx int) {
 	if idx < 0 || idx >= len(s.dayEvents) {
 		return
 	}
 	ev := s.dayEvents[idx]
-	s.app.showEventDetails(ev)
+	if body, ok := s.eventBodies[ev.ItemID]; ok {
+		s.app.showEventDetails(ev, body)
+		return
+	}
+	if s.eventLoading[ev.ItemID] {
+		return
+	}
+	if s.eventLoading == nil {
+		s.eventLoading = make(map[string]bool)
+	}
+	s.eventLoading[ev.ItemID] = true
+	id := s.app.beginLoad("Загрузка встречи…")
+	go func() {
+		raw, err := s.app.client.GetEventBody(s.app.ctx, ev.ItemID, ev.ChangeKey)
+		s.app.tapp.QueueUpdateDraw(func() {
+			s.app.endLoad(id)
+			delete(s.eventLoading, ev.ItemID)
+			if err != nil {
+				s.app.showError(err)
+				return
+			}
+			if s.eventBodies == nil {
+				s.eventBodies = make(map[string]mail.EventBody)
+			}
+			body := mail.FullEventBody(raw)
+			s.eventBodies[ev.ItemID] = body
+			s.app.showEventDetails(ev, body)
+		})
+	}()
+}
+
+// calendarFooter — одна строка под сеткой месяца (V-53): «Ближайшее: …».
+// Сегменты приходят уже с Sanitize и рисуются через tcell (tview.Escape не
+// нужен — теги не разбираются), как в повестке.
+type calendarFooter struct {
+	*tview.Box
+	segs []agendaSeg
+}
+
+func newCalendarFooter() *calendarFooter {
+	f := &calendarFooter{Box: tview.NewBox()}
+	f.SetBackgroundColor(colorPanelBg)
+	return f
+}
+
+// SetSegments задаёт текст строки; пересобирает его render при загрузке месяца.
+func (f *calendarFooter) SetSegments(segs []agendaSeg) { f.segs = segs }
+
+// Draw печатает сегменты с отступом 1 (как содержимое рамки сетки) и обрезает
+// по ширине колонки: строка всегда одна.
+func (f *calendarFooter) Draw(screen tcell.Screen) {
+	f.Box.DrawForSubclass(screen, f)
+	x, y, w, _ := f.GetInnerRect()
+	cx := x + 1
+	for _, seg := range f.segs {
+		for _, r := range []rune(seg.text) {
+			if cx >= x+w {
+				return
+			}
+			screen.SetContent(cx, y, r, nil, seg.style)
+			cx++
+		}
+	}
 }
 
 func cellOf(grid [][]DayCell, day int) (int, int) {
 	for row := 0; row < len(grid); row++ {
 		for col := 0; col < 7; col++ {
-			if grid[row][col].Day == day {
+			// V-46: у соседних месяцев тоже есть числа — ищем только свой месяц.
+			if grid[row][col].InMonth && grid[row][col].Day == day {
 				return row, col
 			}
 		}

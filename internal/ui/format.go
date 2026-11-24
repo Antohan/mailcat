@@ -8,7 +8,10 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"mailcat/internal/mail"
@@ -29,6 +32,12 @@ func ExternalMark(fromEmail string, orgDomains []string) string {
 // индексация по time.Weekday() (воскресенье = 0).
 var shortDays = []string{"Вс", "Пн", "Вт", "Ср", "Чт", "Пт", "Сб"}
 
+// sameLocalDay — те же локальные календарные сутки (граница — местная
+// полночь, не 24 часа назад).
+func sameLocalDay(a, b time.Time) bool {
+	return a.Year() == b.Year() && a.YearDay() == b.YearDay()
+}
+
 // FormatShortDate — компактная дата строки списка (UI-2): сегодня → HH:MM,
 // давность ≤ 7 дней → сокращённый день недели («Чт»), старше → ДД.ММ.
 // now передаётся явно — детерминизм в тестах.
@@ -37,13 +46,34 @@ func FormatShortDate(now, t time.Time) string {
 		return ""
 	}
 	tl, nl := t.Local(), now.Local()
-	if tl.Year() == nl.Year() && tl.YearDay() == nl.YearDay() {
+	if sameLocalDay(tl, nl) {
 		return tl.Format("15:04")
 	}
 	if tl.After(nl.AddDate(0, 0, -7)) {
 		return shortDays[tl.Weekday()]
 	}
 	return tl.Format("02.01")
+}
+
+// dayBuckets — заголовки разделителей дней в списке (О-1); индекс — группа
+// dayBucket (0 — сегодня).
+var dayBuckets = []string{"Сегодня", "Вчера", "Ранее"}
+
+// dayBucket — группа дня для разделителя списка (О-1): 0 — сегодня, 1 —
+// вчера, 2 — ранее; нулевая дата (Received неизвестен) — «Ранее».
+// now передаётся явно — детерминизм в тестах.
+func dayBucket(now, t time.Time) int {
+	if t.IsZero() {
+		return 2
+	}
+	tl, nl := t.Local(), now.Local()
+	if sameLocalDay(tl, nl) {
+		return 0
+	}
+	if sameLocalDay(tl, nl.AddDate(0, 0, -1)) {
+		return 1
+	}
+	return 2
 }
 
 // senderLabel — колонка отправителя (UI-2): имя из t:Name, при отсутствии —
@@ -60,28 +90,169 @@ func senderLabel(a mail.Address) string {
 	return tview.Escape(security.Sanitize(email))
 }
 
-// FormatMessageRow — колонки строки списка писем (UI-2): [ВНЕШН] | имя
-// отправителя (t:Name, fallback — локальная часть адреса) | тема |
-// компактная дата (FormatShortDate). Текст из EWS
-// проходит Sanitize (§3) и tview.Escape — Table интерпретирует теги цветов/
-// регионов безусловно (ревью этапа 2).
-func FormatMessageRow(m mail.MessageSummary, orgDomains []string, now time.Time) []string {
+// listPadLeft/listPadRight — горизонтальные поля пункта списка (V-17): точка
+// и время не примыкают к краям заливки. Печатаются в текст ячейки, поэтому
+// их обязаны добавлять оба места, собирающие строки списка (appendRows и
+// clampMessageColumns), — иначе перерисовка на resize срежет поля.
+const (
+	listPadLeft  = 2
+	listPadRight = 2
+)
+
+// messageDot — точка статуса в строке 1 пункта списка (V-1). Цвет задаёт
+// ячейка в appendRows (colorUnread — непрочитан, colorTextPrimary —
+// прочитан; в тёмной теме colorUnread = accent), поэтому знак один для
+// обоих состояний.
+const messageDot = "●"
+
+// externalMarkCol — фиксированная ширина маркера [ВНЕШН] (П.4г): пустой
+// маркер дополняется пробелами, чтобы отправители всех строк начинались с
+// одного столбца и панель не «дышала» при появлении внешних писем.
+const externalMarkCol = 8
+
+// subjectIndent — отступ строки 2 (темы): «● » (2) + externalMarkCol.
+var subjectIndent = strings.Repeat(" ", 2+externalMarkCol)
+
+// sameSenderRun — письмо cur продолжает серию отправителя prev (V-25): тот же
+// ящик и та же группа дня. WHY: имя печатает только первое письмо серии,
+// остальным — точка и [ВНЕШН]; сравниваем адрес, а не имя — однофамильцы из
+// разных ящиков не должны слипнуться. Пустой адрес серию не продолжает, иначе
+// пачка писем без From осталась бы вовсе без имён.
+func sameSenderRun(prev, cur mail.MessageSummary, now time.Time) bool {
+	if prev.From.Email == "" {
+		return false
+	}
+	return strings.EqualFold(prev.From.Email, cur.From.Email) &&
+		dayBucket(now, prev.Received) == dayBucket(now, cur.Received)
+}
+
+// FormatMessageListItem — контент двухстрочного пункта списка писем (V-1):
+// [строка 1, время, строка 2]. Строка 1 — точка статуса + [ВНЕШН]
+// фиксированной ширины + отправитель (t:Name, fallback — локальная часть
+// адреса); время — отдельная правая колонка (appendRows ставит AlignRight,
+// панели не «дышет»); строка 2 — тема с отступом под отправителя, усечение
+// с «…» делает truncateEllipsis в DrawFunc (WHY у неё). Цвета и жирность
+// назначает appendRows через SetTextColor, а не теги в тексте: выделенная
+// строка Table перекрашивается целиком через SetSelectedStyle, теги бы
+// пробивались (исключение — точка статуса, WHY у dotLine). Текст из EWS
+// проходит Sanitize (§3) и tview.Escape — Table интерпретирует
+// теги цветов/регионов безусловно (ревью этапа 2).
+// repeat (V-25) — письмо продолжает серию отправителя (sameSenderRun): имя
+// не печатается, но точка и [ВНЕШН] остаются у каждой строки (SECURITY §4).
+func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.Time, repeat bool) []string {
+	mark := fmt.Sprintf("%-*s", externalMarkCol, ExternalMark(m.From.Email, orgDomains))
+	name := senderLabel(m.From)
+	if repeat {
+		name = ""
+	}
 	return []string{
-		ExternalMark(m.From.Email, orgDomains),
-		senderLabel(m.From),
-		tview.Escape(security.Sanitize(m.Subject)),
+		messageDot + " " + mark + name,
 		FormatShortDate(now, m.Received),
+		subjectIndent + tview.Escape(security.Sanitize(m.Subject)),
 	}
 }
 
-// FormatFolder — пункт списка папок с счётчиком непрочитанных; Sanitize +
-// tview.Escape (List интерпретирует теги безусловно).
-func FormatFolder(f mail.Folder) string {
-	name := tview.Escape(security.Sanitize(f.DisplayName))
-	if f.UnreadCount > 0 {
-		return fmt.Sprintf("%s (%d)", name, f.UnreadCount)
+// truncateEllipsis — обрезка строки под max клеток с «…» в конце.
+// WHY: своё, а не встроенное многоточие tview.Table — tview сравнивает
+// байтовую длину напечатанного (end-start) с шириной в клетках, у кириллицы
+// байты вдвое больше клеток и условие «текст не влез» всегда ложно.
+// Порог по рунам, не по клеткам — best effort, как и прочие ширины здесь.
+func truncateEllipsis(s string, max int) string {
+	if max < 1 {
+		return ""
 	}
-	return name
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:max-1]) + "…"
+}
+
+// dotLine красит точку статуса тегом: непрочитанный — colorUnread (в тёмной
+// теме accent), прочитанный — colorRead (muted, П.1 референса). WHY: тег
+// осознанно пробивает SetSelectedStyle — статус письма виден и на выделенной
+// строке; «[-]» возвращает остальной текст (отправителя) в цвет ячейки/
+// выделения.
+func dotLine(text string, unread bool) string {
+	c := colorRead
+	if unread {
+		c = colorUnread
+	}
+	return "[" + hexTag(c) + "]" + messageDot + "[-]" + strings.TrimPrefix(text, messageDot)
+}
+
+// hexTag — цвет роли темы в виде тега tview («#2563eb»), чтобы цвет строки
+// менялся вместе с темой, а не был захардкожен в тексте.
+func hexTag(c tcell.Color) string {
+	return fmt.Sprintf("#%06x", c.Hex())
+}
+
+// pluralUnread — «1 непрочитанное», «3/5/11 непрочитанных»: русская
+// морфология для заголовка списка (V-2). 11–14 и *0/*5–*9 — родительный
+// множительный; *1 — именительный единственный (21 непрочитанное).
+func pluralUnread(n int) string {
+	d := n % 100
+	switch {
+	case d >= 11 && d <= 14, d%10 == 0 || d%10 >= 5:
+		return fmt.Sprintf("%d непрочитанных", n)
+	case d%10 == 1:
+		return fmt.Sprintf("%d непрочитанное", n)
+	default:
+		return fmt.Sprintf("%d непрочитанных", n)
+	}
+}
+
+// folderNameCol — ширина колонки имени (отступ + имя): 2 клетки отступа
+// и 13 на «Нежелательная». До первой отрисовки панели (V-26) счётчик
+// начинается с этой колонки (прежний зазор); у более длинных имён —
+// минимальный зазор (pad < 1 → 1).
+const folderNameCol = 15
+
+// FormatFolder — пункт списка папок: отступ, имя, счётчик непрочитанных
+// цветом textSecondary, прижатый к правому краю панели ширины width (V-26;
+// width ≤ 0 — ширина ещё неизвестна, прежний зазор до колонки folderNameCol).
+// Длинное имя усекается «…» ДО tview.Escape — резать escaped-строку нельзя.
+// active — папка открыта: текст accent + жирный; selected — строка под
+// курсором списка: счётчик перекрашивается в colorSelectedFg, иначе серый
+// tag не читается на фоне выделения (П.2б). Sanitize + tview.Escape
+// сохраняются (List интерпретирует теги безусловно — данные экранируются,
+// теги наши).
+// WHY (П.2а): без иконок — все строки с одинаковым отступом.
+func FormatFolder(f mail.Folder, active, selected bool, width int) string {
+	indent := "  "
+	indentLen := utf8.RuneCountInString(indent)
+	counter := ""
+	if f.UnreadCount > 0 {
+		counter = fmt.Sprintf("(%d)", f.UnreadCount)
+	}
+	name := security.Sanitize(f.DisplayName)
+	// width ≤ 0: прежний зазор — счётчик начинается с колонки folderNameCol,
+	// как было до V-26 (панель ещё не нарисована, ширина неизвестна).
+	pad := folderNameCol - indentLen - utf8.RuneCountInString(name)
+	if width > 0 {
+		counterLen := utf8.RuneCountInString(counter)
+		nameMax := width - indentLen - counterLen
+		if counter != "" {
+			nameMax-- // минимальный зазор между именем и счётчиком
+		}
+		name = truncateEllipsis(name, nameMax)
+		pad = width - indentLen - utf8.RuneCountInString(name) - counterLen
+	}
+	if pad < 1 {
+		pad = 1
+	}
+	row := indent + tview.Escape(name) + strings.Repeat(" ", pad)
+	if active {
+		row = fmt.Sprintf("[%s::b]%s[-::-]", hexTag(colorAccent), row)
+	}
+	if counter == "" {
+		return row
+	}
+	counterColor := colorTextSecondary
+	if selected {
+		counterColor = colorSelectedFg
+	}
+	return fmt.Sprintf("%s[%s]%s", row, hexTag(counterColor), counter)
 }
 
 // standardFolders — фиксированный порядок стандартных папок в панели (UI-1).
@@ -143,41 +314,244 @@ func SplitFolders(folders []mail.Folder, hidden []string) (main, technical []mai
 	return main, technical
 }
 
-// FormatMessageHeader — блок заголовков письма для панели просмотра:
-// От/Кому/Дата/Тема + 📎 N при вложениях (UI-3, метаданные GetItem).
-// WHY: маркер — в строке темы, а не отдельной строкой: ниже в карточке
-// FormatAttachments уже печатает список с заголовком «Вложения:».
+// FormatMessageHeader — блок заголовков превью-панели письма (RD-5): Тема
+// (жирный) → От → Кому (если есть) → Дата → линия-разделитель; тело печатает
+// вызывающий. Служит превью (MessageSummary без Кому/вложений). Страница
+// деталей письма с V-5 рисует шапку через FormatMessageCard.
+// WHY: маркера вложений «📎 N» больше нет (П.2а — без иконок): количество
+// показывает секция «Вложения N» (FormatAttachments) на странице деталей,
+// а в превью сводка FindItem вложений не содержит.
 // Важность (⚠) не показывается: item:Importance нет в EWS-REFERENCE, с
 // сервера не приходит (открытый вопрос в HANDOFF «Открыто»).
 // Реальный адрес отправителя показывается всегда (SECURITY.md §4.1).
+// Вывод содержит теги tview: получатели включают SetDynamicColors(true),
+// поэтому все данные из EWS проходят Sanitize + tview.Escape (инвариант escape).
 func FormatMessageHeader(m mail.Message) string {
 	var b strings.Builder
-	b.WriteString("От:    " + security.Sanitize(m.From.String()) + "\n")
+	topic := tview.Escape(security.Sanitize(m.Subject))
+	fmt.Fprintf(&b, "[::b]Тема:  %s[-::-]\n", topic)
+	b.WriteString("От:    " + tview.Escape(security.Sanitize(m.From.String())) + "\n")
 	if len(m.To) > 0 {
-		b.WriteString("Кому:  " + security.Sanitize(joinAddresses(m.To)) + "\n")
+		b.WriteString("Кому:  " + tview.Escape(security.Sanitize(joinAddresses(m.To))) + "\n")
 	}
 	if !m.Received.IsZero() {
 		b.WriteString("Дата:  " + m.Received.Local().Format("02.01.2006 15:04") + "\n")
 	}
-	topic := "Тема:  " + security.Sanitize(m.Subject)
-	if n := len(m.Attachments); n > 0 {
-		topic += fmt.Sprintf("  📎 %d", n)
-	}
-	b.WriteString(topic + "\n")
+	fmt.Fprintf(&b, "%s\n", mutedText(strings.Repeat("─", headerRuleWidth)))
 	return b.String()
 }
 
-// FormatAttachments — список вложений с человекочитаемыми размерами
-// (модал деталей, этап 3 добавит клавиши действий).
+// headerRuleWidth — длина линии-разделителя под заголовками превью и секции
+// вложений (RD-5): фикс, а не ширина панели — узкое окно TextView переносит сам.
+const headerRuleWidth = 32
+
+// readWidth — ширина колонки чтения письма в клетках (V-5, П.1 референса):
+// ~90 колонок по центру панели; терминал уже — вся ширина минус поля
+// (layoutDetails в app.go).
+const readWidth = 90
+
+// mutedText красит статический текст интерфейса (не из EWS — escape не нужен)
+// в textSecondary. Заглушки и линия-разделитель письма (RD-2/RD-5):
+// линия — textSecondary, не hairline.
+func mutedText(s string) string {
+	return fmt.Sprintf("[%s]%s[-]", hexTag(colorTextSecondary), s)
+}
+
+// initials — инициалы аватара (V-5): первые буквы до двух слов имени,
+// заглавные; без имени — буква адреса (локальная часть); взять нечего — «?».
+// Буквы только (unicode.IsLetter): в цветной блок аватара текст из EWS идёт
+// без Escape — квадратная скобка в инициалах стала бы тегом tview
+// (инвариант escape), поэтому данные здесь ещё и Sanitize.
+func initials(name, email string) string {
+	for _, src := range []string{name, email} {
+		var out []rune
+		for _, w := range strings.Fields(security.Sanitize(src)) {
+			for _, r := range w {
+				if unicode.IsLetter(r) {
+					out = append(out, unicode.ToUpper(r))
+					break
+				}
+			}
+			if len(out) == 2 {
+				break
+			}
+		}
+		if len(out) > 0 {
+			return string(out)
+		}
+	}
+	return "?"
+}
+
+// FormatMessageCard — шапка письма на странице деталей (V-5, референс П.1):
+// строка 1 — аватар-инициалы (4 клетки на accent) + «Имя <email>» + дата
+// справа (паддинг до width); строка 2 — «Кому: …» (переносит TextView);
+// линия во всю ширину колонки; тема жирным — как заголовок тела, дальше
+// showDetails печатает тело. width — ширина колонки чтения в клетках.
+// Паддинг даты считает печатную ширину tview.TaggedStringWidth (цвет-теги не
+// в счёт), усечение имени — truncateEllipsis по рунам (best effort, WHY у
+// неё). Все данные EWS — Sanitize + tview.Escape (инвариант escape).
+func FormatMessageCard(m mail.Message, width int) string {
+	var b strings.Builder
+	// Аватар ровно 4 клетки (« %-2s »): имя и дата стартуют с известных
+	// колонок при любой длине инициалов.
+	fmt.Fprintf(&b, "[%s:%s:b] %-2s [-:-:-]",
+		hexTag(colorOnAccent), hexTag(colorAccent), initials(m.From.Name, m.From.Email))
+	date := ""
+	if !m.Received.IsZero() {
+		date = m.Received.Local().Format("02.01.2006 15:04")
+	}
+	whoMax := width - 5 - 1 // аватар (4) + пробел + зазор до даты
+	if date != "" {
+		whoMax -= len(date)
+	}
+	if whoMax < 1 {
+		whoMax = 1
+	}
+	who := tview.Escape(truncateEllipsis(security.Sanitize(m.From.String()), whoMax))
+	b.WriteString(" " + who)
+	if date != "" {
+		pad := width - 5 - tview.TaggedStringWidth(who) - len(date)
+		if pad < 1 {
+			pad = 1
+		}
+		b.WriteString(strings.Repeat(" ", pad) + date)
+	}
+	b.WriteString("\n")
+	if len(m.To) > 0 {
+		b.WriteString("Кому:  " + tview.Escape(security.Sanitize(joinAddresses(m.To))) + "\n")
+	}
+	b.WriteString(mutedText(strings.Repeat("─", width)) + "\n")
+	fmt.Fprintf(&b, "[::b]%s[-::-]", tview.Escape(security.Sanitize(m.Subject)))
+	return b.String()
+}
+
+// bodyHeadingMax — предел длины строки-заголовка (V-28): длиннее — абзац,
+// жирнить его целиком незачем.
+const bodyHeadingMax = 40
+
+// formatBody — тело письма для TextView с dynamic colors (V-28): серии пустых
+// строк схлопываются в одну, короткая изолированная строка без завершающей
+// пунктуации печатается заголовком (жирный accent) и прижимается к абзацу —
+// пустая строка после неё убирается. Каждая строка проходит Sanitize +
+// tview.Escape (SECURITY §3: граница UI, TextView с dynamic colors).
+func formatBody(body string) string {
+	lines := strings.Split(body, "\n")
+	for i, ln := range lines {
+		lines[i] = security.Sanitize(ln)
+	}
+	blank := func(i int) bool {
+		return i < 0 || i >= len(lines) || strings.TrimSpace(lines[i]) == ""
+	}
+	out := make([]string, 0, len(lines))
+	noBlank := true // пустая строка перед этой не нужна: начало, заголовок или уже пусто
+	for i, ln := range lines {
+		if blank(i) {
+			if !noBlank {
+				out = append(out, "")
+				noBlank = true
+			}
+			continue
+		}
+		if isBodyHeading(ln, blank(i-1), blank(i+1)) {
+			out = append(out, fmt.Sprintf("[%s::b]%s[-::-]", hexTag(colorAccent), tview.Escape(strings.TrimSpace(ln))))
+			noBlank = true // заголовок прижат к абзацу
+			continue
+		}
+		out = append(out, tview.Escape(ln))
+		noBlank = false
+	}
+	for len(out) > 0 && out[len(out)-1] == "" { // хвост перед Message-ID не нужен
+		out = out[:len(out)-1]
+	}
+	return strings.Join(out, "\n")
+}
+
+// isBodyHeading — эвристика заголовка (V-28): строка изолирована пустыми
+// строками, ≤ bodyHeadingMax рун, не пункт списка и не кончается пунктуацией.
+// WHY best-effort: после HTMLToText разметки заголовков не осталось — признак
+// только такой; ошибка стоит одной лишней жирной строки, не потери данных.
+// Not to do: жирнить любую короткую строку — «Привет!», подпись, «— пункт»
+// тоже короткие, а заголовками не являются.
+func isBodyHeading(line string, prevBlank, nextBlank bool) bool {
+	if !prevBlank || !nextBlank {
+		return false
+	}
+	s := strings.TrimSpace(line)
+	if s == "" || utf8.RuneCountInString(s) > bodyHeadingMax {
+		return false
+	}
+	first, size := utf8.DecodeRuneInString(s)
+	if isListMarker(first, s[size:]) {
+		return false
+	}
+	last, _ := utf8.DecodeLastRuneInString(s)
+	return !unicode.IsPunct(last)
+}
+
+// isListMarker — маркер пункта списка в начале строки («— », «- », «• »,
+// «1. », «2) »): такие строки заголовками не считаются.
+func isListMarker(first rune, rest string) bool {
+	switch first {
+	case '-', '–', '—', '•', '*', '·':
+		return true
+	}
+	if !unicode.IsDigit(first) {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(strings.TrimLeftFunc(rest, unicode.IsDigit))
+	return r == '.' || r == ')'
+}
+
+// messageView собирает тело письма для показа целиком (V-15): реестр ссылок
+// ([N] host, ⚠, [IDN]) + санитайзер тела, Message-ID, секция вложений и
+// напоминание о клавишах. Общий для панели чтения и страницы деталей — один
+// реестр ссылок, одни и те же g/v. Ссылки возвращаются для a.currentLinks.
+func messageView(m mail.Message) (string, []mail.LinkInfo) {
+	reg := mail.NewLinkRegistry()
+	var body string
+	if m.BodyHTML != "" {
+		body = reg.RenderBodyHTML(m.BodyHTML)
+	} else {
+		body = reg.RenderBody(m.BodyText)
+	}
+	// RD-5/V-17: вызывающий печатает перед хвостом подробную шапку
+	// (FormatMessageHeader); пустое тело — заглушка. Escape обязателен:
+	// TextView с dynamic colors, сырой «[» из EWS стал бы тегом (V-28:
+	// построчно, внутри formatBody).
+	var tail strings.Builder
+	if formatted := formatBody(body); formatted == "" {
+		tail.WriteString(mutedText(noBodyPlaceholder))
+	} else {
+		tail.WriteString(formatted)
+	}
+	if m.InternetMessageID != "" {
+		tail.WriteString("\nMessage-ID: " + tview.Escape(security.Sanitize(m.InternetMessageID)))
+	}
+	if atts := FormatAttachments(m.Attachments); atts != "" {
+		tail.WriteString("\n" + atts + "\n\n(g — ссылки, v — вложения)")
+	} else if len(reg.List()) > 0 {
+		tail.WriteString("\n\n(g — ссылки)")
+	}
+	return tail.String(), reg.List()
+}
+
+// FormatAttachments — секция вложений на странице деталей (V-5): линия,
+// «Вложения N» жирным и пункты «имя (размер)» с человекочитаемыми размерами.
 func FormatAttachments(list []mail.Attachment) string {
 	if len(list) == 0 {
 		return ""
 	}
 	lines := make([]string, 0, len(list))
 	for _, a := range list {
-		lines = append(lines, fmt.Sprintf("  • %s (%s)", security.Sanitize(a.Name), a.SizeLabel()))
+		// escapeForList (Sanitize + tview.Escape), не просто Sanitize: вывод
+		// печатается в TextView с dynamic colors (RD-5) — «[» в имени вложения
+		// иначе стал бы тегом (находка security-reviewer).
+		lines = append(lines, fmt.Sprintf("  • %s (%s)", escapeForList(a.Name), a.SizeLabel()))
 	}
-	return "Вложения:\n" + strings.Join(lines, "\n")
+	return mutedText(strings.Repeat("─", headerRuleWidth)) + "\n" +
+		fmt.Sprintf("[::b]Вложения %d[-::-]", len(list)) + "\n" +
+		strings.Join(lines, "\n")
 }
 
 func joinAddresses(list []mail.Address) string {

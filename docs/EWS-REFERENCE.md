@@ -299,3 +299,28 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 - Элементы EWS XML: https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/ews-xml-elements-in-exchange
 - Аутентификация и EWS: https://learn.microsoft.com/en-us/exchange/client-developer/exchange-web-services/authentication-and-ews-in-exchange
 - FieldURI: https://learn.microsoft.com/en-us/exchange/client-developer/web-service-reference/fielduri
+
+## 11. GetItem — описание встречи (CalendarItem)
+
+Тот же `m:GetItem`, что и §6; достаточен `BaseShape=Default` + `item:TextBody`.
+
+```xml
+<m:GetItem>
+  <m:ItemShape>
+    <t:BaseShape>Default</t:BaseShape>
+    <t:AdditionalProperties>
+      <t:FieldURI FieldURI="item:TextBody"/>
+    </t:AdditionalProperties>
+  </m:ItemShape>
+  <m:ItemIds>
+    <t:ItemId Id="AAMkAGI..." ChangeKey="DwAAAB"/>
+  </m:ItemIds>
+</m:GetItem>
+```
+
+Ответ — `m:GetItemResponseMessage/m:Items/t:CalendarItem` (не `t:Message`;
+разбор по локальному имени). `ItemId` и `ChangeKey` берутся из CalendarView
+(§8). `t:TextBody` — основной путь; `t:Body BodyType="Html"` — fallback,
+конвертация html2text, если TextBody пуст. `t:BodyType@BodyType="Best"`
+запрещён — тот же 500 `ErrorInvalidRequest`, что и в §6.
+

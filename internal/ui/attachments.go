@@ -17,8 +17,10 @@ import (
 	"mailcat/internal/security"
 )
 
-// showAttachments открывает модал вложений текущего письма.
-func (a *App) showAttachments(attachments []mail.Attachment) {
+// showAttachments открывает модал вложений текущего письма. back — возврат
+// на исходный экран (V-15): модал открывается и из панели чтения, и со
+// страницы деталей, Esc должен возвращать туда, откуда пришли.
+func (a *App) showAttachments(attachments []mail.Attachment, back func()) {
 	a.pages.RemovePage(pageAttachments)
 	list := tview.NewList().ShowSecondaryText(true)
 	list.SetBorder(true).SetTitle(" Вложения (s — сохранить, o — открыть, Esc — назад) ")
@@ -43,7 +45,7 @@ func (a *App) showAttachments(attachments []mail.Attachment) {
 	list.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
 		case tcell.KeyEsc:
-			a.pages.SwitchToPage(pageDetails)
+			back()
 			a.showHint()
 			return nil
 		case tcell.KeyRune:

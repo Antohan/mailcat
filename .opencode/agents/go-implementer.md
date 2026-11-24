@@ -1,11 +1,15 @@
 ---
-description: Основной агент разработки mailcat — пишет код по задачам итераций (сейчас docs/PLAN-ITER2.md)
+description: Основной агент разработки mailcat — пишет код по задачам итераций (сейчас docs/PLAN-ITER3.1.md)
 mode: primary
-# Default model is Flash (cheap, fine for routine tasks); switch to the
-# flagship with /models for layout-heavy tasks (UI-2, UI-4 in PLAN-ITER2).
+# Default model is DeepSeek Flash via the deepseek provider (API key,
+# pay-as-you-go — no 5-hour windows); switch to the flagship glm-5.3 with
+# /models for layout-heavy tasks (V-1, V-5 in PLAN-ITER3.1).
 # The provider prefix is mandatory: a bare id does not resolve and the agent
 # silently disappears from the picker (observed).
-model: opencode/deepseek-v4.1-flash-free
+# REQUIREMENT: authorize the deepseek provider first — `opencode auth login`
+# → DeepSeek (API key from platform.deepseek.com). Without auth the model
+# fails to resolve and the agent silently disappears.
+model: deepseek/deepseek-flash
 # Hard cap: a stuck task must stop, not loop (AGENTS.md, "Circuit breaker").
 steps: 40
 ---
@@ -28,6 +32,14 @@ Your loop:
    `docs/HANDOFF.md`.
 6. EWS/SOAP/XML work → consult the `ews-specialist` subagent before
    implementing. Security-relevant work → request `security-reviewer` after.
+
+UX/UI-задачи (вёрстка, панели, палитра, типографика, подсказки, календарь)
+начинаются со скилла `tui-fundamentals` — основной TUI/UX-скилл; `golang-tui` —
+дополнительный технический справочник, его Charm/Bubble Tea-предписания не
+отменяют tview/tcell (AGENTS.md, правило 6). Терминал, а не браузер: реальные
+ограничения macOS-терминала (ANSI, 256/truecolor, Unicode и ширины символов,
+клеточная сетка), возможности существующего фреймворка; миграцию на другой
+фреймворк — только с веской причиной (AGENTS.md, «Terminal limits»).
 
 There is no live Exchange in this environment: code against the mock server and
 fixtures (`docs/TESTING.md §2–4`) and mark live checks as TODO for the user.

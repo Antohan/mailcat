@@ -1,23 +1,24 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 3 не спланирована — сессия планирования: docs/PLAN-ITER3.md
-(спеки задач с указателями на код, образец — PLAN-ITER2.md).
+
+Итерация 3.1 закрыта (V-1…V-9): релиз — `/release` по явному запросу юзера.
 
 ## Сделано
-- e3e8daf — Release: итерация 2 — доработка интерфейса (merge dev→main).
+
+- V-9 (54e1a37): README — скриншоты и структура; V-53 (c06c538); V-52 (41361bc).
+- V-50 (7e73af2): откат V-48/V-49 — тонкая сетка 55/45; V-47 (261c341).
 
 ## Открыто
-- НИЗКО (security-ревью релиза): attachments.go ~120 — частичный файл
-  при ошибке Write (косметика, не безопасность).
-- item:Importance нет в EWS-REFERENCE — нужно для min_importance и ⚠.
+
+- «ок»: V-53 (`…/opencode/v53`), V-52 (`…/opencode/v52b`), V-51, V-47, V-35…V-48.
+- TODO юзера (TESTING.md §5): smoke S3–S7; V-28 на живой почте; О-3; V-25–V-53 на живом терминале.
+- НИЗКО (security): attachments.go ~120 — частичный файл при Write; отложено: item:Importance, write, Catppuccin, Preview.
 
 ## Не трогать
-- Статус-бар (UI-9): подсказки — только showHint→a.hint (нижняя строка,
-  видна всегда); сообщения/ошибки/индикатор — setStatus→a.status; endLoad/
-  clearError гасят a.status или возвращают идущую загрузку — a.hint не
-  трогают. Загрузки: endLoad(id) ровно один раз на ветку горутины
-  (QueueUpdateDraw); loads — только главный поток TUI; красный — только
-  colorError; автоочистка по statusGen; ошибки EWS — Sanitize, по рунам.
-- EWS: item:IsRead в FindItem / t:BodyType в GetItem → 500 на живом;
-  CalendarView без SortOrder/Restriction; read-only; tls только internal/ews.
+
+- V-9: цвета и стили — только `theme.go`/константы UI-6; сырых tcell-цветов в экранах нет.
+- V-53: футер — ближайшее будущее месяца (`Start` > now); часы `agendaNow`; отступ 1, одна строка; без ссылок.
+- V-52: номера недель ISO (`MonthWeeks`/`time.ISOWeek`); акцент — строка с `today`; клик по колонке день не выбирает; ширина 3, без шапки.
+- V-51: повестка — 2-строчные строки (время primary + тема; место muted), зазор 1, прошедшие muted.
+- V-50: сетка — тонкие линии (`drawGridLines`/`colorGridLine`), 55/45; полосы V-48 и 45/55 V-49 отменены — только новым решением юзера.

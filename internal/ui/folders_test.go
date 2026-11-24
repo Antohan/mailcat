@@ -4,13 +4,52 @@ package ui
 // фиксированный порядок, остальные — алфавит, техпапки — секция «Ещё ▸».
 
 import (
+	"encoding/pem"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
 	"mailcat/internal/config"
+	"mailcat/internal/ews"
 	"mailcat/internal/mail"
 )
+
+// mockFixture выбирает фикстуру EWS по операции в запросе (мок для
+// full-path тестов UI; файлы — ../ews/testdata).
+func mockFixture(t *testing.T, reqBody string) []byte {
+	t.Helper()
+	var file string
+	switch {
+	case strings.Contains(reqBody, "FindFolder"):
+		file = "findfolder_response.xml"
+	case strings.Contains(reqBody, "GetItem"):
+		if strings.Contains(reqBody, "AAMkAGI2CAL") {
+			file = "getitem_calendar_response.xml"
+		} else {
+			file = "getitem_response.xml"
+		}
+	case strings.Contains(reqBody, "CalendarView"):
+		file = "calendar_response.xml"
+	case strings.Contains(reqBody, `Offset="0"`), !strings.Contains(reqBody, "Offset="):
+		file = "finditem_response_p1.xml"
+	default:
+		file = "finditem_response_p2.xml"
+	}
+	b, err := os.ReadFile(filepath.Join("..", "ews", "testdata", file))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
 
 func names(folders []mail.Folder) []string {
 	out := make([]string, 0, len(folders))
@@ -79,48 +118,340 @@ func TestRenderFoldersToggle(t *testing.T) {
 	s := &mailScreen{
 		app: &App{cfg: &config.Config{}},
 		// Список создаётся как в newMailScreen: только текст пунктов.
-		folders:     tview.NewList(),
-		mainFolders: []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}},
-		techFolders: []mail.Folder{{DisplayName: "Опции"}, {DisplayName: "Корневая папка Yammer"}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}},
+		techFolders:    []mail.Folder{{DisplayName: "Опции"}, {DisplayName: "Корневая папка Yammer"}},
+		messagesHeader: newPanelHeader("Письма"), // renderFolders обновляет и заголовок (V-2)
 	}
 
 	s.renderFolders()
-	if got := s.folders.GetItemCount(); got != 2 {
-		t.Fatalf("свернуто: пунктов %d, хочу 2 (Входящие + Ещё ▸)", got)
+	if got := s.folders.GetItemCount(); got != 3 {
+		t.Fatalf("свернуто: пунктов %d, хочу 3 (Входящие + разделитель + Ещё ▸)", got)
 	}
-	if main, _ := s.folders.GetItemText(1); main != "Ещё ▸" {
+	if main, _ := s.folders.GetItemText(2); main != "Ещё ▸" {
 		t.Errorf("маркер секции = %q, хочу «Ещё ▸»", main)
 	}
-	if main, _ := s.folders.GetItemText(0); main != "Входящие (2)" {
-		t.Errorf("первый пункт = %q, хочу «Входящие (2)»", main)
+	if main, _ := s.folders.GetItemText(1); !strings.Contains(main, strings.Repeat("─", 13)) {
+		t.Errorf("второй пункт = %q, хочу линию-разделитель групп (V-4)", main)
+	}
+	if main, _ := s.folders.GetItemText(0); !strings.HasPrefix(main, "  Входящие") || !strings.HasSuffix(main, "](2)") {
+		t.Errorf("первый пункт = %q, хочу «  Входящие» со счётчиком 2 (без иконок, П.2а)", main)
+	}
+	if _, ok := s.rowByItem[1]; ok {
+		t.Errorf("разделитель попал в rowByItem: %v", s.rowByItem)
 	}
 
 	s.toggleTech()
-	if got := s.folders.GetItemCount(); got != 4 {
-		t.Fatalf("развернуто: пунктов %d, хочу 4 (Входящие, Ещё ▾, 2 техпапки)", got)
+	if got := s.folders.GetItemCount(); got != 5 {
+		t.Fatalf("развернуто: пунктов %d, хочу 5 (Входящие, разделитель, Ещё ▾, 2 техпапки)", got)
 	}
-	if main, _ := s.folders.GetItemText(1); main != "Ещё ▾" {
+	if main, _ := s.folders.GetItemText(2); main != "Ещё ▾" {
 		t.Errorf("маркер секции = %q, хочу «Ещё ▾»", main)
 	}
-	if got := s.folders.GetCurrentItem(); got != 1 {
-		t.Errorf("курсор = %d, хочу 1 (остаться на «Ещё»)", got)
+	if got := s.folders.GetCurrentItem(); got != 2 {
+		t.Errorf("курсор = %d, хочу 2 (остаться на «Ещё», moreIdx с учётом разделителя)", got)
 	}
 
 	s.toggleTech()
-	if got := s.folders.GetItemCount(); got != 2 {
-		t.Fatalf("после сворачивания: пунктов %d, хочу 2", got)
+	if got := s.folders.GetItemCount(); got != 3 {
+		t.Fatalf("после сворачивания: пунктов %d, хочу 3", got)
+	}
+}
+
+// TestRenderFoldersKeepsCursor (V-19): пересборка списка возвращает курсор
+// на ту же папку — по ID, а без ID — по имени; на «Ещё» тоже стоит на месте.
+func TestRenderFoldersKeepsCursor(t *testing.T) {
+	s := &mailScreen{
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{ID: "a", DisplayName: "Входящие"}, {DisplayName: "Черновики"}},
+		techFolders:    []mail.Folder{{DisplayName: "Опции"}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	s.renderFolders()
+	s.folders.SetCurrentItem(1)
+	s.renderFolders()
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Errorf("курсор = %d, хочу 1 (папка без ID ищется по имени)", got)
+	}
+
+	s.folders.SetCurrentItem(s.moreIdx)
+	s.renderFolders()
+	if got := s.folders.GetCurrentItem(); got != s.moreIdx {
+		t.Errorf("курсор = %d, хочу moreIdx %d (пункт «Ещё»)", got, s.moreIdx)
+	}
+
+	empty := &mailScreen{app: &App{cfg: &config.Config{}}, folders: tview.NewList(), messagesHeader: newPanelHeader("Письма")}
+	empty.renderFolders()
+	if got := empty.folders.GetCurrentItem(); got != 0 {
+		t.Errorf("пустой список: курсор = %d, хочу 0", got)
+	}
+}
+
+// TestCursorDoesNotRenameFolder (V-20): движение курсора по сайдбару меняет
+// только вид строк — folderName и accent открытой папки остаются прежними;
+// имя меняет лишь selectFolder. Distinguished inbox на старте — ID пуст.
+func TestCursorDoesNotRenameFolder(t *testing.T) {
+	a := New(config.Defaults(), nil, nil)
+	s := a.mail
+	s.folderName, s.folder = "Входящие", ews.FolderID{}
+	s.mainFolders = []mail.Folder{{DisplayName: "Входящие"}, {DisplayName: "Черновики"}}
+	s.renderFolders()
+
+	// Настоящий путь ввода: Up/Down обновляет currentItem ДО SetChangedFunc
+	// (в отличие от SetCurrentItem) — как у пользователя.
+	s.folders.InputHandler()(tcell.NewEventKey(tcell.KeyDown, 0, tcell.ModNone), func(tview.Primitive) {})
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Fatalf("курсор = %d, хочу 1 (Черновики)", got)
+	}
+	if s.folderName != "Входящие" {
+		t.Errorf("folderName = %q, хочу «Входящие» (курсор не открывает папку)", s.folderName)
+	}
+	got, _ := s.folders.GetItemText(0)
+	if want := FormatFolder(s.mainFolders[0], true, false, 0); got != want {
+		t.Errorf("строка «Входящих» = %q, хочу accent открытой папки %q", got, want)
+	}
+}
+
+// TestUpdateInboxUnreadKeepsCursor (V-18): тик watcher'а меняет только
+// счётчик строки «Входящих» — курсор и состав списка остаются на месте.
+func TestUpdateInboxUnreadKeepsCursor(t *testing.T) {
+	s := &mailScreen{
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}, {DisplayName: "Черновики"}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	s.renderFolders()
+	s.folders.SetCurrentItem(1)
+
+	s.updateInboxUnread(7)
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Errorf("курсор = %d, хочу 1 (строка «Входящих» не пересобирает список)", got)
+	}
+	if main, _ := s.folders.GetItemText(0); !strings.Contains(main, "(7)") {
+		t.Errorf("строка «Входящих» = %q, хочу счётчик (7)", main)
+	}
+	if s.mainFolders[0].UnreadCount != 7 {
+		t.Errorf("кэш счётчика = %d, хочу 7", s.mainFolders[0].UnreadCount)
+	}
+}
+
+// TestSetFoldersWidthKeepsCursor (V-26): смена ширины панели пересобирает
+// строки под новую ширину (счётчик справа), курсор остаётся на прежнем пункте.
+func TestSetFoldersWidthKeepsCursor(t *testing.T) {
+	s := &mailScreen{
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие", UnreadCount: 2}, {DisplayName: "Отправленные"}},
+		messagesHeader: newPanelHeader("Письма"),
+	}
+	s.renderFolders()
+	s.folders.SetCurrentItem(1)
+
+	s.setFoldersWidth(20)
+	if got := s.folders.GetCurrentItem(); got != 1 {
+		t.Errorf("курсор = %d, хочу 1 (ширина не двигает курсор)", got)
+	}
+	if s.foldersW != 20 {
+		t.Errorf("foldersW = %d, хочу 20", s.foldersW)
+	}
+	got, _ := s.folders.GetItemText(0)
+	if want := FormatFolder(s.mainFolders[0], false, false, 20); got != want {
+		t.Errorf("строка «Входящих» = %q, хочу ширину 20 %q", got, want)
 	}
 }
 
 // TestRenderFoldersNoTech: без техпапок пункт «Ещё ▸» не добавляется.
 func TestRenderFoldersNoTech(t *testing.T) {
 	s := &mailScreen{
-		app:         &App{cfg: &config.Config{}},
-		folders:     tview.NewList(),
-		mainFolders: []mail.Folder{{DisplayName: "Входящие"}},
+		app:            &App{cfg: &config.Config{}},
+		folders:        tview.NewList(),
+		mainFolders:    []mail.Folder{{DisplayName: "Входящие"}},
+		messagesHeader: newPanelHeader("Письма"),
 	}
 	s.renderFolders()
 	if got := s.folders.GetItemCount(); got != 1 {
 		t.Fatalf("пунктов %d, хочу 1 (без «Ещё ▸»)", got)
 	}
+}
+
+// TestFolderSwitchSelectsFirst (V-17): при переключении папки выделение — на
+// первое письмо, а не на прежнюю позицию; восстановление места по ItemId
+// остаётся только для перечитывания той же папки («u»).
+func TestFolderSwitchSelectsFirst(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_, _ = w.Write(mockFixture(t, string(b)))
+	}))
+	defer srv.Close()
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caPath, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := ews.NewClient(srv.URL, ews.Credentials{Username: "u", Password: "p"}, caPath,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Defaults()
+	cfg.Server = srv.URL
+	a := New(cfg, client, slog.New(slog.NewTextHandler(io.Discard, nil)))
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(120, 40)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+
+	a.mail.loadFolders() // старт с «Входящих»
+	waitFor := func(cond func() bool) bool {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			ok := false
+			_ = a.tapp.QueueUpdateDraw(func() { ok = cond() })
+			if ok {
+				return true
+			}
+			time.Sleep(20 * time.Millisecond)
+		}
+		return false
+	}
+	if !waitFor(func() bool { return len(a.mail.items) >= 2 }) {
+		t.Fatal("письма не загрузились")
+	}
+	_ = a.tapp.QueueUpdateDraw(func() {
+		a.mail.messages.Select(a.mail.itemRows[1], 0)
+	})
+	a.mail.selectFolder(ews.FolderID{ID: "other-folder"}, "Другая")
+	if !waitFor(func() bool {
+		row, _ := a.mail.messages.GetSelection()
+		return len(a.mail.items) > 0 && row == a.mail.itemRows[0]
+	}) {
+		row, _ := a.mail.messages.GetSelection()
+		t.Fatalf("после смены папки выделена строка %d, хочу первую (%d)", row, a.mail.itemRows[0])
+	}
+}
+
+// TestFolderCursorSkipsSeparators (V-29): ↑/↓/Home/End/PgUp/PgDn не ставят
+// курсор на разделители групп, а клик по линии оставляет его на следующей
+// папке (фокус — панели папок).
+func TestFolderCursorSkipsSeparators(t *testing.T) {
+	a := New(config.Defaults(), nil, nil)
+	s := a.mail
+	s.folderName, s.folder = "Входящие", ews.FolderID{}
+	s.mainFolders = []mail.Folder{{DisplayName: "Входящие"}, {DisplayName: "Отправленные"}, {DisplayName: "Проекты"}}
+	s.techFolders = []mail.Folder{{DisplayName: "Опции"}}
+	s.renderFolders()
+	// строки: 0 Входящие, 1 Отправленные, 2 разделитель, 3 Проекты,
+	// 4 разделитель, 5 «Ещё ▸».
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	defer sim.Fini()
+	sim.SetSize(120, 40)
+	a.mail.root.SetRect(0, 0, 120, 40)
+	a.mail.root.Draw(sim) // раскладка: GetInnerRect панели папок
+
+	press := func(k tcell.Key) {
+		t.Helper()
+		s.folders.InputHandler()(tcell.NewEventKey(k, 0, tcell.ModNone), func(tview.Primitive) {})
+	}
+	check := func(k tcell.Key, want int) {
+		t.Helper()
+		press(k)
+		if got := s.folders.GetCurrentItem(); got != want {
+			t.Fatalf("%v: курсор = %d, хочу %d", k, got, want)
+		}
+	}
+	check(tcell.KeyDown, 1)
+	check(tcell.KeyDown, 3) // через разделитель (2)
+	check(tcell.KeyUp, 1)   // обратно через разделитель
+	check(tcell.KeyEnd, 5)  // «Ещё ▸» — выбираем
+	check(tcell.KeyHome, 0)
+	check(tcell.KeyPgDn, 5)
+	check(tcell.KeyPgUp, 0)
+
+	// Клик по линии-разделителю (строка 2) — курсор на «Проектах» (3),
+	// папка не открывается (selectFolder не зовётся — клиент nil).
+	x, y, _, _ := s.folders.GetInnerRect()
+	ev := tcell.NewEventMouse(x+1, y+2, tcell.Button1, tcell.ModNone)
+	if got, _ := a.tapp.GetMouseCapture()(ev, tview.MouseLeftClick); got != nil {
+		t.Errorf("клик по разделителю не поглощён (событие ушло в List)")
+	}
+	if got := s.folders.GetCurrentItem(); got != 3 {
+		t.Errorf("после клика курсор = %d, хочу 3 («Проекты»)", got)
+	}
+	if a.tapp.GetFocus() != s.folders {
+		t.Errorf("после клика фокус не на панели папок")
+	}
+
+	// Клик по папке идёт штатным обработчиком (capture событие не гасит).
+	ev = tcell.NewEventMouse(x+1, y, tcell.Button1, tcell.ModNone)
+	if got, _ := a.tapp.GetMouseCapture()(ev, tview.MouseLeftClick); got == nil {
+		t.Errorf("клик по папке поглощён — List не получит выбор")
+	}
+}
+
+// TestRefreshRestoresEmptySidebar: «u» (refreshFolder) при пустом сайдбаре —
+// состояние после ошибки FindFolders при старте — восстанавливает и папки, а
+// не только письма: loadFolders завершается selectFolder («Входящие»).
+// До фикса «u» перегружал письма с folderName=="" — заголовок списка
+// оставался сброшенным, сайдбар пустым до перезапуска (живой кейс 21.11).
+func TestRefreshRestoresEmptySidebar(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		_, _ = w.Write(mockFixture(t, string(b)))
+	}))
+	defer srv.Close()
+	caPath := filepath.Join(t.TempDir(), "ca.pem")
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw})
+	if err := os.WriteFile(caPath, pemBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client, err := ews.NewClient(srv.URL, ews.Credentials{Username: "u", Password: "p"}, caPath,
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Defaults()
+	cfg.Server = srv.URL
+	a := New(cfg, client, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// Состояние «FindFolders при старте упал»: сайдбар пуст, папка не выбрана.
+	a.mail.folderName, a.mail.folder = "", ews.FolderID{}
+
+	sim := tcell.NewSimulationScreen("UTF-8")
+	if err := sim.Init(); err != nil {
+		t.Fatal(err)
+	}
+	a.tapp.SetScreen(sim)
+	sim.SetSize(110, 28)
+	done := make(chan struct{})
+	go func() { defer close(done); _ = a.tapp.Run() }()
+	defer func() { a.tapp.Stop(); <-done }()
+
+	a.mail.refreshFolder() // «u»
+
+	var items, mains int
+	var title string
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		_ = a.tapp.QueueUpdateDraw(func() {
+			items = a.mail.folders.GetItemCount()
+			mains = len(a.mail.mainFolders)
+			title = a.mail.messagesHeader.title
+		})
+		if items > 0 && mains > 0 && title != "" {
+			return // восстановилось
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("«u» не восстановил сайдбар: items=%d mainFolders=%d title=%q", items, mains, title)
 }

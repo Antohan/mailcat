@@ -4,10 +4,14 @@ package ui
 // через security.Sanitize (SECURITY.md §3: граница UI) — это фиксируется здесь.
 
 import (
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
+	"github.com/rivo/tview"
 	"mailcat/internal/mail"
 )
 
@@ -33,8 +37,9 @@ func TestExternalMark(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRow: колонки [ВНЕШН] | имя отправителя | тема | дата (UI-2).
-func TestFormatMessageRow(t *testing.T) {
+// TestFormatMessageListItem: [строка 1 = ● + [ВНЕШН] + отправитель, время,
+// строка 2 = тема с отступом под отправителя] (V-1).
+func TestFormatMessageListItem(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
 	recv := time.Date(2026, 11, 20, 10, 12, 44, 0, time.Local) // сегодня → HH:MM
 	m := mail.MessageSummary{
@@ -42,26 +47,23 @@ func TestFormatMessageRow(t *testing.T) {
 		Received: recv,
 		From:     mail.Address{Name: "Иванов И.", Email: "ivanov@partner.tld"},
 	}
-	row := FormatMessageRow(m, orgDomains, now)
-	if len(row) != 4 {
-		t.Fatalf("колонок %d, хочу 4: %v", len(row), row)
+	row := FormatMessageListItem(m, orgDomains, now, false)
+	if len(row) != 3 {
+		t.Fatalf("частей %d, хочу 3: %v", len(row), row)
 	}
-	if row[0] != "[ВНЕШН]" {
-		t.Errorf("метка = %q", row[0])
+	if row[0] != "● [ВНЕШН] Иванов И." {
+		t.Errorf("строка 1 = %q", row[0])
 	}
-	if row[1] != "Иванов И." {
-		t.Errorf("отправитель = %q, хочу имя из t:Name", row[1])
+	if row[1] != "10:12" {
+		t.Errorf("время = %q, хочу компактное HH:MM для сегодняшнего", row[1])
 	}
-	if row[2] != "Отчёт Q3" {
-		t.Errorf("тема = %q", row[2])
-	}
-	if row[3] != "10:12" {
-		t.Errorf("дата = %q, хочу компактную HH:MM для сегодняшнего", row[3])
+	if !strings.HasPrefix(row[2], subjectIndent) || !strings.HasSuffix(row[2], "Отчёт Q3") {
+		t.Errorf("строка 2 = %q, хочу отступ + тему", row[2])
 	}
 }
 
-// TestFormatMessageRowFallback: без t:Name — локальная часть адреса (UI-2).
-func TestFormatMessageRowFallback(t *testing.T) {
+// TestFormatMessageListItemFallback: без t:Name — локальная часть адреса (UI-2).
+func TestFormatMessageListItemFallback(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
 	cases := []struct {
 		from mail.Address
@@ -73,9 +75,9 @@ func TestFormatMessageRowFallback(t *testing.T) {
 		{mail.Address{Email: "@host"}, "@host"}, // пустая локальная часть — адрес целиком
 	}
 	for _, tc := range cases {
-		row := FormatMessageRow(mail.MessageSummary{From: tc.from}, orgDomains, now)
-		if row[1] != tc.want {
-			t.Errorf("отправитель %v = %q, хочу %q", tc.from, row[1], tc.want)
+		row := FormatMessageListItem(mail.MessageSummary{From: tc.from}, orgDomains, now, false)
+		if !strings.HasSuffix(row[0], tc.want) {
+			t.Errorf("отправитель %v = %q, хочу суффикс %q", tc.from, row[0], tc.want)
 		}
 	}
 }
@@ -105,33 +107,131 @@ func TestFormatShortDate(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRowSanitized: тема с escape-инъекцией sanitized до tview.
-func TestFormatMessageRowSanitized(t *testing.T) {
+// TestFormatMessageListItemSanitized: тема с escape-инъекцией sanitized до tview.
+func TestFormatMessageListItemSanitized(t *testing.T) {
 	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
 	m := mail.MessageSummary{
 		Subject: "плохая\x1b]8;;http://evil\x1b\\тема",
 		From:    mail.Address{Email: "a@b.c"},
 	}
-	row := FormatMessageRow(m, orgDomains, now)
-	if row[2] != "плохаятема" {
+	row := FormatMessageListItem(m, orgDomains, now, false)
+	if !strings.HasSuffix(row[2], "плохаятема") {
 		t.Errorf("тема не санитизирована: %q", row[2])
 	}
 }
 
-// TestFormatFolder: имя папки + счётчик непрочитанных.
-func TestFormatFolder(t *testing.T) {
-	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
-	if got := FormatFolder(f); got != "Входящие (23)" {
-		t.Errorf("FormatFolder = %q", got)
+// TestTruncateEllipsis: обрезка с «…» ровно в max рун, короткая строка —
+// без изменений (V-1: тема строки 2).
+func TestTruncateEllipsis(t *testing.T) {
+	if got := truncateEllipsis("тема", 10); got != "тема" {
+		t.Errorf("короткая строка изменена: %q", got)
 	}
-	f2 := mail.Folder{DisplayName: "Отправленные"}
-	if got := FormatFolder(f2); got != "Отправленные" {
-		t.Errorf("FormatFolder без непрочитанных = %q", got)
+	if got, want := truncateEllipsis("очень длинная тема письма", 12), "очень длинн…"; got != want {
+		t.Errorf("truncateEllipsis = %q, хочу %q", got, want)
 	}
 }
 
-// TestFormatMessageHeader: блок заголовков для панели просмотра;
-// UI-3 — 📎 N при вложениях (метаданные GetItem), без вложений маркера нет.
+// TestPluralUnread (V-2): русская морфология счётчика в заголовке списка.
+func TestPluralUnread(t *testing.T) {
+	cases := map[int]string{
+		1: "1 непрочитанное", 2: "2 непрочитанных", 5: "5 непрочитанных",
+		11: "11 непрочитанных", 14: "14 непрочитанных", 21: "21 непрочитанное",
+		24: "24 непрочитанных", 100: "100 непрочитанных", 111: "111 непрочитанных",
+	}
+	for n, want := range cases {
+		if got := pluralUnread(n); got != want {
+			t.Errorf("pluralUnread(%d) = %q, хочу %q", n, got, want)
+		}
+	}
+}
+
+// TestFormatFolder: единый отступ без иконок (П.2а), выравнивание счётчика
+// на колонку folderNameCol, счётчик — цветовой тег textSecondary (RD-3).
+// Тема в тестах переключаема, поэтому проверяем структуру, а не hex цвета.
+func TestFormatFolder(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	got := FormatFolder(f, false, false, 0)
+	if !strings.HasPrefix(got, "  Входящие") {
+		t.Errorf("нет отступа перед именем: %q", got)
+	}
+	if !strings.Contains(got, "[#") || !strings.HasSuffix(got, "](23)") {
+		t.Errorf("счётчик без цвета textSecondary/не прижат: %q", got)
+	}
+	if width := utf8.RuneCountInString("  Входящие"); !strings.Contains(got, strings.Repeat(" ", folderNameCol-width)) {
+		t.Errorf("счётчик не выровнен на колонку %d: %q", folderNameCol, got)
+	}
+	f2 := mail.Folder{DisplayName: "Отправленные"}
+	if got2 := FormatFolder(f2, false, false, 0); !strings.HasPrefix(got2, "  Отправленные") || strings.Contains(got2, "(0)") {
+		t.Errorf("FormatFolder без непрочитанных = %q", got2)
+	}
+}
+
+// TestFormatFolderSelected: строка под курсором — счётчик colorSelectedFg,
+// чтобы читать его на фоне выделения (П.2б).
+func TestFormatFolderSelected(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	got := FormatFolder(f, false, true, 0)
+	if !strings.Contains(got, fmt.Sprintf("[%s](23)", hexTag(colorSelectedFg))) {
+		t.Errorf("счётчик на выделенной строке не colorSelectedFg: %q", got)
+	}
+	if got2 := FormatFolder(f, false, false, 0); strings.Contains(got2, hexTag(colorSelectedFg)) {
+		t.Errorf("невыделенная строка красится colorSelectedFg: %q", got2)
+	}
+}
+
+// TestFormatFolderActive: открытая папка — текст accent + жирный (RD-3);
+// счётчик остаётся вторичным, акцентируется только имя.
+func TestFormatFolderActive(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	got := FormatFolder(f, true, false, 0)
+	if !strings.Contains(got, "::b]") {
+		t.Errorf("активная папка не жирная: %q", got)
+	}
+	if !strings.Contains(got, fmt.Sprintf("[%s::b]", hexTag(colorAccent))) {
+		t.Errorf("активная папка не accent: %q", got)
+	}
+	if got := FormatFolder(f, false, false, 0); strings.Contains(got, "::b]") {
+		t.Errorf("неактивная папка жирная: %q", got)
+	}
+}
+
+// visibleWidth — длина строки в клетках без tview-тегов цвета: теги рисуются
+// форматированием, а не текстом (V-26 — проверяем, что строка ровно в ширину).
+func visibleWidth(s string) int {
+	return utf8.RuneCountInString(folderTagRe.ReplaceAllString(s, ""))
+}
+
+var folderTagRe = regexp.MustCompile(`\[[#-][^\]]*\]`)
+
+// TestFormatFolderWidth (V-26): счётчик прижат к правому краю панели ширины
+// width; длинное имя усекается «…», а счётчик остаётся справа.
+func TestFormatFolderWidth(t *testing.T) {
+	f := mail.Folder{DisplayName: "Входящие", UnreadCount: 23}
+	for _, w := range []int{20, 30} {
+		got := FormatFolder(f, false, false, w)
+		if vw := visibleWidth(got); vw != w {
+			t.Errorf("ширина %d: строка занимает %d клеток: %q", w, vw, got)
+		}
+		if !strings.HasSuffix(got, "(23)") {
+			t.Errorf("ширина %d: счётчик не прижат к правому краю: %q", w, got)
+		}
+	}
+
+	long := mail.Folder{DisplayName: "Очень длинное имя папки", UnreadCount: 5}
+	got := FormatFolder(long, false, false, 20)
+	if !strings.Contains(got, "…") {
+		t.Errorf("длинное имя не усечено «…»: %q", got)
+	}
+	if !strings.HasSuffix(got, "(5)") {
+		t.Errorf("счётчик усечён вместе с именем: %q", got)
+	}
+	if vw := visibleWidth(got); vw != 20 {
+		t.Errorf("усечённая строка занимает %d клеток, хочу 20: %q", vw, got)
+	}
+}
+
+// TestFormatMessageHeader: блок заголовков превью-панели (V-5: детали письма
+// перешли на FormatMessageCard, маркер 📎 заменён секцией «Вложения N»).
 func TestFormatMessageHeader(t *testing.T) {
 	m := mail.Message{
 		MessageSummary: mail.MessageSummary{
@@ -142,32 +242,286 @@ func TestFormatMessageHeader(t *testing.T) {
 		Attachments: []mail.Attachment{{Name: "report.pdf"}, {Name: "данные.csv"}},
 	}
 	h := FormatMessageHeader(m)
-	for _, want := range []string{"От:", "Иванов И. <ivanov@company.example>", "Кому:", "apetrova@company.example", "vsidorov@company.example", "Тема:", "Отчёт Q3", "📎 2"} {
+	for _, want := range []string{"От:", "Иванов И. <ivanov@company.example>", "Кому:", "apetrova@company.example", "vsidorov@company.example", "Тема:", "Отчёт Q3"} {
 		if !contains(h, want) {
 			t.Errorf("в заголовках нет %q:\n%s", want, h)
 		}
 	}
-	bare := FormatMessageHeader(mail.Message{
-		MessageSummary: mail.MessageSummary{Subject: "Пусто", From: mail.Address{Email: "a@b.c"}},
+	// П.2а (без иконок): маркера 📎 нет ни с вложениями, ни без.
+	if contains(h, "📎") {
+		t.Errorf("иконка 📎 в заголовках:\n%s", h)
+	}
+	// RD-5: порядок Тема → От; тема жирная; линия-разделитель присутствует.
+	if i, j := strings.Index(h, "Тема:"), strings.Index(h, "От:"); i > j {
+		t.Errorf("Тема должна идти перед От:\n%s", h)
+	}
+	if !contains(h, "[::b]Тема:") {
+		t.Errorf("тема не жирная:\n%s", h)
+	}
+	if !contains(h, "──") {
+		t.Errorf("нет линии-разделителя:\n%s", h)
+	}
+	// Тема-обманка с тегом не рендерится как тег (Sanitize + tview.Escape).
+	evil := FormatMessageHeader(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "[red]скрыто", From: mail.Address{Email: "a@b.c"}},
 	})
-	if contains(bare, "📎") {
-		t.Errorf("маркер 📎 без вложений:\n%s", bare)
+	if !contains(evil, "[red[]") {
+		t.Errorf("тег из темы не экранирован:\n%s", evil)
 	}
 }
 
-// TestFormatAttachments: имя + человекочитаемый размер.
+// TestFormatMessageCard: шапка страницы деталей (V-5, референс П.1) —
+// аватар-инициалы, «Имя <email>», дата справа (паддинг до width; ширина
+// печатных клеток меряет tview.TaggedStringWidth), «Кому: …», линия во всю
+// ширину колонки, тема жирным. Узкая колонка усекает имя с «…»
+// (truncateEllipsis, инвариант V-1).
+func TestFormatMessageCard(t *testing.T) {
+	m := mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject:  "Отчёт Q3",
+			From:     mail.Address{Name: "Иванов Иван Иванович", Email: "ivanov@company.example"},
+			Received: time.Date(2026, 11, 21, 15, 4, 0, 0, time.Local),
+		},
+		To: []mail.Address{{Email: "apetrova@company.example"}, {Email: "vsidorov@company.example"}},
+	}
+	card := FormatMessageCard(m, 90)
+	lines := strings.Split(card, "\n")
+	if len(lines) != 4 {
+		t.Fatalf("хочу 4 строки (аватар, кому, линия, тема):\n%s", card)
+	}
+	avatar := "[" + hexTag(colorOnAccent) + ":" + hexTag(colorAccent) + ":b]"
+	if !contains(lines[0], avatar) || !contains(lines[0], " ИИ ") {
+		t.Errorf("нет аватара-инициалов:\n%q", lines[0])
+	}
+	if !contains(lines[0], "Иванов Иван Иванович <ivanov@company.example>") {
+		t.Errorf("нет «Имя <email>»:\n%q", lines[0])
+	}
+	if !contains(lines[0], "21.11.2026 15:04") {
+		t.Errorf("нет даты:\n%q", lines[0])
+	}
+	if w := tview.TaggedStringWidth(lines[0]); w != 90 {
+		t.Errorf("строка 1 = %d клеток, хочу 90 (дата справа):\n%q", w, lines[0])
+	}
+	if !contains(lines[1], "Кому:") || !contains(lines[1], "vsidorov@company.example") {
+		t.Errorf("нет «Кому»:\n%q", lines[1])
+	}
+	if c := strings.Count(lines[2], "─"); c != 90 {
+		t.Errorf("линия = %d клеток, хочу 90:\n%q", c, lines[2])
+	}
+	if i, j := strings.Index(card, "─"), strings.Index(card, "[::b]Отчёт Q3"); i > j {
+		t.Errorf("тема должна идти после линии:\n%s", card)
+	}
+
+	// Узкая колонка: имя усечено с «…», дата всё равно справа до width.
+	narrow := strings.Split(FormatMessageCard(m, 58), "\n")
+	if w := tview.TaggedStringWidth(narrow[0]); w != 58 {
+		t.Errorf("узкая строка 1 = %d клеток, хочу 58:\n%q", w, narrow[0])
+	}
+	if !contains(narrow[0], "…") {
+		t.Errorf("имя не усечено на узкой колонке:\n%q", narrow[0])
+	}
+
+	// Без Кому и даты — строки опускаются (остаются аватар, линия, тема).
+	bare := FormatMessageCard(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "Пусто", From: mail.Address{Email: "a@b.c"}},
+	}, 90)
+	if got := strings.Count(bare, "\n"); got != 2 {
+		t.Errorf("без Кому/даты хочу 3 строки, строк-1 = %d:\n%s", got, bare)
+	}
+
+	// Тема/имя-обманки с тегами не рендерятся как теги (Sanitize + Escape).
+	evil := FormatMessageCard(mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject: "[red]скрыто",
+			From:    mail.Address{Name: "[blue]Зло", Email: "x@y.z"},
+		},
+	}, 90)
+	if !contains(evil, "[red[]") || !contains(evil, "[blue[]") {
+		t.Errorf("теги из EWS не экранированы:\n%s", evil)
+	}
+}
+
+// TestInitials: инициалы аватара (V-5) — до двух первых букв слов имени,
+// заглавные; пустое имя — буква из локальной части адреса; нечего брать — «?».
+func TestInitials(t *testing.T) {
+	cases := []struct{ name, email, want string }{
+		{"Иванов Иван", "", "ИИ"},
+		{"Иванов", "", "И"},
+		{"", "ivanov@corp.example", "I"},
+		{"мария попова", "", "МП"},
+		{"O'Hara Pty Ltd", "", "OP"},
+		{"", "", "?"},
+	}
+	for _, c := range cases {
+		if got := initials(c.name, c.email); got != c.want {
+			t.Errorf("initials(%q, %q) = %q, хочу %q", c.name, c.email, got, c.want)
+		}
+	}
+}
+
+// TestFormatAttachments: имя + человекочитаемый размер; V-5 — секция
+// «Вложения N» с линией-разделителем.
 func TestFormatAttachments(t *testing.T) {
 	list := []mail.Attachment{
 		{Name: "report.pdf", ContentLength: 2097152},
 		{Name: "данные.csv", ContentLength: 1024},
 	}
 	got := FormatAttachments(list)
+	if !contains(got, "Вложения 2") || !contains(got, "──") {
+		t.Errorf("нет секции «Вложения N» с линией:\n%s", got)
+	}
 	if !contains(got, "report.pdf (2.0 МБ)") || !contains(got, "данные.csv (1.0 КБ)") {
 		t.Errorf("FormatAttachments = %q", got)
 	}
 	if got := FormatAttachments(nil); got != "" {
 		t.Errorf("пустой список = %q, хочу пусто", got)
 	}
+	// Сторож (RD-5): имя вложения с тегом не должно пройти в dynamic-colors
+	// TextView сырым — только в экранированном виде.
+	evil := FormatAttachments([]mail.Attachment{{Name: "[red]x.pdf"}})
+	if !contains(evil, "[red[]") || contains(evil, "\x1b") {
+		t.Errorf("имя вложения не экранировано: %q", evil)
+	}
 }
 
 func contains(s, sub string) bool { return strings.Contains(s, sub) }
+
+func TestDayBucket(t *testing.T) {
+	now := time.Date(2026, 11, 21, 10, 0, 0, 0, time.Local)
+	cases := []struct {
+		t    time.Time
+		want int
+	}{
+		{time.Date(2026, 11, 21, 0, 1, 0, 0, time.Local), 0},
+		{time.Date(2026, 11, 21, 23, 59, 0, 0, time.Local), 0},
+		{time.Date(2026, 11, 20, 23, 59, 0, 0, time.Local), 1},
+		{time.Date(2026, 11, 19, 12, 0, 0, 0, time.Local), 2},
+		{time.Time{}, 2}, // Received неизвестен
+	}
+	for _, c := range cases {
+		if got := dayBucket(now, c.t); got != c.want {
+			t.Fatalf("dayBucket(%v) = %d, want %d", c.t, got, c.want)
+		}
+	}
+	if dayBuckets[0] != "Сегодня" || dayBuckets[1] != "Вчера" || dayBuckets[2] != "Ранее" {
+		t.Fatalf("dayBuckets = %v", dayBuckets)
+	}
+}
+
+// TestSameSenderRun (V-25): серия — тот же ящик и та же группа дня; смена
+// отправителя или дня начинает новую серию (имя печатается снова).
+func TestSameSenderRun(t *testing.T) {
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
+	mk := func(email string, at time.Time) mail.MessageSummary {
+		return mail.MessageSummary{From: mail.Address{Email: email}, Received: at}
+	}
+	today1 := time.Date(2026, 11, 20, 9, 0, 0, 0, time.Local)
+	today2 := time.Date(2026, 11, 20, 10, 0, 0, 0, time.Local)
+	yesterday := time.Date(2026, 11, 19, 10, 0, 0, 0, time.Local)
+	cases := []struct {
+		name      string
+		prev, cur mail.MessageSummary
+		want      bool
+	}{
+		{"серия", mk("ivanov@company.example", today1), mk("IVANOV@company.example", today2), true},
+		{"другой отправитель", mk("ivanov@company.example", today1), mk("petrov@company.example", today2), false},
+		{"другой день", mk("ivanov@company.example", today1), mk("ivanov@company.example", yesterday), false},
+		{"пустой адрес", mk("", today1), mk("", today2), false},
+	}
+	for _, tc := range cases {
+		if got := sameSenderRun(tc.prev, tc.cur, now); got != tc.want {
+			t.Errorf("%s: sameSenderRun = %v, хочу %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// TestFormatMessageListItemRepeat (V-25): у повторного письма серии имени нет,
+// но точка и [ВНЕШН] на месте (SECURITY §4).
+func TestFormatMessageListItemRepeat(t *testing.T) {
+	now := time.Date(2026, 11, 20, 12, 0, 0, 0, time.Local)
+	m := mail.MessageSummary{
+		Subject:  "Re: Счёт",
+		Received: time.Date(2026, 11, 20, 10, 0, 0, 0, time.Local),
+		From:     mail.Address{Name: "Петров П.", Email: "petrov@partner.tld"},
+	}
+	first := FormatMessageListItem(m, orgDomains, now, false)
+	again := FormatMessageListItem(m, orgDomains, now, true)
+	if !strings.HasSuffix(first[0], "Петров П.") {
+		t.Errorf("первое письмо серии без имени: %q", first[0])
+	}
+	if got := strings.TrimRight(again[0], " "); got != messageDot+" [ВНЕШН]" {
+		t.Errorf("повтор = %q, хочу точку и [ВНЕШН] без имени", again[0])
+	}
+}
+
+// TestClampKeepsSenderRuns (V-25): resize пересобирает текст ячейки — правило
+// серии сохраняется, имя не возвращается.
+func TestClampKeepsSenderRuns(t *testing.T) {
+	a := newTestApp(t)
+	a.cfg.OrgDomains = []string{"company.example"}
+	s := a.mail
+	s.items = []mail.MessageSummary{
+		{Subject: "Первое", Received: time.Now(), From: mail.Address{Name: "Иванов И.", Email: "ivanov@company.example"}},
+		{Subject: "Второе", Received: time.Now(), From: mail.Address{Name: "Иванов И.", Email: "ivanov@company.example"}},
+	}
+	s.appendRows(s.items)
+	s.clampMessageColumns(nil, 0, 0, 60, 10)
+	first := s.messages.GetCell(s.itemRows[0], 0).Text
+	second := s.messages.GetCell(s.itemRows[1], 0).Text
+	if !strings.Contains(first, "Иванов И.") {
+		t.Errorf("первое письмо без имени после clamp: %q", first)
+	}
+	if strings.Contains(second, "Иванов") || !strings.Contains(second, messageDot) {
+		t.Errorf("повтор после clamp = %q, хочу точку без имени", second)
+	}
+}
+
+// TestFormatBody (V-28): серии пустых строк схлопываются в одну, изолированная
+// короткая строка без завершающей пунктуации — заголовок жирным accent, пустая
+// строка после него убрана; приветствие, пункт списка, длинная и
+// неизолированная строка заголовками не считаются; «[»/ESC экранируются.
+func TestFormatBody(t *testing.T) {
+	accent := fmt.Sprintf("[%s::b]", hexTag(colorAccent))
+	heading := func(s string) string { return accent + s + "[-::-]" }
+
+	t.Run("заголовок прижат к абзацу", func(t *testing.T) {
+		if got, want := formatBody("Оргмоменты\n\nВстреча в четверг."),
+			heading("Оргмоменты")+"\nВстреча в четверг."; got != want {
+			t.Errorf("formatBody = %q, хочу %q", got, want)
+		}
+	})
+
+	t.Run("пустые строки схлопнуты", func(t *testing.T) {
+		if got, want := formatBody("\nАбзац один.\n\n\n\nАбзац два.\n\n"),
+			"Абзац один.\n\nАбзац два."; got != want {
+			t.Errorf("formatBody = %q, хочу %q", got, want)
+		}
+	})
+
+	t.Run("не заголовки", func(t *testing.T) {
+		for _, line := range []string{
+			"Привет! Как дела?",
+			"— пункт списка",
+			"1. пункт списка",
+			strings.Repeat("длинная строка ", 4),
+		} {
+			if got := formatBody(line); got != tview.Escape(line) {
+				t.Errorf("formatBody(%q) = %q, хочу без заголовка", line, got)
+			}
+		}
+		if got := formatBody("Вводная строка\nОргмоменты\n\nтекст."); strings.Contains(got, accent) {
+			t.Errorf("строка внутри абзаца стала заголовком: %q", got)
+		}
+	})
+
+	t.Run("экранирование", func(t *testing.T) {
+		if got, want := formatBody("[red]Опасный заголовок\n\nтекст."),
+			heading(tview.Escape("[red]Опасный заголовок"))+"\nтекст."; got != want {
+			t.Errorf("formatBody = %q, хочу %q", got, want)
+		}
+		got := formatBody("текст.\n\x1b[2Jопасно")
+		if strings.ContainsRune(got, '\x1b') || !strings.Contains(got, "опасно") {
+			t.Errorf("ESC из тела не вычищен: %q", got)
+		}
+	})
+}

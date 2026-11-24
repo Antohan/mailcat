@@ -56,7 +56,11 @@ func serveFixture(t *testing.T, w http.ResponseWriter, reqBody string) {
 	case strings.Contains(reqBody, "FindFolder"):
 		_, _ = w.Write(fixture(t, "findfolder_response.xml"))
 	case strings.Contains(reqBody, "GetItem"):
-		_, _ = w.Write(fixture(t, "getitem_response.xml"))
+		if strings.Contains(reqBody, "AAMkAGI2CAL") {
+			_, _ = w.Write(fixture(t, "getitem_calendar_response.xml"))
+		} else {
+			_, _ = w.Write(fixture(t, "getitem_response.xml"))
+		}
 	case strings.Contains(reqBody, "GetAttachment"):
 		_, _ = w.Write(fixture(t, "getattachment_response.xml"))
 	case strings.Contains(reqBody, "CalendarView"):

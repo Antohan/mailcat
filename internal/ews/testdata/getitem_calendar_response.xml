@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">
+  <soap:Body>
+    <m:GetItemResponse>
+      <m:ResponseMessages>
+        <m:GetItemResponseMessage ResponseClass="Success">
+          <m:ResponseCode>NoError</m:ResponseCode>
+          <m:Items>
+            <t:CalendarItem>
+              <t:ItemId Id="AAMkAGI2CAL1=" ChangeKey="DwAAABYAAA"/>
+              <t:Subject>Синк команды</t:Subject>
+              <t:Body BodyType="Html">&lt;html&gt;&lt;body&gt;&lt;p&gt;Повестка: релиз. Созвон &lt;a href="https://meet.example/x"&gt;здесь&lt;/a&gt;.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</t:Body>
+            </t:CalendarItem>
+          </m:Items>
+        </m:GetItemResponseMessage>
+      </m:ResponseMessages>
+    </m:GetItemResponse>
+  </soap:Body>
+</soap:Envelope>

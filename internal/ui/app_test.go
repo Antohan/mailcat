@@ -8,6 +8,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -56,31 +57,31 @@ func TestShowErrorRunesTruncation(t *testing.T) {
 	}
 }
 
-// TestFormatMessageRowEscaped: теги tview в теме/имени отправителя
+// TestFormatMessageListItemEscaped: теги tview в теме/имени отправителя
 // экранируются (Table интерпретирует [red] даже без SetDynamicColors;
 // tview.Escape вставляет "[]" внутрь тега — семантика tview).
-func TestFormatMessageRowEscaped(t *testing.T) {
+func TestFormatMessageListItemEscaped(t *testing.T) {
 	m := mail.MessageSummary{
 		Subject: "[red]СРОЧНО[-] проверка",
 		From:    mail.Address{Email: `["evil"]@x.example`},
 	}
-	row := FormatMessageRow(m, []string{"company.example"}, time.Now())
+	row := FormatMessageListItem(m, []string{"company.example"}, time.Now(), false)
 	if !strings.Contains(row[2], "[red[]") {
 		t.Errorf("тег [red] в теме не экранирован: %q", row[2])
 	}
-	if !strings.Contains(row[1], `["evil"[]`) {
-		t.Errorf("region-тег в адресе не экранирован: %q", row[1])
+	if !strings.Contains(row[0], `["evil"[]`) {
+		t.Errorf("region-тег в адресе не экранирован: %q", row[0])
 	}
 }
 
 // TestFormatFolderEscaped: имя папки с тегом экранируется для tview.List.
 // Кириллица в скобках ([ВХОД]) тегом не является — проходит как есть.
 func TestFormatFolderEscaped(t *testing.T) {
-	got := FormatFolder(mail.Folder{DisplayName: `["x"]Входящие`})
+	got := FormatFolder(mail.Folder{DisplayName: `["x"]Входящие`}, false, false, 0)
 	if !strings.Contains(got, `["x"[]`) {
 		t.Errorf("имя папки не экранировано: %q", got)
 	}
-	if got2 := FormatFolder(mail.Folder{DisplayName: `[ВХОД]ящик`}); got2 != `[ВХОД]ящик` {
+	if got2 := FormatFolder(mail.Folder{DisplayName: `[ВХОД]ящик`}, false, false, 0); !strings.Contains(got2, `[ВХОД]ящик`) {
 		t.Errorf("безопасные скобки искажены: %q", got2)
 	}
 }
@@ -103,12 +104,12 @@ func TestPaintFocusFramesWired(t *testing.T) {
 func TestPageHint(t *testing.T) {
 	a := newTestApp(t)
 	hints := map[string]string{
-		pageMail:        hintMail,
-		pageCalendar:    hintCalendar,
-		pageDetails:     hintDetails,
-		pageEvent:       hintEvent,
-		pageLinks:       hintLinks,
-		pageAttachments: hintAttachments,
+		pageMail:        formatHint(hintMail),
+		pageCalendar:    formatHint(hintCalendarGrid),
+		pageDetails:     formatHint(hintDetails),
+		pageEvent:       formatHint(hintEvent),
+		pageLinks:       formatHint(hintLinks),
+		pageAttachments: formatHint(hintAttachments),
 	}
 	// Модальные страницы не существуют до первого открытия — добавляем
 	// заглушку, SwitchToPage непроверенной страницы ничего не меняет.
@@ -122,6 +123,43 @@ func TestPageHint(t *testing.T) {
 	}
 }
 
+// TestFormatHint (V-7, RD-6): клавиша — в бейдже `[клавиша]` акцентом
+// жирным, подпись — второстепенным цветом; текст наш (не из EWS), теги
+// динамических цветов допустимы, «[» бейджа экранирован от парсера tview.
+func TestFormatHint(t *testing.T) {
+	got := formatHint([]hintSeg{{"Esc", "назад", false}, {"q", "выход", false}})
+	want := fmt.Sprintf("[#%06x::b]%s [#%06x]назад [#%06x]· [#%06x::b]%s [#%06x]выход",
+		colorAccent.Hex(), tview.Escape("[Esc]"),
+		colorTextSecondary.Hex(), colorTextSecondary.Hex(),
+		colorAccent.Hex(), tview.Escape("[q]"), colorTextSecondary.Hex())
+	if got != want {
+		t.Errorf("formatHint = %q, хочу %q", got, want)
+	}
+}
+
+// TestFormatHintFit (V-17): на узком экране необязательный сегмент «←/→
+// панели» снимается, чтобы подсказка влезала в 100 колонок; на широком —
+// показывается; без opt-сегментов текст не меняется.
+func TestFormatHintFit(t *testing.T) {
+	full := formatHint(hintMail)
+	if got := formatHintFit(hintMail, 120); got != full {
+		t.Errorf("широкий экран: подсказка урезана")
+	}
+	fullW := tview.TaggedStringWidth(full)
+	narrow := formatHintFit(hintMail, fullW-1)
+	if strings.Contains(narrow, "панели") {
+		t.Errorf("узкий экран: необязательный сегмент не снят: %q", narrow)
+	}
+	if tview.TaggedStringWidth(narrow) > fullW-1 {
+		t.Errorf("узкий экран: подсказка всё ещё шире (%d > %d)",
+			tview.TaggedStringWidth(narrow), fullW-1)
+	}
+	custom := []hintSeg{{"Esc", "назад", false}, {"q", "выход", false}}
+	if got := formatHintFit(custom, 3); got != formatHint(custom) {
+		t.Errorf("без opt-сегментов текст изменился: %q", got)
+	}
+}
+
 // TestErrorAutoClear (UI-7/UI-9): ошибка живёт в строке сообщений и не
 // трогает строку подсказок; после таймаута сообщение гаснет; таймер с
 // устаревшим поколением свежий статус не затирает.
@@ -131,7 +169,7 @@ func TestErrorAutoClear(t *testing.T) {
 	if text := a.status.GetText(false); !strings.Contains(text, "Ошибка") {
 		t.Fatalf("ошибка не показана: %q", text)
 	}
-	if got := a.hint.GetText(false); got != hintMail {
+	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Errorf("ошибка затронула строку подсказок: %q", got)
 	}
 	a.clearError(a.statusGen) // то, что таймер прислал бы в QueueUpdateDraw
@@ -153,14 +191,14 @@ func TestErrorAutoClear(t *testing.T) {
 func TestLoadIndicator(t *testing.T) {
 	a := newTestApp(t)
 	id := a.beginLoad("Загрузка писем…")
-	if text := a.status.GetText(false); text != "Загрузка писем…" {
+	if text := a.status.GetText(false); text != spinnerFrames[0:3]+" Загрузка писем…" {
 		t.Fatalf("индикатор не показан: %q", text)
 	}
-	if got := a.hint.GetText(false); got != hintMail {
+	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Fatalf("подсказки пропали во время загрузки: %q", got)
 	}
 	a.showHint() // смена страницы во время загрузки
-	if text := a.status.GetText(false); text != "Загрузка писем…" {
+	if text := a.status.GetText(false); text != spinnerFrames[0:3]+" Загрузка писем…" {
 		t.Errorf("подсказка затёрла индикатор загрузки: %q", text)
 	}
 	// Перекрытие загрузок: завершилась не последняя — остаётся надпись идущей.
@@ -179,7 +217,7 @@ func TestLoadIndicator(t *testing.T) {
 	if text := a.status.GetText(false); text != "" {
 		t.Errorf("после последней загрузки строка сообщений не погасла: %q", text)
 	}
-	if got := a.hint.GetText(false); got != hintMail {
+	if got := a.hint.GetText(false); got != formatHint(hintMail) {
 		t.Errorf("подсказки после загрузки не на месте: %q", got)
 	}
 }
@@ -190,16 +228,97 @@ func TestHintLineFollowsPages(t *testing.T) {
 	a := newTestApp(t)
 	a.pages.SwitchToPage(pageCalendar)
 	a.showHint()
-	if got := a.hint.GetText(false); got != hintCalendar {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendarGrid) {
 		t.Errorf("строка подсказок не сменилась со страницей: %q", got)
 	}
 	id := a.beginLoad("Загрузка календаря…")
 	a.showError(errors.New("сбой"))
-	if got := a.hint.GetText(false); got != hintCalendar {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendarGrid) {
 		t.Errorf("сообщение/ошибка затронули строку подсказок: %q", got)
 	}
 	a.endLoad(id)
-	if got := a.hint.GetText(false); got != hintCalendar {
+	if got := a.hint.GetText(false); got != formatHint(hintCalendarGrid) {
 		t.Errorf("конец загрузки затронул строку подсказок: %q", got)
+	}
+}
+
+// TestReadingInPreview (V-15): Enter больше не открывает полноэкранную
+// страницу — письмо читается в панели просмотра, фокус и подсказки уходят
+// туда; выбор другой строки возвращает панель в режим черновика.
+func TestReadingInPreview(t *testing.T) {
+	a := newTestApp(t)
+	a.mail.showReading(mail.Message{
+		MessageSummary: mail.MessageSummary{
+			Subject:  "Тема",
+			From:     mail.Address{Name: "Иван", Email: "ivan@company.example"},
+			Received: time.Date(2026, 11, 20, 21, 25, 0, 0, time.Local),
+		},
+		To:       []mail.Address{{Name: "everybody", Email: "everybody@company.example"}},
+		BodyText: "тело",
+	})
+	if !a.mail.reading || a.tapp.GetFocus() != a.mail.preview {
+		t.Fatalf("письмо не открылось в панели чтения: reading=%v", a.mail.reading)
+	}
+	// V-17: шапка подробная (Тема/От/Кому/Дата), а не аватар-карточка V-5.
+	text := a.mail.preview.GetText(false)
+	for _, want := range []string{"Тема:", "От:", "Кому:", "Дата:", "20.11.2026 21:25"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("в шапке нет %q:\n%s", want, text)
+		}
+	}
+	if got := a.hint.GetText(false); got != formatHint(hintReading) {
+		t.Errorf("подсказки панели чтения: %q", got)
+	}
+	a.mail.showPreview(-1) // курсор ушёл со строки — панель снова черновик
+	if a.mail.reading {
+		t.Error("reading не сброшен при смене строки — resize вернёт старое письмо")
+	}
+}
+
+// TestInitialFocusMessages (V-21): приложение стартует с фокусом в списке
+// писем — подсказка стартового экрана (hintMail) и акцентная рамка совпадают.
+func TestInitialFocusMessages(t *testing.T) {
+	a := newTestApp(t)
+	if got := a.tapp.GetFocus(); got != a.mail.messages {
+		t.Errorf("стартовый фокус не в списке писем: %T", got)
+	}
+}
+
+// TestCycleFocusUpdatesHint (V-23): Tab/Shift-Tab вместе с фокусом меняет и
+// строку подсказок — она не остаётся от прежней панели.
+func TestCycleFocusUpdatesHint(t *testing.T) {
+	a := newTestApp(t)
+	a.mail.showReading(mail.Message{
+		MessageSummary: mail.MessageSummary{Subject: "Тема"},
+	})
+	if got := a.hint.GetText(false); got != formatHint(hintReading) {
+		t.Fatalf("после открытия письма подсказки панели чтения: %q", got)
+	}
+	a.mail.cycleFocus() // просмотр → папки
+	if a.tapp.GetFocus() != a.mail.folders || a.hint.GetText(false) != formatHint(hintFolders) {
+		t.Errorf("Tab из просмотра не обновил подсказку: %q", a.hint.GetText(false))
+	}
+	a.mail.cycleFocus() // папки → письма
+	a.mail.cycleFocus() // письма → просмотр
+	if a.tapp.GetFocus() != a.mail.preview || a.hint.GetText(false) != formatHint(hintReading) {
+		t.Errorf("возврат в просмотр не вернул подсказки панели: %q", a.hint.GetText(false))
+	}
+}
+
+// TestFoldersHint (V-24): фокус на папках даёт набор панели папок, и он
+// укладывается в 100 колонок без opt-сегментов.
+func TestFoldersHint(t *testing.T) {
+	a := newTestApp(t)
+	a.tapp.SetFocus(a.mail.folders)
+	if got := formatHint(a.pageHintSegs()); got != formatHint(hintFolders) {
+		t.Errorf("подсказки фокуса на папках: %q", got)
+	}
+	if w := tview.TaggedStringWidth(formatHint(hintFolders)); w > 100 {
+		t.Errorf("подсказки папок шире 100 колонок: %d", w)
+	}
+	for _, s := range hintFolders {
+		if s.opt {
+			t.Errorf("сегмент %q помечен opt — на 100 колонках обязательная клавиша пропадёт", s.key)
+		}
 	}
 }

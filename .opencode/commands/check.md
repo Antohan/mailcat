@@ -1,5 +1,6 @@
 ---
 description: Прогон качества — gofmt, go vet, go build, go test
+agent: go-implementer
 ---
 
 Run `./scripts/check.sh` — one call, prints only failing steps; the last line is

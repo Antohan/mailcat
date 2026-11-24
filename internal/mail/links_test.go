@@ -25,6 +25,23 @@ func TestRenderBodyPlainTextLinks(t *testing.T) {
 	}
 }
 
+// TestRenderBodyAutolinkBrackets (V-10): автолинк <https://…> — маркер без
+// огрызков скобок, голый URL рядом нумеруется как раньше.
+func TestRenderBodyAutolinkBrackets(t *testing.T) {
+	reg := NewLinkRegistry()
+	body := reg.RenderBody("в блоге <https://a.example/post> и https://b.example/x")
+	want := "в блоге [1] a.example и [2] b.example"
+	if body != want {
+		t.Errorf("получили %q, хотим %q", body, want)
+	}
+	if strings.ContainsAny(body, "<>") {
+		t.Errorf("огрызки скобок в теле: %q", body)
+	}
+	if list := reg.List(); len(list) != 2 || list[0].URL != "https://a.example/post" {
+		t.Fatalf("реестр: %+v", list)
+	}
+}
+
 // TestRenderBodyHTMLAnchorMismatch: якорь с текстом-обманкой — в теле текст
 // и реальный хост с ⚠; флаг Mismatch в реестре.
 func TestRenderBodyHTMLAnchorMismatch(t *testing.T) {

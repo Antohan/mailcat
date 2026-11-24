@@ -30,7 +30,9 @@ type Config struct {
 
 // UI — настройки интерфейса.
 type UI struct {
-	Language      string   `toml:"language"`
+	Language string `toml:"language"`
+	// Theme — палитра интерфейса: "light" (по умолчанию) или "dark".
+	Theme         string   `toml:"theme"`
 	HiddenFolders []string `toml:"hidden_folders"` // точные имена папок: не показывать в панели вообще (iter2 UI-1)
 }
 
@@ -56,7 +58,7 @@ func Defaults() *Config {
 	return &Config{
 		PageSize:        50,
 		MaxAttachmentMB: 100,
-		UI:              UI{Language: "ru"},
+		UI:              UI{Language: "ru", Theme: "light"},
 		Notify: Notify{
 			Enabled:       true,
 			IntervalSec:   60,
@@ -125,6 +127,11 @@ func (c *Config) Validate() error {
 	}
 	if c.UI.Language != "ru" {
 		return fmt.Errorf("ui.language: MVP поддерживает только \"ru\", получено %q", c.UI.Language)
+	}
+	switch c.UI.Theme {
+	case "light", "dark":
+	default:
+		return fmt.Errorf("ui.theme: допустимо light|dark, получено %q", c.UI.Theme)
 	}
 	if c.Notify.Enabled && c.Notify.IntervalSec < 30 {
 		return fmt.Errorf("notify.interval_sec: минимум 30 секунд, получено %d", c.Notify.IntervalSec)
