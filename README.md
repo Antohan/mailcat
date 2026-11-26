@@ -111,12 +111,14 @@ scripts/check.sh    gofmt, vet, build, test
 
 ## Разработка
 
-Разработка идёт итерациями: текущая — `docs/PLAN-ITER3.1.md` (доработка
-визуала по структурному референсу), выполненные — `docs/PLAN-ITER3.md`
-(итерация 3), `docs/PLAN-ITER2.md` (итерация 2) и `docs/PLAN.md`
-(итерация 1, история).
+Разработка идёт итерациями. Активный план — тот, чей путь стоит на первой
+строке `docs/CURRENT`; выполненные планы (`PLAN.md`, `PLAN-ITER2.md`,
+`PLAN-ITER3.md`, `PLAN-ITER3.1.md`) хранятся в `docs/` как история.
 Ход работ и решения агента — `CHANGELOG.md` (запись на каждую задачу);
 формат планов итераций — `docs/PLAN-TEMPLATE.md`.
+Скрипты разработки: `./scripts/check.sh` — гейт качества; закрытие задачи —
+`./scripts/close-task.sh <ID>` (галочка в плане и коммит журнала с handoff);
+`./scripts/token-report.py` — расход токенов с последнего релиза.
 Архитектура — `docs/ARCHITECTURE.md`, точные SOAP-шаблоны —
 `docs/EWS-REFERENCE.md`, тесты — `docs/TESTING.md`. Практики работы с
 ИИ-агентами, собранные за итерации, — `docs/AI-AGENT-PRACTICES.md`

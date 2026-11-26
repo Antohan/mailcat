@@ -23,8 +23,8 @@ Procedure:
 1. Read `docs/SECURITY.md` — that is the checklist.
 2. Read the changes you were given in the task (diff or stage); read whole files
    only when the diff is not enough to judge.
-3. Walk every point of the checklist §1–§8 and golden rules 1–5 from AGENTS.md.
-4. Check the invariants that were already broken once: `docs/ARCHITECTURE.md §3`
+3. Walk every section of `docs/SECURITY.md` and golden rules 1–5 from AGENTS.md.
+4. Check the invariants that were already broken once: `docs/ARCHITECTURE.md §4`
    and `Не трогать` in `docs/HANDOFF.md` — only those parts, never the whole
    files. A violated invariant is ВАЖНО even when it is outside the diff; that
    regression loop is the reason the list exists.
