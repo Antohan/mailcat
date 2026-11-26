@@ -2,9 +2,9 @@
 
 You are building **mailcat** — a read-only client for corporate mail and calendar
 (on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
-tasks of the current iteration plan, `docs/PLAN-ITER3.1.md` (`docs/PLAN.md`,
-`docs/PLAN-ITER2.md`, `docs/PLAN-ITER3.md` are finished history — do not open
-or modify them).
+tasks of the current iteration plan — the path on the first line of
+`docs/CURRENT`. `none` there means no active plan: say so and stop. Every other
+plan in `docs/` is finished history — do not open or modify it.
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
@@ -12,17 +12,17 @@ English only to spend fewer tokens — that is not permission to answer in Engli
 
 ## Where to look (one file at a time)
 
-| File                    | What it gives you                                                 |
-| ----------------------- | ----------------------------------------------------------------- |
-| `docs/HANDOFF.md`       | **start here**: state after the last stage, next task, open items |
-| `docs/PLAN-ITER3.1.md`  | **current iteration**: tasks, DoD, the CHANGELOG rule             |
-| `docs/PLAN-TEMPLATE.md` | mandatory format for composing a new iteration plan               |
-| `docs/PLAN.md`          | iteration 1 history — do not open in sessions                     |
-| `docs/ARCHITECTURE.md`  | packages, data flow; §3 is the list of invariants                 |
-| `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML                             |
-| `docs/SECURITY.md`      | mandatory security checklist                                      |
-| `docs/TESTING.md`       | what and how to test; manual smoke in §5                          |
-| `config.example.toml`   | configuration format                                              |
+| File | What it gives you |
+| --- | --- |
+| `docs/HANDOFF.md` | **start here**: state after the last stage, next task, open items |
+| `docs/CURRENT` | path of the active iteration plan (one line; `none` = no plan) |
+| the plan it names | **current iteration**: tasks, DoD, commit prefix, the CHANGELOG rule |
+| `docs/PLAN-TEMPLATE.md` | mandatory format for composing a new iteration plan |
+| `docs/ARCHITECTURE.md` | packages, UI skeleton, data flow; §4 is the list of invariants |
+| `docs/EWS-REFERENCE.md` | the only source of truth for SOAP/XML |
+| `docs/SECURITY.md` | mandatory security checklist |
+| `docs/TESTING.md` | what and how to test; manual smoke in §5 |
+| `config.example.toml` | configuration format |
 
 ## Golden rules (breaking one means rework)
 
@@ -44,8 +44,8 @@ English only to spend fewer tokens — that is not permission to answer in Engli
    (`encoding/xml`, `crypto/tls`, `net/http`, `log/slog`, `os/exec`).
 7. **Russian UI.** Key hints, errors, statuses, folder names («Входящие»,
    «Отправленные»).
-8. **Scope is the current iteration plan.** No "for later" features that
-   `docs/PLAN-ITER3.1.md` does not describe.
+8. **Scope is the current iteration plan.** No "for later" features that the
+   current iteration plan does not describe.
 
 ## Code minimalism
 
@@ -62,7 +62,7 @@ Write the smallest complete change (adopted from the ponytail ruleset, MIT):
 - New non-trivial logic (branches, loops, parsers) needs one small test;
   trivial changes don't.
 - A deliberate limitation gets a code comment: `shortcut: <the limit>, <when
-to upgrade>` — and one line in `HANDOFF.md → Открыто`.
+  to upgrade>` — and one line in `HANDOFF.md → Открыто`.
 - Never cut: validation, error handling against data loss, security,
   accessibility, anything the task explicitly asks for.
 
@@ -93,16 +93,19 @@ framework without strong reasons (golden rule 6 still applies).
 
 ## Work
 
-1. Open a session with `/stage <task>` (e.g. `/stage V-1`): it loads the
+1. Open a session with `/stage <task>` (e.g. `/stage UI-1`): it loads the
    iteration plan and the task.
 2. All work happens on the `dev` branch. `main` is release-only: it receives
    a finished iteration as a single merge commit — a release action performed
    on explicit user request, never inside a task session.
-3. One task = one commit (`iter31:V-1: short description`) plus its
-   CHANGELOG.md entry.
+3. One task = one code commit (`<iter>:<ID>: short description`; the prefix
+   is in the plan) plus a CHANGELOG.md entry.
 4. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
    fix the cause.
-5. At the end of a task rewrite `docs/HANDOFF.md` (see below).
+5. Close the task with `./scripts/close-task.sh <ID>` once the HANDOFF is
+   rewritten: it ticks the checkbox in the plan and commits the journal, the
+   plan and the handoff. Never tick the checkbox or commit these three by
+   hand.
 6. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
    implementing. Security-relevant work: request `security-reviewer` after —
    once per stage.
@@ -146,12 +149,12 @@ Security review runs on Flash (the checklist is mechanical), once per
 stage/iteration over a commit range, not per task; `ews-specialist` stays on
 the flagship.
 
-**Stable prefix = cache hits.** Do not edit, inside a coding session, any file
-already read earlier in that session — `AGENTS.md`, `SECURITY.md`, plans,
-`HANDOFF.md` included. An edit invalidates the cached prompt prefix and the
-rest of the session bills at full price; doc edits go to a separate session.
-Open sessions identically (HANDOFF first) and never paste large texts into
-coding-session prompts.
+**Stable prefix = cache hits.** Do not edit, in the middle of a coding
+session, a file read at its start — `AGENTS.md`, `SECURITY.md`, references
+included: an edit invalidates the cached prefix and the rest of the session
+bills at full price; such edits go to a separate session. The plan and
+`HANDOFF.md` are written once, at the close step. Open sessions identically
+(HANDOFF first) and never paste large texts into coding-session prompts.
 
 **No discussions in coding sessions.** Questions, ideas and planning go to a
 separate conversation; a coding session receives a task and returns a report.
@@ -162,9 +165,8 @@ times.
 provider, pay-as-you-go: авторизуйте `opencode auth login` → DeepSeek до
 первой сессии). The provider prefix is mandatory: a bare id does not resolve
 and the agent silently disappears from lists — observed. Flagship (via
-`/models`) for the
-`ews-specialist` subagent and for iteration tasks where layout design matters
-(V-1, V-5). `security-reviewer` inherits the session model —
+`/models`) for the `ews-specialist` subagent and for the layout-heavy tasks
+the plan names. `security-reviewer` inherits the session model —
 do not pin a `model:` in its file (same silent-disappearance failure mode).
 
 ## Handoff file
@@ -187,7 +189,7 @@ code and delete the stale line — do not repair it.
   "ask IT", never work around them.
 - macOS: open files and links with `/usr/bin/open`; Keychain through `security`.
 
-The iteration is done when every DoD point of `docs/PLAN-ITER2.md` is met.
+The iteration is done when every DoD point of the current iteration plan is met.
 Live-server checks are unavailable here: mark them as TODO for the user
 (`TESTING.md §5`).
 
@@ -203,7 +205,7 @@ it — an inline comment in the code, three lines:
 ```
 
 A decision made during a stage also gets one line in `HANDOFF.md` → `Не трогать`.
-Only what survives its stage moves into `docs/ARCHITECTURE.md §3`; the rest is
+Only what survives its stage moves into `docs/ARCHITECTURE.md §4`; the rest is
 deleted. Never read §3 or the handoff as prose — use them to check the invariant
 you are about to break. Every finding from `security-reviewer` becomes one such
 invariant line, otherwise the same mistake comes back next stage.
