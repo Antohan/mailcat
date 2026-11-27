@@ -81,6 +81,10 @@ var dangerousExtensions = map[string]bool{
 	".exe": true, ".js": true, ".vbs": true, ".ps1": true, ".bat": true,
 	".cmd": true, ".lnk": true, ".hta": true, ".scr": true, ".jar": true,
 	".msi": true, ".docm": true, ".xlsm": true,
+	".app": true, ".command": true, ".tool": true, ".scpt": true,
+	".applescript": true, ".workflow": true, ".pkg": true, ".mpkg": true,
+	".dmg": true, ".webloc": true, ".inetloc": true, ".fileloc": true,
+	".terminal": true,
 }
 
 // IsDangerousExtension сообщает, требует ли имя файла предупреждения перед

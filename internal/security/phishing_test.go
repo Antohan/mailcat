@@ -47,13 +47,18 @@ func TestIsDangerousExtension(t *testing.T) {
 		"virus.exe", "script.js", "macro.vbs", "ps.ps1", "run.bat", "cmd.cmd",
 		"link.lnk", "page.hta", "screen.scr", "app.jar", "setup.msi",
 		"doc.docm", "sheet.xlsm", "REPORT.PDF.EXE", "Отчёт.exe",
+		"installer.app", "setup.command", "run.tool", "script.scpt",
+		"note.applescript", "flow.workflow", "bundle.pkg", "bundle.mpkg",
+		"disk.dmg", "link.webloc", "link.inetloc", "link.fileloc",
+		"session.terminal", "REPORT.PDF.COMMAND", "отчёт.pdf.command",
+		"INSTALLER.APP", "BUNDLE.PKG", "DISK.DMG",
 	}
 	for _, name := range dangerous {
 		if !IsDangerousExtension(name) {
 			t.Errorf("IsDangerousExtension(%q) = false, хочу true", name)
 		}
 	}
-	safe := []string{"report.pdf", "данные.csv", "photo.jpeg", "archive.zip", "doc.docx", "sheet.xlsx"}
+	safe := []string{"report.pdf", "данные.csv", "photo.jpeg", "image.png", "archive.zip", "doc.docx", "sheet.xlsx"}
 	for _, name := range safe {
 		if IsDangerousExtension(name) {
 			t.Errorf("IsDangerousExtension(%q) = true, хочу false", name)
