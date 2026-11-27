@@ -1,13 +1,13 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 4 — `docs/PLAN-ITER4.md`, задача C-6 (безопасные имена файлов).
-Читать: задачу C-6, `internal/security/filesafe.go` (`SafeFileName` 31, `CreateUnique` 56), `internal/security/filesafe_test.go`.
-Старт: `/stage C-6`.
+Итерация 4 — `docs/PLAN-ITER4.md`, задача C-7 (частичный файл вложения).
+Читать: задачу C-7, `internal/ui/attachments.go` (`saveAttachment` 103–150).
+Старт: `/stage C-7`.
 
 ## Сделано
+- 64ac8bd — iter4:C-6: безопасные имена файлов, лимит перебора.
 - d1a0a34 — iter4:C-5: права `ca_path` (0644 → предупреждение при старте и в doctor).
-- d635d9d — iter4:C-4: усечение строк списка до tview.Escape, тест на `[red]`.
 
 ## Открыто
 - Живой smoke, TODO: C-5 — CA 0644 даёт предупреждение; C-4 — скриншот до/после (`[red[…` → `[red]…`), «ок» пользователя; C-3 — `.command`/`.app`/`.dmg`; A-4 — `/stage` на `main`; A-3 — `/release`. «ок» на V-35…V-53 нет; S3–S7 — TODO.
@@ -15,7 +15,7 @@
 
 ## Не трогать
 - `docs/ARCHITECTURE.md §4` целиком; схему аутентификации выбирает сервер, после C-8 транспорт лишь её помнит.
-- Вложения — только через `security.CreateUnique` (O_EXCL).
+- Вложения — только через `security.CreateUnique` (O_EXCL); имя — без ведущих точек/пробелов (`TrimLeft(". \t")`), лимит 10 000.
 - Скилл EWS: `item:IsRead` — только в ответе `Default`, CalendarView без `SortOrder`; `policy_test.go` не ослаблять.
 - Ревьюер без shell: diff и stat путями; `#nosec` — только семь мест A-8; релиз стоит на `КРИТИЧНО`/`ВАЖНО`, M < N — не принято.
 - Сетка календаря — тонкие линии 55/45; клик по колонке недель день не выбирает, ширина 3 (V-52).
