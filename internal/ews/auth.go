@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
+	"sync/atomic"
 
 	"github.com/Azure/go-ntlmssp"
 )
@@ -24,19 +25,25 @@ type Credentials struct {
 func (c Credentials) String() string { return c.Username }
 
 // authTransport — RoundTripper со схемой «Basic, затем NTLM»
-// (docs/EWS-REFERENCE.md §1–2): первый запрос уходит с Basic-заголовком;
+// (docs/EWS-REFERENCE.md §1–2): первый запрос сессии уходит с Basic-заголовком;
 // если сервер отвечает 401 с предложением NTLM/Negotiate, запрос повторяется
 // через ntlmssp.Negotiator (креденшелы Negotiator берёт из того же
-// Basic-заголовка запроса).
+// Basic-заголовка запроса), а схема запоминается — дальнейшие запросы идут
+// сразу через NTLM.
 type authTransport struct {
 	base  http.RoundTripper // *http.Transport с изолированным TLS-пулом
 	ntlm  http.RoundTripper // ntlmssp.Negotiator поверх base
 	creds Credentials
 
-	basicOnce sync.Once // выбор схемы логируем один раз на сессию
-	ntlmOnce  sync.Once
-	log       *slog.Logger
+	ntlmChosen atomic.Bool // после первого 401+NTLM схема запомнена на сессию
+	basicOnce  sync.Once   // выбор схемы логируем один раз на сессию
+	ntlmOnce   sync.Once
+	log        *slog.Logger
 }
+
+// WHY: после первого 401+NTLM схема запоминается на всю сессию (ntlmChosen).
+// Why: иначе каждый запрос начинается с Basic и тратит лишний круг «запрос — 401».
+// Not to do: не сбрасывать память по ошибке NTLM — схему выбирает сервер (ARCHITECTURE.md §4.1).
 
 // newHTTPClient собирает http.Client на сессию:
 //   - TLS-конфиг из ca_path (приватный пул — transport.go, SECURITY.md §1);
@@ -91,6 +98,11 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 	}
 
+	// Схема уже запомнена — сразу NTLM, без лишнего круга Basic.
+	if t.ntlmChosen.Load() {
+		return t.roundTripNTLM(req, body)
+	}
+
 	// Попытка 1: Basic.
 	basicReq, err := cloneWithBody(req, body)
 	if err != nil {
@@ -102,19 +114,29 @@ func (t *authTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		return nil, err
 	}
 	if resp.StatusCode != http.StatusUnauthorized || !offersNTLM(resp.Header.Values("WWW-Authenticate")) {
-		t.basicOnce.Do(func() {
-			t.log.Info("EWS-аутентификация: схема basic принята сервером", "scheme", "basic") // без учётных данных — SECURITY.md §2
-		})
+		// Схема «принята» только при успешном статусе: финальный 401 без NTLM —
+		// это неверный пароль, а не выбор сервера.
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			t.basicOnce.Do(func() {
+				t.log.Info("EWS-аутентификация: схема basic принята сервером", "scheme", "basic") // без учётных данных — SECURITY.md §2
+			})
+		}
 		return resp, nil // включая финальный 401 без NTLM — Do превратит его в ошибку аутентификации
 	}
+	t.ntlmChosen.Store(true)
 	t.ntlmOnce.Do(func() {
 		t.log.Info("EWS-аутентификация: сервер отклонил Basic и предложил NTLM, переключаюсь на NTLM",
 			"scheme", "ntlm") // без учётных данных — SECURITY.md §2
 	})
 	drainAndClose(resp)
 
-	// Попытка 2: NTLM (Negotiator сам разыграет handshake; тело повторно
-	// устанавливается им из Basic-заголовка запроса).
+	// Попытка 2: NTLM (Negotiator сам разыграет handshake).
+	return t.roundTripNTLM(req, body)
+}
+
+// roundTripNTLM отправляет запрос через NTLM-транспорт; Basic-заголовок нужен
+// Negotiator'у как источник креденшелов на каждый запрос handshake.
+func (t *authTransport) roundTripNTLM(req *http.Request, body []byte) (*http.Response, error) {
 	ntlmReq, err := cloneWithBody(req, body)
 	if err != nil {
 		return nil, err

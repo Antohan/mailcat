@@ -75,7 +75,9 @@ func TestAuthDeniedNoNTLM(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := newTestClient(t, srv, Credentials{Username: "ivanov", Password: "wrong"}, nil)
+	var buf bytes.Buffer
+	client := newTestClient(t, srv, Credentials{Username: "ivanov", Password: "wrong"},
+		slog.New(slog.NewTextHandler(&buf, nil)))
 	resp, err := client.Get(srv.URL)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
@@ -86,6 +88,9 @@ func TestAuthDeniedNoNTLM(t *testing.T) {
 	}
 	if got := rec.count.Load(); got != 1 {
 		t.Errorf("запросов %d, хочу 1 (нет NTLM — нет и повтора)", got)
+	}
+	if bytes.Contains(buf.Bytes(), []byte("принята")) {
+		t.Errorf("401 без NTLM не должен писать «принята» в лог: %s", buf.String())
 	}
 }
 
@@ -150,7 +155,52 @@ func TestAuthNTLMBodyReplay(t *testing.T) {
 	}
 }
 
-// TestAuthSchemeLogged: факт выбора схемы попадает в лог, пароль — нет (SECURITY.md §2).
+// TestAuthNTLMRemembered: после первого 401+NTLM схема запомнена — следующий
+// запрос той же сессии идёт сразу через NTLM, без круга Basic.
+func TestAuthNTLMRemembered(t *testing.T) {
+	var rec recordingHandler
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec.record(r)
+		w.Header().Set("WWW-Authenticate", "NTLM")
+		http.Error(w, "challenge", http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	client := newTestClient(t, srv, Credentials{Username: "COMPANY\\ivanov", Password: "secret"}, nil)
+	resp, err := client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET 1: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	// Вызов до второго запроса: дальше смотрим только его заголовки.
+	n := len(rec.authSeen)
+	resp, err = client.Get(srv.URL)
+	if err != nil {
+		t.Fatalf("GET 2: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if n == 0 {
+		t.Fatal("первый запрос не дошёл до сервера")
+	}
+	if len(rec.authSeen) == n {
+		t.Fatal("второй запрос не дошёл до сервера")
+	}
+	hasNTLM := false
+	for _, a := range rec.authSeen[n:] {
+		if len(a) >= 4 && a[:4] == "NTLM" {
+			hasNTLM = true
+		}
+		if len(a) >= 5 && a[:5] == "Basic" {
+			t.Errorf("во втором запросе снова попытка Basic: %v", rec.authSeen[n:])
+		}
+	}
+	if !hasNTLM {
+		t.Errorf("второй запрос ушёл без NTLM: %v", rec.authSeen[n:])
+	}
+}
+
 func TestAuthSchemeLogged(t *testing.T) {
 	var buf bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&buf, nil))
