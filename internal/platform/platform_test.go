@@ -18,6 +18,32 @@ func TestOpenCmd(t *testing.T) {
 	}
 }
 
+// TestCheckFilePerm: файл шире 0600 — предупреждение; 0600 — тишина.
+// Каталог не проверяется: CA может лежать в любом (C-5).
+func TestCheckFilePerm(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "shared")
+	if err := os.Mkdir(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "ca.pem")
+	if err := os.WriteFile(path, []byte("cert"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	warns := CheckFilePerm(path)
+	if len(warns) != 1 || !strings.Contains(warns[0], "chmod 600") {
+		t.Fatalf("CheckFilePerm(0644) = %v, хочу предупреждение про chmod 600", warns)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if warns := CheckFilePerm(path); len(warns) != 0 {
+		t.Errorf("CheckFilePerm(0600) = %v, хочу тишину", warns)
+	}
+}
+
 // TestNewLoggerWrites: логгер создаёт каталоги и файл, записи попадают в файл.
 func TestNewLoggerWrites(t *testing.T) {
 	dir := t.TempDir()

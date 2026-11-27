@@ -17,6 +17,7 @@ import (
 
 	"mailcat/internal/config"
 	"mailcat/internal/ews"
+	"mailcat/internal/platform"
 	"mailcat/internal/security"
 )
 
@@ -112,6 +113,13 @@ func (r *reporter) run(cfg *config.Config, deps doctorDeps) int {
 	r.printf("OK\n")
 
 	// Шаг 2: TLS с изолированным пулом (crypto/tls — внутри ews.TLSProbe).
+	// SECURITY.md §6: файл CA проверяется как файл конфига (шире 0600 —
+	// предупреждение, не отказ).
+	if cfg.CAPath != "" {
+		for _, warn := range platform.CheckFilePerm(config.ExpandHome(cfg.CAPath)) {
+			r.printf("      внимание: %s\n", security.Sanitize(warn))
+		}
+	}
 	r.printf("[2/4] TLS-рукопожатие (ca_path: %s) … ", caPathLabel(cfg.CAPath))
 	if err := deps.tlsHandshake(hp, config.ExpandHome(cfg.CAPath)); err != nil {
 		r.printf("ОШИБКА\n      %s\n", security.Sanitize(err.Error()))

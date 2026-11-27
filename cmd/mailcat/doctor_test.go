@@ -58,6 +58,36 @@ func TestDoctorAllOK(t *testing.T) {
 	}
 }
 
+// TestDoctorCAPerms: ca_path шире 0600 — предупреждение на шаге 2, 0600 — нет.
+func TestDoctorCAPerms(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeCfg(t, home)
+	ca := filepath.Join(home, "ca.pem")
+	if err := os.WriteFile(ca, []byte("cert"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadCfg(t, home)
+	cfg.CAPath = ca
+	var out bytes.Buffer
+	if code := runDoctor(&out, cfg, okDeps()); code != 0 {
+		t.Fatalf("code = %d, вывод: %s", code, out.String())
+	}
+	if strings.Contains(out.String(), "chmod 600") {
+		t.Errorf("предупреждение при правах 0600: %s", out.String())
+	}
+	if err := os.Chmod(ca, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := runDoctor(&out, cfg, okDeps()); code != 0 {
+		t.Fatalf("code = %d, вывод: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "chmod 600") {
+		t.Errorf("нет предупреждения о правах CA: %s", out.String())
+	}
+}
+
 // errWriter ломается на первой записи — закрытый stderr или полный диск.
 type errWriter struct{}
 

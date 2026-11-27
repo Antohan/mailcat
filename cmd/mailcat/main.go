@@ -86,9 +86,17 @@ func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 		_, _ = fmt.Fprintf(stderr, "Конфигурация некорректна: %v\n", err)
 		return 1
 	}
-	// SECURITY.md §6: предупреждать о широких правах конфига/каталога.
+	// SECURITY.md §6: предупреждать о широких правах конфига/каталога и CA.
 	for _, warn := range platform.CheckFilePerms(path) {
-		_, _ = fmt.Fprintf(stderr, "внимание: %s\n", warn)
+		_, _ = fmt.Fprintf(stderr, "внимание: %s\n", security.Sanitize(warn))
+	}
+	// WHY: при doctor CA проверит шаг 2 в самом отчёте.
+	// Why: иначе предупреждение печатается дважды — в stderr и в отчёте.
+	// Не делать: проверку CA на шаге 2 дублировать здесь без guard.
+	if cfg.CAPath != "" && argv[0] != "doctor" {
+		for _, warn := range platform.CheckFilePerm(config.ExpandHome(cfg.CAPath)) {
+			_, _ = fmt.Fprintf(stderr, "внимание: %s\n", security.Sanitize(warn))
+		}
 	}
 
 	log, closer, lerr := platform.NewLogger(cfg.Log.File)
