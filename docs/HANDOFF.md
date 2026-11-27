@@ -1,17 +1,14 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Все задачи `docs/PLAN-ITER4.md` закрыты (A-9 — `eff88e9`). Следующий шаг — `/release`
-по команде пользователя: DoD плана, ревью диапазона, merge `dev → main`.
+План не составлен — следующая итерация планируется по `docs/PLAN-TEMPLATE.md`, старт — `/stage <ID>`.
 
 ## Сделано
-- eff88e9 A-9 · 7bd6572 A-8 · ec01223 A-7 · 627653c A-6 · f7137e5 A-5 (iter4).
+- Релиз итерации 4: merge `Release: итерация 4` в `main` (iter4: A-1…A-9, C-1…C-8; C-9 — вне плана `6c7c1f2`).
 
 ## Открыто
-- Живой smoke, TODO: C-8 — после 401+NTLM нет Basic; C-5 — CA 0644; C-4 — скриншот до/после и «ок»;
-  C-3 — `.command`/`.app`/`.dmg`; A-4 — `/stage` на `main`; A-3 — `/release`; A-5/A-6 —
-  `env-check.sh` на машине пользователя. «ок» на V-35…V-53 нет; S3–S7 — TODO.
-- A-9 — только документы, живой проверки не требует.
+- Нет открытых пунктов: smoke S1–S7 и визуал V-35…V-53 итерации 4 подтверждены пользователем.
+- Ревью iter4: 4 МЕЛКО не блокировали (класс C-1 и права скриптов); правила — в «Не трогать».
 
 ## Не трогать
 - `docs/ARCHITECTURE.md §4` целиком; схема аутентификации: выбирает сервер, транспорт лишь помнит (`ntlmChosen`), «basic принята» — только при 2xx.
@@ -22,3 +19,4 @@
 - `#nosec` — ровно семь мест A-8 с причиной; инструменты ищутся PATH → `$GOBIN` → первый `$(go env GOPATH)/bin`; нет gosec/govulncheck — FAIL с командой установки.
 - close-task.sh: журнал только на dev; сбой git — отказ до записи; temp — mktemp рядом с планом; CURRENT — первая непустая строка без `#`.
 - Ошибки doctor — только `security.Sanitize`; ключи конфига по Config; `ca_path` — `platform.CheckFilePerm` (doctor — шаг 2); `env-check.sh` вне `check.sh`; числа `token-report.py` — в §2 AI-AGENT-PRACTICES.
+- Ревью iter4: в `opencode.json` права скриптов без `*` (glob авто-подтверждает цепочку); имена ключей конфига и локальные значения `doctor` — через `Sanitize`; `env-check.sh` проверяет у `security-reviewer` и deny `shell`.
