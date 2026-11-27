@@ -37,6 +37,9 @@ code — the only writes are the release records below.
    subagent is allowed only with the user's explicit consent; mark the final
    report «ревью деградировано: general вместо security-reviewer» and record
    it in the CHANGELOG entry.
+   This is the iteration's single security review: a security task reviewed its
+   own diff before its commit (AGENTS.md, «Work»), so no per-task review runs
+   here.
 4. Run `./scripts/token-report.py` and keep its three headline numbers for the
    final report: sessions cut by the step limit, sessions per task, cost per
    task. «Отчёт недоступен» is reported as is — it does not block the release.
