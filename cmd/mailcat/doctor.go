@@ -105,7 +105,7 @@ func (r *reporter) run(cfg *config.Config, deps doctorDeps) int {
 	// Шаг 1: TCP.
 	r.printf("[1/4] Соединение с %s … ", hp)
 	if err := deps.dialTCP(hp); err != nil {
-		r.printf("НЕТ\n      Сервер недоступен: %v\n", err)
+		r.printf("НЕТ\n      Сервер недоступен: %s\n", security.Sanitize(err.Error()))
 		r.printf("      Похоже, VPN выключен — включите VPN и повторите (mailcat doctor).\n")
 		return 1
 	}
@@ -114,7 +114,7 @@ func (r *reporter) run(cfg *config.Config, deps doctorDeps) int {
 	// Шаг 2: TLS с изолированным пулом (crypto/tls — внутри ews.TLSProbe).
 	r.printf("[2/4] TLS-рукопожатие (ca_path: %s) … ", caPathLabel(cfg.CAPath))
 	if err := deps.tlsHandshake(hp, config.ExpandHome(cfg.CAPath)); err != nil {
-		r.printf("ОШИБКА\n      %v\n", err)
+		r.printf("ОШИБКА\n      %s\n", security.Sanitize(err.Error()))
 		var probe *ews.TLSProbeError
 		if errors.As(err, &probe) && probe.CertProblem {
 			r.printf("      Сервер представил сертификат, который не прошёл проверку.\n" +
@@ -129,7 +129,7 @@ func (r *reporter) run(cfg *config.Config, deps doctorDeps) int {
 	// Шаг 3: сборка клиента с паролем из Keychain.
 	client, err := deps.client(cfg)
 	if err != nil {
-		r.printf("[3/4] Аутентификация … ОШИБКА\n      %v\n", err)
+		r.printf("[3/4] Аутентификация … ОШИБКА\n      %s\n", security.Sanitize(err.Error()))
 		return 1
 	}
 
@@ -137,7 +137,7 @@ func (r *reporter) run(cfg *config.Config, deps doctorDeps) int {
 	folders, err := deps.findFolders(context.Background(), client)
 	switch {
 	case err != nil && isAuthFailure(err):
-		r.printf("[3/4] Аутентификация … ОШИБКА\n      %v\n", err)
+		r.printf("[3/4] Аутентификация … ОШИБКА\n      %s\n", security.Sanitize(err.Error()))
 		r.printf("      Проверьте логин (%s) и пароль.\n"+
 			"      Пароль хранится в Keychain (запись mailcat); обновить:\n"+
 			"        security delete-generic-password -s mailcat\n"+
@@ -145,7 +145,7 @@ func (r *reporter) run(cfg *config.Config, deps doctorDeps) int {
 		return 1
 	case err != nil:
 		r.printf("[3/4] Аутентификация … OK\n")
-		r.printf("[4/4] Список папок … ОШИБКА\n      %v\n", err)
+		r.printf("[4/4] Список папок … ОШИБКА\n      %s\n", security.Sanitize(err.Error()))
 		if isAccessDenied(err) {
 			r.printf("      Похоже, EWS отключён политикой для вашего ящика — спросите ИТ-отдел.\n")
 		}

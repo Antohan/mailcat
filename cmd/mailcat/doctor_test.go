@@ -157,6 +157,51 @@ func TestDoctorAccessDenied(t *testing.T) {
 	}
 }
 
+// TestDoctorSanitizesErrors: escape-последовательность в тексте ошибки
+// (сеть, TLS, EWS) не доходит до терминала (SECURITY.md §3).
+func TestDoctorSanitizesErrors(t *testing.T) {
+	const evil = "boom \x1b]8;;http://evil\x1b\\text"
+	cases := []struct {
+		name string
+		mod  func(*doctorDeps)
+		hint string // подсказка после ошибки должна уцелеть
+	}{
+		{"сеть", func(d *doctorDeps) {
+			d.dialTCP = func(string) error { return errors.New(evil) }
+		}, "VPN"},
+		{"TLS", func(d *doctorDeps) {
+			d.tlsHandshake = func(string, string) error {
+				return &ews.TLSProbeError{CertProblem: true, Err: errors.New(evil)}
+			}
+		}, "ca_path"},
+		{"Keychain", func(d *doctorDeps) {
+			d.client = func(*config.Config) (*ews.Client, error) { return nil, errors.New(evil) }
+		}, ""},
+		{"EWS", func(d *doctorDeps) {
+			d.findFolders = func(context.Context, *ews.Client) ([]ews.Folder, error) {
+				return nil, errors.New(evil)
+			}
+		}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			writeCfg(t, home)
+			deps := okDeps()
+			tc.mod(&deps)
+			var out bytes.Buffer
+			runDoctor(&out, loadCfg(t, home), deps)
+			if strings.Contains(out.String(), "\x1b") {
+				t.Errorf("ESC в выводе: %q", out.String())
+			}
+			if tc.hint != "" && !strings.Contains(out.String(), tc.hint) {
+				t.Errorf("потеряна подсказка %q: %s", tc.hint, out.String())
+			}
+		})
+	}
+}
+
 func loadCfg(t *testing.T, home string) *config.Config {
 	t.Helper()
 	cfg, err := config.Load(filepath.Join(home, ".config", "mailcat", "config.toml"))
