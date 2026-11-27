@@ -9,7 +9,8 @@ plan in `docs/` is finished history — do not open or modify it.
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
-English only to spend fewer tokens — that is not permission to answer in English.
+English by team choice — a measurement did not confirm token savings. That is
+not permission to answer in English.
 
 ## Where to look (one file at a time)
 
@@ -150,9 +151,9 @@ commands. The report is: what changed, what was verified, what is next.
 Ask for a verdict of at most ten lines. A subagent that reads everything costs
 more than doing the work yourself. Spawn one only if the task touches EWS/XML
 (`ews-specialist`) or security (`security-reviewer`) — never for routine edits.
-Security review runs on Flash (the checklist is mechanical): a security task's
-diff is reviewed before its commit, an iteration gets one review of its commit
-range at release — not one per task; `ews-specialist` stays on the flagship.
+The security reviewer inherits the session model: a security task's diff is
+reviewed before its commit, an iteration gets one review of its commit range at
+release — not one per task; `ews-specialist` stays on its pinned model.
 
 **Stable prefix = cache hits.** Do not edit, in the middle of a coding
 session, a file read at its start — `AGENTS.md`, `SECURITY.md`, references
@@ -169,10 +170,12 @@ times.
 **Models.** Flash by default — pinned as `deepseek/deepseek-flash` (deepseek
 provider, pay-as-you-go: авторизуйте `opencode auth login` → DeepSeek до
 первой сессии). The provider prefix is mandatory: a bare id does not resolve
-and the agent silently disappears from lists — observed. Flagship (via
-`/models`) for the `ews-specialist` subagent and for the layout-heavy tasks
-the plan names. `security-reviewer` inherits the session model —
-do not pin a `model:` in its file (same silent-disappearance failure mode).
+and the agent silently disappears from lists — observed. `ews-specialist` is
+the only deliberate exception: it pins the flagship `zai/glm-5.3`, because the
+EWS XML schema is the riskiest part of the project. Every other subagent
+(`security-reviewer` included) inherits the session model — do not pin a
+`model:` in its file (same silent-disappearance failure mode). Flagship in the
+main session only on an explicit user decision (layout-heavy tasks).
 
 ## Handoff file
 

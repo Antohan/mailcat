@@ -66,15 +66,24 @@ if gi:
     steps = gi.get("steps")
     check("steps go-implementer >= 120", isinstance(steps, int) and steps >= 120,
           "steps=%s" % steps)
-check("агент ews-specialist загружен", "ews-specialist" in agents)
+ews = agents.get("ews-specialist")
+check("агент ews-specialist загружен", ews is not None)
+if ews:
+    eff = last_effect(ews, "edit")
+    check("ews-specialist без права правки", eff == "deny",
+          "эффективное право edit: %s" % eff)
+    eff = last_effect(ews, "shell")
+    check("ews-specialist без права shell", eff == "deny",
+          "эффективное право shell: %s" % eff)
+    eff = last_effect(ews, "webfetch")
+    check("ews-specialist без права webfetch", eff == "deny",
+          "эффективное право webfetch: %s" % eff)
 sr = agents.get("security-reviewer")
 check("агент security-reviewer загружен", sr is not None)
 if sr:
     eff = last_effect(sr, "edit")
     check("security-reviewer без права правки", eff == "deny",
           "эффективное право edit: %s" % eff)
-# shortcut: правку ews-specialist проверяет A-6, после её запрета добавить сюда,
-# как у security-reviewer — сегодня консультант править ещё может.
 
 sys.exit(1 if failed else 0)
 ' || failed=1
