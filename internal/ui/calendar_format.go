@@ -163,7 +163,7 @@ func responseStatus(responseType string) (mark string, color tcell.Color) {
 	}
 }
 
-// AgendaSegments — блок повестки выбранного дня в стиле списка писем
+// agendaSegments — блок повестки выбранного дня в стиле списка писем
 // (V-34/V-51): две строки — «14:30–15:00 ✓ Тема» (время и тема primary,
 // статус — роль ответа) и «(Место)» muted. Прошедшая встреча (End < now) — всё
 // muted; выбранная — onAccent: на акцентной заливке primary тёмный, а ★ совпал
@@ -175,7 +175,7 @@ func responseStatus(responseType string) (mark string, color tcell.Color) {
 // рисуется собственным Draw через tcell, теги там не разбираются. Поэтому
 // tview.Escape не нужен, обязателен только Sanitize (SECURITY.md §3).
 // Не делать: возврат к tview.List и тегам — перенос строк тогда невозможен.
-func AgendaSegments(ev mail.Event, reg *mail.LinkRegistry, selected bool, now time.Time) [][]agendaSeg {
+func agendaSegments(ev mail.Event, reg *mail.LinkRegistry, selected bool, now time.Time) [][]agendaSeg {
 	subject, muted := colorTextPrimary, colorTextSecondary
 	mark, status := responseStatus(ev.MyResponseType)
 	switch {
@@ -219,11 +219,11 @@ func NearestEvent(events []mail.Event, now time.Time) (mail.Event, bool) {
 	return best, found
 }
 
-// NearestLine — строка «Ближайшее: 14:30–15:00 Тема» под сеткой (V-53):
+// nearestLine — строка «Ближайшее: 14:30–15:00 Тема» под сеткой (V-53):
 // подпись muted, время и тема primary; если будущих событий нет — muted
 // «Больше событий нет». Тема — через Sanitize: сегменты рисуются tcell,
-// tview.Escape не нужен (как у AgendaSegments).
-func NearestLine(events []mail.Event, now time.Time) []agendaSeg {
+// tview.Escape не нужен (как у agendaSegments).
+func nearestLine(events []mail.Event, now time.Time) []agendaSeg {
 	muted := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
 	ev, ok := NearestEvent(events, now)
 	if !ok {

@@ -21,7 +21,7 @@ var agendaNow = time.Now
 
 // agendaSeg — кусок строки повестки одним стилем. Текст уже прошёл Sanitize;
 // tview.Escape не применяется: сегменты рисуются через tcell, а не парсятся
-// как разметка tview (WHY у AgendaSegments).
+// как разметка tview (WHY у agendaSegments).
 type agendaSeg struct {
 	text  string
 	style tcell.Style
@@ -227,7 +227,7 @@ const emptyAgendaText = "Встреч нет"
 // Draw рисует видимые строки повестки: выбранный блок залит акцентом на всю
 // ширину; пустой день — muted «Встреч нет».
 func (l *agendaList) Draw(screen tcell.Screen) {
-	l.Box.DrawForSubclass(screen, l)
+	l.DrawForSubclass(screen, l)
 	x, y, w, h := l.GetInnerRect()
 	if w <= 0 || h <= 0 {
 		return

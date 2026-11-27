@@ -210,7 +210,7 @@ func New(cfg *config.Config, client *ews.Client, log *slog.Logger) *App {
 	details := tview.NewTextView().
 		SetWrap(true).
 		SetScrollable(true).
-		SetDynamicColors(true) // RD-5: жирная тема/линия; сторонний текст — только через tview.Escape в showDetails
+		SetDynamicColors(true) // RD-5: жирная тема/линия; сторонний текст — только через tview.Escape в messageView
 	details.SetBorder(true).SetTitle(" Письмо ")
 	details.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Key() {
@@ -473,27 +473,9 @@ func (a *App) closeModals(focus tview.Primitive) {
 	a.tapp.SetFocus(focus)
 }
 
-// showDetails выводит полное письмо на экран деталей (страница поверх почты).
-// Тело проходит через реестр ссылок ([N] host, ⚠, [IDN]) и санитайзер;
-// клавиши g/v открывают модалы ссылок и вложений.
-func (a *App) showDetails(m mail.Message) {
-	tail, links := messageView(m)
-	a.currentLinks = links
-	a.currentAttachments = m.Attachments
-
-	// Тело кэшируется: DrawFunc на resize пересобирает только карточку шапки.
-	a.detailsMsg = m
-	a.detailsTail = tail
-	a.setDetailsText(readWidth - 2) // широкая колонка; DrawFunc поправит узкую
-	a.detail.ScrollToBeginning()
-	a.pages.SwitchToPage(pageDetails)
-	a.tapp.SetFocus(a.detail)
-	a.showHint()
-}
-
 // setDetailsText собирает текст страницы деталей: карточка шапки (V-5) под
 // текущую ширину колонки + закэшированный хвост (тело, вложения). Зовётся из
-// showDetails и из DrawFunc при resize — зачем так, см. WHY у DrawFunc.
+// DrawFunc при resize — зачем так, см. WHY у DrawFunc.
 func (a *App) setDetailsText(inner int) {
 	a.detailsW = inner
 	a.detail.SetText(FormatMessageCard(a.detailsMsg, inner) + "\n" + a.detailsTail)
@@ -666,17 +648,17 @@ func formatHint(segs []hintSeg) string {
 	return b.String()
 }
 
-// formatHintFit — подсказка под ширину max: необязательные сегменты (opt)
-// снимаются с конца, пока текст не влезет; max <= 0 — ширина неизвестна,
+// formatHintFit — подсказка под ширину width: необязательные сегменты (opt)
+// снимаются с конца, пока текст не влезет; width <= 0 — ширина неизвестна,
 // отдаём полный набор. Если влезть не удалось — возвращаем что есть (край
 // обрежется, но обязательные клавиши останутся).
-func formatHintFit(segs []hintSeg, max int) string {
-	if max <= 0 {
+func formatHintFit(segs []hintSeg, width int) string {
+	if width <= 0 {
 		return formatHint(segs)
 	}
 	for {
 		text := formatHint(segs)
-		if tview.TaggedStringWidth(text) <= max {
+		if tview.TaggedStringWidth(text) <= width {
 			return text
 		}
 		drop := -1

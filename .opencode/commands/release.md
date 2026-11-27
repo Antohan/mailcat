@@ -7,6 +7,8 @@ You are running the release procedure for the current iteration. The release
 is a human decision: your job is the checklist and the mechanics; the merge
 happens only after the user explicitly confirms. If any precondition fails —
 stop and report; do not fix things on your own inside a release session.
+This is not a task session: do not take a task from the plan and do not edit
+code — the only writes are the release records below.
 
 1. Preconditions (all must hold, otherwise stop and report what is missing):
    - `docs/CURRENT` names an active plan (not `none`); branch is `dev`, working
@@ -14,17 +16,33 @@ stop and report; do not fix things on your own inside a release session.
    - every task checkbox in that plan is ticked and every DoD point of the
      plan is met;
    - `/check` (`./scripts/check.sh`) is green;
+   - `./scripts/release-checks.sh` is green (`govulncheck`, `gosec`); a missing
+     tool is a FAIL that prints its install command — not a skip;
+   - `./scripts/env-check.sh` is green (agents, commands, skills, plugin loaded);
    - `CHANGELOG.md` has an entry for every task of the plan.
 2. The manual smoke scenarios (`docs/TESTING.md §5`) need VPN and the live
-   server — ask the user whether they have been run for this iteration and
-   wait for the answer. Do not proceed on an assumption.
-3. Spawn `security-reviewer` over the iteration range: from the last release
-   (`git log main -1 --format=%h`) to `dev`. A verdict containing КРИТИЧНО
-   findings stops the release. If the subagent is not in this session's list,
-   run the same review through a general subagent — give it pointers only
-   (`docs/SECURITY.md`, invariants in `HANDOFF.md → Не трогать`), require
-   read-only behaviour and the ≤10-line verdict, and mark the final report
-   «ревью деградировано: general вместо security-reviewer».
+   server, and visual changes need the user's «ок» — ask the user which were
+   run for this iteration and wait for the answer. Do not proceed on an
+   assumption.
+3. Write the iteration diff to files — the reviewer has no shell and gets no
+   new rights — from the last release (`git log main -1 --format=%h`) to `dev`:
+   `git diff <from>..dev > "$TMPDIR/mailcat-review.diff"` and
+   `git diff --stat <from>..dev > "$TMPDIR/mailcat-review.stat"`.
+   Spawn `security-reviewer` and give it the two paths, not the file contents.
+   The verdict must begin with the coverage line «файлов в диапазоне N,
+   проверено M», where N is the number of files in `--stat`; M < N means the
+   review is not accepted — re-run it, do not proceed.
+   The release stops on every КРИТИЧНО and ВАЖНО finding: a violated invariant
+   is ВАЖНО, so it stops too. The only exception is an explicit user decision
+   in this release session, recorded in the CHANGELOG entry (step 5).
+   If `security-reviewer` is not in this session's agent list — stop and
+   suggest `./scripts/env-check.sh`. A fallback review through a general
+   subagent is allowed only with the user's explicit consent; mark the final
+   report «ревью деградировано: general вместо security-reviewer» and record
+   it in the CHANGELOG entry.
+   This is the iteration's single security review: a security task reviewed its
+   own diff before its commit (AGENTS.md, «Work»), so no per-task review runs
+   here.
 4. Run `./scripts/token-report.py` and keep its three headline numbers for the
    final report: sessions cut by the step limit, sessions per task, cost per
    task. «Отчёт недоступен» is reported as is — it does not block the release.
@@ -35,7 +53,10 @@ stop and report; do not fix things on your own inside a release session.
      the user names one;
    - rewrite `docs/HANDOFF.md`: «Сделано» = the released iteration, «Дальше» =
      the next plan or «план не составлен», keep «Открыто» and «Не трогать»;
-   - commit `docs: релиз <итерация> — план заморожен, CURRENT=none`;
+   - add the release entry to `CHANGELOG.md`: the smoke scenarios passed by
+     number, the visual confirmations, the review coverage line and every
+     exception with the user's decision;
+   - commit `docs: релиз <итерация> — план заморожен, CURRENT обновлён`;
    - `git checkout main` → `git merge --no-ff dev -m "Release: <итерация> —
      <тема>"` → `git switch dev`. Checkout and merge are permission-guarded
      (ask) — the prompts are the confirmation. Never push: pushing is the

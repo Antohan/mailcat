@@ -73,15 +73,41 @@ func Defaults() *Config {
 // вызовом Validate, чтобы UI/doctor могли показать все проблемы сразу.
 func Load(path string) (*Config, error) {
 	path = ExpandHome(path)
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- путь конфига задаёт пользователь
 	if err != nil {
 		return nil, fmt.Errorf("не удалось прочитать конфигурацию %s: %w", path, err)
 	}
 	cfg := Defaults()
-	if err := toml.Unmarshal(raw, cfg); err != nil {
+	md, err := toml.Decode(string(raw), cfg)
+	if err != nil {
 		return nil, fmt.Errorf("ошибка разбора TOML в %s: %w", path, err)
 	}
+	// WHY: неизвестный ключ — не ошибка парсера, но молча отключает настройку:
+	// опечатка в org_domains стирает метку [ВНЕШН] без сообщения.
+	// Not to do: игнорировать Undecoded — тихая потеря настройки дороже отказа.
+	if keys := unknownKeys(md); len(keys) > 0 {
+		return nil, fmt.Errorf("неизвестные ключи в %s: %s — сверьтесь с config.example.toml",
+			path, strings.Join(keys, ", "))
+	}
 	return cfg, nil
+}
+
+// unknownKeys — ключи, которых нет в Config. Родительская таблица
+// побеждает ключи внутри неё, чтобы [foo] не печатался как «foo, foo.bar».
+func unknownKeys(md toml.MetaData) []string {
+	undecoded := md.Undecoded()
+	seen := make(map[string]bool, len(undecoded))
+	for _, k := range undecoded {
+		seen[k.String()] = true
+	}
+	out := make([]string, 0, len(undecoded))
+	for _, k := range undecoded {
+		if len(k) > 1 && seen[k[:len(k)-1].String()] {
+			continue
+		}
+		out = append(out, k.String())
+	}
+	return out
 }
 
 // InternalDomains — эффективный список внутренних доменов: org_domains,
@@ -122,8 +148,17 @@ func (c *Config) Validate() error {
 	if c.PageSize <= 0 {
 		return fmt.Errorf("page_size должен быть больше нуля, получено %d", c.PageSize)
 	}
+	if c.PageSize > 500 {
+		return fmt.Errorf("page_size: максимум 500, получено %d", c.PageSize)
+	}
 	if c.MaxAttachmentMB <= 0 {
 		return fmt.Errorf("max_attachment_mb должен быть больше нуля, получено %d", c.MaxAttachmentMB)
+	}
+	// WHY: 380 МиБ в base64 не влезает в потолок ответа 512 МиБ
+	// (internal/ews/soap.go, maxResponseBytes) — скачивание упадёт непонятно.
+	// Not to do: поднимать 380, не пересчитав потолок ответа EWS.
+	if c.MaxAttachmentMB > 380 {
+		return fmt.Errorf("max_attachment_mb: максимум 380 — большее вложение в base64 не поместится в ответ Exchange, получено %d", c.MaxAttachmentMB)
 	}
 	if c.UI.Language != "ru" {
 		return fmt.Errorf("ui.language: MVP поддерживает только \"ru\", получено %q", c.UI.Language)

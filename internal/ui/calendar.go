@@ -308,7 +308,7 @@ func (s *calendarScreen) render() {
 	// V-53: ближайшее будущее месяца — пересчёт при каждой загрузке/смене
 	// месяца (render зовётся после ответа и смены месяца); часы — agendaNow,
 	// чтобы тесты не зависели от даты прогона.
-	s.gridFooter.SetSegments(NearestLine(s.events, agendaNow()))
+	s.gridFooter.SetSegments(nearestLine(s.events, agendaNow()))
 	// Выбор: сегодняшний день месяца, иначе 1-е — onSelect сам обновит повестку.
 	pick := 1
 	if inMonth {
@@ -318,7 +318,7 @@ func (s *calendarScreen) render() {
 }
 
 // onDaySelected обновляет повестку при движении по сетке (UI-4): блоки
-// событий собирает AgendaSegments (маркеры статуса + реестр ссылок из
+// событий собирает agendaSegments (маркеры статуса + реестр ссылок из
 // «Места»), пустой день — muted-заглушка «Встреч нет» без выбора.
 func (s *calendarScreen) onDaySelected(row, col int) {
 	if row < 0 || row >= len(s.grid.cells) || col < 0 || col >= 7 {
@@ -339,7 +339,7 @@ func (s *calendarScreen) onDaySelected(row, col int) {
 }
 
 // restyleAgenda пересобирает блоки повестки под выбор sel (V-34/V-42/V-51):
-// две строки каждого события через AgendaSegments (время+тема / место),
+// две строки каждого события через agendaSegments (время+тема / место),
 // выбранное — onAccent, прошедшее — muted. Реестр
 // ссылок новый, но порядок тот же — маркеры [N] не меняются; прокрутка не
 // сбрасывается (строки те же, меняются только стили).
@@ -351,7 +351,7 @@ func (s *calendarScreen) restyleAgenda(sel int) {
 	now := agendaNow()
 	items := make([][][]agendaSeg, len(s.dayEvents))
 	for i, ev := range s.dayEvents {
-		items[i] = AgendaSegments(ev, reg, i == sel, now)
+		items[i] = agendaSegments(ev, reg, i == sel, now)
 	}
 	s.dayLinks = reg.List()
 	s.agenda.SetItems(items, sel)
@@ -416,11 +416,11 @@ func (f *calendarFooter) SetSegments(segs []agendaSeg) { f.segs = segs }
 // Draw печатает сегменты с отступом 1 (как содержимое рамки сетки) и обрезает
 // по ширине колонки: строка всегда одна.
 func (f *calendarFooter) Draw(screen tcell.Screen) {
-	f.Box.DrawForSubclass(screen, f)
+	f.DrawForSubclass(screen, f)
 	x, y, w, _ := f.GetInnerRect()
 	cx := x + 1
 	for _, seg := range f.segs {
-		for _, r := range []rune(seg.text) {
+		for _, r := range seg.text {
 			if cx >= x+w {
 				return
 			}

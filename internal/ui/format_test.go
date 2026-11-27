@@ -11,8 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/rivo/tview"
 	"mailcat/internal/mail"
+
+	"github.com/rivo/tview"
 )
 
 var orgDomains = []string{"company.example"}
@@ -47,7 +48,7 @@ func TestFormatMessageListItem(t *testing.T) {
 		Received: recv,
 		From:     mail.Address{Name: "Иванов И.", Email: "ivanov@partner.tld"},
 	}
-	row := FormatMessageListItem(m, orgDomains, now, false)
+	row := FormatMessageListItem(m, orgDomains, now, false, 0)
 	if len(row) != 3 {
 		t.Fatalf("частей %d, хочу 3: %v", len(row), row)
 	}
@@ -75,7 +76,7 @@ func TestFormatMessageListItemFallback(t *testing.T) {
 		{mail.Address{Email: "@host"}, "@host"}, // пустая локальная часть — адрес целиком
 	}
 	for _, tc := range cases {
-		row := FormatMessageListItem(mail.MessageSummary{From: tc.from}, orgDomains, now, false)
+		row := FormatMessageListItem(mail.MessageSummary{From: tc.from}, orgDomains, now, false, 0)
 		if !strings.HasSuffix(row[0], tc.want) {
 			t.Errorf("отправитель %v = %q, хочу суффикс %q", tc.from, row[0], tc.want)
 		}
@@ -114,7 +115,7 @@ func TestFormatMessageListItemSanitized(t *testing.T) {
 		Subject: "плохая\x1b]8;;http://evil\x1b\\тема",
 		From:    mail.Address{Email: "a@b.c"},
 	}
-	row := FormatMessageListItem(m, orgDomains, now, false)
+	row := FormatMessageListItem(m, orgDomains, now, false, 0)
 	if !strings.HasSuffix(row[2], "плохаятема") {
 		t.Errorf("тема не санитизирована: %q", row[2])
 	}
@@ -444,8 +445,8 @@ func TestFormatMessageListItemRepeat(t *testing.T) {
 		Received: time.Date(2026, 11, 20, 10, 0, 0, 0, time.Local),
 		From:     mail.Address{Name: "Петров П.", Email: "petrov@partner.tld"},
 	}
-	first := FormatMessageListItem(m, orgDomains, now, false)
-	again := FormatMessageListItem(m, orgDomains, now, true)
+	first := FormatMessageListItem(m, orgDomains, now, false, 0)
+	again := FormatMessageListItem(m, orgDomains, now, true, 0)
 	if !strings.HasSuffix(first[0], "Петров П.") {
 		t.Errorf("первое письмо серии без имени: %q", first[0])
 	}

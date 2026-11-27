@@ -121,7 +121,7 @@ func TestRunTUI(t *testing.T) {
 func TestRunTUIKeychainMissing(t *testing.T) {
 	home := fakeHome(t)
 	writeConfig(t, home, validConfig)
-	tr := &testRuntime{passErr: errors.New("security: SecKeychainSearch ...")}
+	tr := &testRuntime{passErr: errors.New("security: SecKeychainSearch failed")}
 	var out, errb bytes.Buffer
 	code := run([]string{"run"}, &out, &errb, tr.runtime())
 	if code != 1 {

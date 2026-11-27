@@ -58,6 +58,51 @@ func TestDoctorAllOK(t *testing.T) {
 	}
 }
 
+// TestDoctorCAPerms: ca_path шире 0600 — предупреждение на шаге 2, 0600 — нет.
+func TestDoctorCAPerms(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeCfg(t, home)
+	ca := filepath.Join(home, "ca.pem")
+	if err := os.WriteFile(ca, []byte("cert"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadCfg(t, home)
+	cfg.CAPath = ca
+	var out bytes.Buffer
+	if code := runDoctor(&out, cfg, okDeps()); code != 0 {
+		t.Fatalf("code = %d, вывод: %s", code, out.String())
+	}
+	if strings.Contains(out.String(), "chmod 600") {
+		t.Errorf("предупреждение при правах 0600: %s", out.String())
+	}
+	if err := os.Chmod(ca, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if code := runDoctor(&out, cfg, okDeps()); code != 0 {
+		t.Fatalf("code = %d, вывод: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "chmod 600") {
+		t.Errorf("нет предупреждения о правах CA: %s", out.String())
+	}
+}
+
+// errWriter ломается на первой записи — закрытый stderr или полный диск.
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write: broken pipe") }
+
+// TestDoctorWriteError: отчёт не записался — код 1, а не «всё OK».
+func TestDoctorWriteError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeCfg(t, home)
+	if code := runDoctor(errWriter{}, loadCfg(t, home), okDeps()); code != 1 {
+		t.Fatalf("code = %d, хочу 1", code)
+	}
+}
+
 // TestDoctorVPN: TCP недоступен — подсказка про VPN, код 1, шаги 2–4 не идут.
 func TestDoctorVPN(t *testing.T) {
 	home := t.TempDir()
@@ -130,7 +175,7 @@ func TestDoctorAccessDenied(t *testing.T) {
 	writeCfg(t, home)
 	deps := okDeps()
 	deps.findFolders = func(context.Context, *ews.Client) ([]ews.Folder, error) {
-		return nil, &ews.EWSError{Code: "ErrorAccessDenied"}
+		return nil, &ews.ResponseError{Code: "ErrorAccessDenied"}
 	}
 	var out bytes.Buffer
 	code := runDoctor(&out, loadCfg(t, home), deps)
@@ -139,6 +184,51 @@ func TestDoctorAccessDenied(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "ИТ-отдел") {
 		t.Errorf("нет подсказки про ИТ-отдел: %s", out.String())
+	}
+}
+
+// TestDoctorSanitizesErrors: escape-последовательность в тексте ошибки
+// (сеть, TLS, EWS) не доходит до терминала (SECURITY.md §3).
+func TestDoctorSanitizesErrors(t *testing.T) {
+	const evil = "boom \x1b]8;;http://evil\x1b\\text"
+	cases := []struct {
+		name string
+		mod  func(*doctorDeps)
+		hint string // подсказка после ошибки должна уцелеть
+	}{
+		{"сеть", func(d *doctorDeps) {
+			d.dialTCP = func(string) error { return errors.New(evil) }
+		}, "VPN"},
+		{"TLS", func(d *doctorDeps) {
+			d.tlsHandshake = func(string, string) error {
+				return &ews.TLSProbeError{CertProblem: true, Err: errors.New(evil)}
+			}
+		}, "ca_path"},
+		{"Keychain", func(d *doctorDeps) {
+			d.client = func(*config.Config) (*ews.Client, error) { return nil, errors.New(evil) }
+		}, ""},
+		{"EWS", func(d *doctorDeps) {
+			d.findFolders = func(context.Context, *ews.Client) ([]ews.Folder, error) {
+				return nil, errors.New(evil)
+			}
+		}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			writeCfg(t, home)
+			deps := okDeps()
+			tc.mod(&deps)
+			var out bytes.Buffer
+			runDoctor(&out, loadCfg(t, home), deps)
+			if strings.Contains(out.String(), "\x1b") {
+				t.Errorf("ESC в выводе: %q", out.String())
+			}
+			if tc.hint != "" && !strings.Contains(out.String(), tc.hint) {
+				t.Errorf("потеряна подсказка %q: %s", tc.hint, out.String())
+			}
+		})
 	}
 }
 

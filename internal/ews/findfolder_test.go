@@ -56,7 +56,7 @@ func TestFindFoldersParse(t *testing.T) {
 	}
 }
 
-// TestFindFoldersResponseError: ResponseClass="Error" → *EWSError с кодом
+// TestFindFoldersResponseError: ResponseClass="Error" → *ResponseError с кодом
 // из ответа (EWS-REFERENCE.md §9).
 func TestFindFoldersResponseError(t *testing.T) {
 	doc := []byte(`<?xml version="1.0" encoding="utf-8"?>
@@ -80,11 +80,11 @@ func TestFindFoldersResponseError(t *testing.T) {
 	}
 	_, err := resp.result()
 	if err == nil {
-		t.Fatal("хочу EWSError")
+		t.Fatal("хочу ResponseError")
 	}
-	var ewsErr *EWSError
+	var ewsErr *ResponseError
 	if !errors.As(err, &ewsErr) {
-		t.Fatalf("ошибка %v (%T), хочу *EWSError", err, err)
+		t.Fatalf("ошибка %v (%T), хочу *ResponseError", err, err)
 	}
 	if ewsErr.Code != "ErrorAccessDenied" {
 		t.Errorf("Code = %q, хочу ErrorAccessDenied", ewsErr.Code)

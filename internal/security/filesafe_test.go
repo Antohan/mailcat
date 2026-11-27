@@ -4,6 +4,7 @@ package security
 // фильтрация символов, длина, уникальность в каталоге.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,12 @@ func TestSafeFileName(t *testing.T) {
 		{"", "attachment"},
 		{".", "attachment"},
 		{"..", "attachment"},
+		{"...", "attachment"},
+		{".bashrc", "bashrc"},
+		{". .", "attachment"},
+		{". .bashrc", "bashrc"},
+		{".. .x.txt", "x.txt"},
+		{"... .bashrc", "bashrc"},
 	}
 	for _, tc := range cases {
 		if got := SafeFileName(tc.in); got != tc.want {
@@ -54,13 +61,13 @@ func TestCreateUnique(t *testing.T) {
 	}
 	st1, err := f1.Stat()
 	if err != nil {
-		f1.Close()
+		_ = f1.Close()
 		t.Fatal(err)
 	}
 	if _, err := f1.Write([]byte("x")); err != nil {
 		t.Errorf("файл не открыт на запись: %v", err)
 	}
-	f1.Close()
+	_ = f1.Close()
 	if p1 != filepath.Join(dir, "report (1).pdf") {
 		t.Errorf("первый конфликт = %q", p1)
 	}
@@ -72,7 +79,7 @@ func TestCreateUnique(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f2.Close()
+	_ = f2.Close()
 	if p2 != filepath.Join(dir, "report (2).pdf") {
 		t.Errorf("второй конфликт = %q", p2)
 	}
@@ -81,15 +88,34 @@ func TestCreateUnique(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f3.Close()
+	_ = f3.Close()
 	if p3 != filepath.Join(dir, "free.txt") {
 		t.Errorf("свободное имя = %q", p3)
 	}
 
 	// Несуществующий каталог — ошибка, а не паника/тишина.
 	if f, _, err := CreateUnique(filepath.Join(dir, "нет"), "a.txt"); err == nil {
-		f.Close()
+		_ = f.Close()
 		t.Errorf("нет ошибки для отсутствующего каталога")
+	}
+}
+
+// TestCreateUniqueExhausted: после 10 000 конфликтов имён — ошибка, а не
+// бесконечный перебор.
+func TestCreateUniqueExhausted(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{"report.pdf"}
+	for i := 1; i < maxUniqueAttempts; i++ {
+		names = append(names, fmt.Sprintf("report (%d).pdf", i))
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f, _, err := CreateUnique(dir, "report.pdf"); err == nil {
+		_ = f.Close()
+		t.Errorf("нет ошибки после %d конфликтов", maxUniqueAttempts)
 	}
 }
 

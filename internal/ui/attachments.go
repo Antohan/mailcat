@@ -6,7 +6,10 @@ package ui
 // опасные расширения — предупреждение перед открытием (SECURITY.md §5).
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"os"
 	"path/filepath"
 
 	"github.com/gdamore/tcell/v2"
@@ -81,7 +84,7 @@ func (a *App) confirmDangerous(name string, onYes func()) {
 	modal := tview.NewModal().
 		SetText(dangerousConfirmText(name)).
 		AddButtons([]string{"Открыть (риск)", "Отмена"}).
-		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		SetDoneFunc(func(buttonIndex int, _ string) {
 			a.pages.RemovePage(pageConfirm)
 			if buttonIndex == 0 {
 				onYes()
@@ -92,6 +95,31 @@ func (a *App) confirmDangerous(name string, onYes func()) {
 		})
 	a.pages.AddPage(pageConfirm, modal, true, true)
 	a.showHint()
+}
+
+// writeAttachment пишет данные во вложение и закрывает файл. При ошибке
+// записи или закрытия недописанный файл удаляется: в загрузках не остаётся
+// обрезанного вложения, неотличимого от целого.
+// WHY: ошибки Close и Remove объединяются с первичной — иначе на сбойном
+// диске хвост файла остаётся молча; errors.Join сохраняет все причины.
+// Not to do: удалять до Close — файл ещё открыт, Remove вернёт ошибку.
+func writeAttachment(path string, w io.WriteCloser, data []byte) error {
+	if _, err := w.Write(data); err != nil {
+		return errors.Join(err, w.Close(), removePartial(path, w))
+	}
+	if err := w.Close(); err != nil {
+		return errors.Join(err, removePartial(path, w))
+	}
+	return nil
+}
+
+// removePartial удаляет файл, который закрыл w. Если писатель сообщает другое
+// имя, удаление пропускается: чужой файл не сносится из-за ошибки в пути.
+func removePartial(path string, w io.WriteCloser) error {
+	if n, ok := w.(interface{ Name() string }); ok && n.Name() != path {
+		return fmt.Errorf("недописанный файл %s не удалён: писатель пишет в %s", path, n.Name())
+	}
+	return os.Remove(path)
 }
 
 // saveAttachment скачивает вложение (с проверкой лимита) и кладёт в каталог
@@ -121,17 +149,7 @@ func (a *App) saveAttachment(att mail.Attachment, open bool) {
 			a.tapp.QueueUpdateDraw(func() { a.showError(err) })
 			return
 		}
-		writeErr := func(e error) {
-			f.Close()
-			a.tapp.QueueUpdateDraw(func() {
-				a.showError(fmt.Errorf("запись вложения %s: %w", filepath.Base(path), e))
-			})
-		}
-		if _, err := f.Write(data); err != nil {
-			writeErr(err)
-			return
-		}
-		if err := f.Close(); err != nil {
+		if err := writeAttachment(path, f, data); err != nil {
 			a.tapp.QueueUpdateDraw(func() {
 				a.showError(fmt.Errorf("запись вложения %s: %w", filepath.Base(path), err))
 			})

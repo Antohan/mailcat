@@ -2,13 +2,15 @@
 
 You are building **mailcat** — a read-only client for corporate mail and calendar
 (on-premises Microsoft Exchange) for macOS: Go + TUI (tview). Work follows the
-tasks of the current iteration plan — the path on the first line of
-`docs/CURRENT`. `none` there means no active plan: say so and stop. Every other
+tasks of the current iteration plan — the path on the first non-comment line of
+`docs/CURRENT` (`#` lines and blanks are skipped, as `close-task.sh` parses it).
+`none` there means no active plan: say so and stop. Every other
 plan in `docs/` is finished history — do not open or modify it.
 
 **Language.** Everything the user sees is Russian: replies, UI strings, errors,
 status lines, code comments. This file and the other agent files are written in
-English only to spend fewer tokens — that is not permission to answer in English.
+English by team choice — a measurement did not confirm token savings. That is
+not permission to answer in English.
 
 ## Where to look (one file at a time)
 
@@ -93,22 +95,26 @@ framework without strong reasons (golden rule 6 still applies).
 
 ## Work
 
-1. Open a session with `/stage <task>` (e.g. `/stage UI-1`): it loads the
-   iteration plan and the task.
-2. All work happens on the `dev` branch. `main` is release-only: it receives
+1. Open a session with `/stage <task>` (e.g. `/stage UI-1`). Entry checks, in
+   this order: `docs/CURRENT` names an active plan, the branch is `dev` with a
+   clean tree (`git status`), the task has exactly one spec — any failure stops
+   the session without touching the tree.
+2. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
+   implementing. Implement, then run `/check` (`./scripts/check.sh`): gofmt,
+   vet, build, test. Red — fix the cause.
+3. Security task: `security-reviewer` reviews the task's own diff before the
+   commit; fix the findings and re-run `/check`.
+4. One task = one code commit (`<iter>:<ID>: short description`; the prefix
+   is in the plan) plus a CHANGELOG.md entry. Then rewrite `docs/HANDOFF.md`
+   and close the task with `./scripts/close-task.sh <ID>`: it ticks the
+   checkbox in the plan and commits the journal, the plan and the handoff.
+   Never tick the checkbox or commit these three by hand.
+5. The order above is one sequence — entrance, consultation, implementation,
+   `/check`, security review, code commit, journal, handoff, close — no step
+   moves.
+6. All work happens on the `dev` branch. `main` is release-only: it receives
    a finished iteration as a single merge commit — a release action performed
    on explicit user request, never inside a task session.
-3. One task = one code commit (`<iter>:<ID>: short description`; the prefix
-   is in the plan) plus a CHANGELOG.md entry.
-4. Finish with `/check` (`./scripts/check.sh`): gofmt, vet, build, test. Red —
-   fix the cause.
-5. Close the task with `./scripts/close-task.sh <ID>` once the HANDOFF is
-   rewritten: it ticks the checkbox in the plan and commits the journal, the
-   plan and the handoff. Never tick the checkbox or commit these three by
-   hand.
-6. EWS/SOAP/XML work: consult the `ews-specialist` subagent before
-   implementing. Security-relevant work: request `security-reviewer` after —
-   once per stage.
 7. New tasks enter an iteration plan only as specs — touched files/symbols and
    expected behavior written BEFORE the coding session, in the fixed format of
    `docs/PLAN-TEMPLATE.md`. A task without pointers to code costs exploration
@@ -145,9 +151,9 @@ commands. The report is: what changed, what was verified, what is next.
 Ask for a verdict of at most ten lines. A subagent that reads everything costs
 more than doing the work yourself. Spawn one only if the task touches EWS/XML
 (`ews-specialist`) or security (`security-reviewer`) — never for routine edits.
-Security review runs on Flash (the checklist is mechanical), once per
-stage/iteration over a commit range, not per task; `ews-specialist` stays on
-the flagship.
+The security reviewer inherits the session model: a security task's diff is
+reviewed before its commit, an iteration gets one review of its commit range at
+release — not one per task; `ews-specialist` stays on its pinned model.
 
 **Stable prefix = cache hits.** Do not edit, in the middle of a coding
 session, a file read at its start — `AGENTS.md`, `SECURITY.md`, references
@@ -164,10 +170,12 @@ times.
 **Models.** Flash by default — pinned as `deepseek/deepseek-flash` (deepseek
 provider, pay-as-you-go: авторизуйте `opencode auth login` → DeepSeek до
 первой сессии). The provider prefix is mandatory: a bare id does not resolve
-and the agent silently disappears from lists — observed. Flagship (via
-`/models`) for the `ews-specialist` subagent and for the layout-heavy tasks
-the plan names. `security-reviewer` inherits the session model —
-do not pin a `model:` in its file (same silent-disappearance failure mode).
+and the agent silently disappears from lists — observed. `ews-specialist` is
+the only deliberate exception: it pins the flagship `zai/glm-5.3`, because the
+EWS XML schema is the riskiest part of the project. Every other subagent
+(`security-reviewer` included) inherits the session model — do not pin a
+`model:` in its file (same silent-disappearance failure mode). Flagship in the
+main session only on an explicit user decision (layout-heavy tasks).
 
 ## Handoff file
 

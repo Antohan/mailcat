@@ -1,7 +1,7 @@
 package ui
 
 // Тесты санитизации на границе UI по итогам security-ревью этапа 2:
-// 1) текст ошибок EWS (EWSError.MessageText/faultstring) — серверный,
+// 1) текст ошибок EWS (ResponseError.MessageText/faultstring) — серверный,
 //    до терминала только через Sanitize;
 // 2) строки для tview.Table/List — tview.Escape (теги [red]/["region"]
 //    интерпретируются этими виджетами безусловно).
@@ -65,7 +65,7 @@ func TestFormatMessageListItemEscaped(t *testing.T) {
 		Subject: "[red]СРОЧНО[-] проверка",
 		From:    mail.Address{Email: `["evil"]@x.example`},
 	}
-	row := FormatMessageListItem(m, []string{"company.example"}, time.Now(), false)
+	row := FormatMessageListItem(m, []string{"company.example"}, time.Now(), false, 0)
 	if !strings.Contains(row[2], "[red[]") {
 		t.Errorf("тег [red] в теме не экранирован: %q", row[2])
 	}

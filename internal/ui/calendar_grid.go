@@ -76,22 +76,22 @@ func (g *monthGrid) Move(delta int) {
 	if day < 1 {
 		day = 1
 	}
-	if max := g.maxDay(); day > max {
-		day = max
+	if last := g.maxDay(); day > last {
+		day = last
 	}
 	g.SelectDay(day)
 }
 
 func (g *monthGrid) maxDay() int {
-	max := 0
+	last := 0
 	for _, row := range g.cells {
 		for _, c := range row {
-			if c.InMonth && c.Day > max {
-				max = c.Day
+			if c.InMonth && c.Day > last {
+				last = c.Day
 			}
 		}
 	}
-	return max
+	return last
 }
 
 // gridCellSize — размер ячейки: колонка номеров недель (V-52) и 7 колонок
@@ -139,7 +139,7 @@ func dayAt(px, py, w, h int) (row, col int, ok bool) {
 // colorSelectedBg от линии до линии, «сегодня» — акцентный номер без заливки
 // (V-33, V-39, V-44, V-45).
 func (g *monthGrid) Draw(screen tcell.Screen) {
-	g.Box.DrawForSubclass(screen, g)
+	g.DrawForSubclass(screen, g)
 	x, y, w, h := g.GetInnerRect()
 	if w <= 0 || len(g.cells) == 0 {
 		return

@@ -9,6 +9,8 @@
         { "action": "shell", "resource": "go run*", "effect": "allow" },
         { "action": "shell", "resource": "gofmt*", "effect": "allow" },
         { "action": "shell", "resource": "./scripts/check.sh*", "effect": "allow" },
+        { "action": "shell", "resource": "./scripts/release-checks.sh", "effect": "allow" },
+        { "action": "shell", "resource": "./scripts/env-check.sh*", "effect": "allow" },
         { "action": "shell", "resource": "./scripts/close-task.sh*", "effect": "allow" },
         { "action": "shell", "resource": "./scripts/token-report.py*", "effect": "allow" },
         { "action": "shell", "resource": "git status*", "effect": "allow" },

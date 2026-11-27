@@ -23,8 +23,8 @@ func TestHostInfoPunycode(t *testing.T) {
 		if info.IDN != tc.isIDN {
 			t.Errorf("HostInfoOf(%q).IDN = %v, хочу %v", tc.host, info.IDN, tc.isIDN)
 		}
-		if tc.asciiSub != "" && !containsStr(info.Ascii, tc.asciiSub) {
-			t.Errorf("HostInfoOf(%q).Ascii = %q, хочу подстроку %q", tc.host, info.Ascii, tc.asciiSub)
+		if tc.asciiSub != "" && !containsStr(info.ASCII, tc.asciiSub) {
+			t.Errorf("HostInfoOf(%q).ASCII = %q, хочу подстроку %q", tc.host, info.ASCII, tc.asciiSub)
 		}
 	}
 }
@@ -32,10 +32,10 @@ func TestHostInfoPunycode(t *testing.T) {
 // TestHostInfoFromURL: вариант для полной ссылки берёт хост из URL.
 func TestHostInfoFromURL(t *testing.T) {
 	info := HostInfo("https://xn--80ak6aa92e.com/login")
-	if !info.IDN || info.Ascii != "xn--80ak6aa92e.com" {
+	if !info.IDN || info.ASCII != "xn--80ak6aa92e.com" {
 		t.Errorf("HostInfo(url) = %+v", info)
 	}
-	if got := HostInfo("http://mail.company.example/"); got.IDN || got.Ascii != "mail.company.example" {
+	if got := HostInfo("http://mail.company.example/"); got.IDN || got.ASCII != "mail.company.example" {
 		t.Errorf("HostInfo(url) = %+v", got)
 	}
 }
@@ -47,13 +47,18 @@ func TestIsDangerousExtension(t *testing.T) {
 		"virus.exe", "script.js", "macro.vbs", "ps.ps1", "run.bat", "cmd.cmd",
 		"link.lnk", "page.hta", "screen.scr", "app.jar", "setup.msi",
 		"doc.docm", "sheet.xlsm", "REPORT.PDF.EXE", "Отчёт.exe",
+		"installer.app", "setup.command", "run.tool", "script.scpt",
+		"note.applescript", "flow.workflow", "bundle.pkg", "bundle.mpkg",
+		"disk.dmg", "link.webloc", "link.inetloc", "link.fileloc",
+		"session.terminal", "REPORT.PDF.COMMAND", "отчёт.pdf.command",
+		"INSTALLER.APP", "BUNDLE.PKG", "DISK.DMG",
 	}
 	for _, name := range dangerous {
 		if !IsDangerousExtension(name) {
 			t.Errorf("IsDangerousExtension(%q) = false, хочу true", name)
 		}
 	}
-	safe := []string{"report.pdf", "данные.csv", "photo.jpeg", "archive.zip", "doc.docx", "sheet.xlsx"}
+	safe := []string{"report.pdf", "данные.csv", "photo.jpeg", "image.png", "archive.zip", "doc.docx", "sheet.xlsx"}
 	for _, name := range safe {
 		if IsDangerousExtension(name) {
 			t.Errorf("IsDangerousExtension(%q) = true, хочу false", name)

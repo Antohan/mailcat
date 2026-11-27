@@ -131,6 +131,49 @@ func TestMissingFile(t *testing.T) {
 	}
 }
 
+// TestLoadUnknownKey: опечатка в ключе -> ошибка с именем ключа и подсказкой
+// на config.example.toml, а не молчаливое игнорирование (C-2).
+func TestLoadUnknownKey(t *testing.T) {
+	cases := []struct{ name, body, want string }{
+		{"корневой ключ", "org_domins = [\"company.example\"]\n", "org_domins"},
+		{"ключ секции", "[ui]\nlangauge = \"ru\"\n", "ui.langauge"},
+		{"неизвестная таблица", "[foo]\nbar = 1\n", "foo"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.toml")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("ожидал ошибку, получил nil")
+			}
+			if !contains(err.Error(), tc.want) {
+				t.Errorf("ошибка %q не называет ключ %q", err.Error(), tc.want)
+			}
+			if !contains(err.Error(), "config.example.toml") {
+				t.Errorf("ошибка без подсказки на config.example.toml: %v", err)
+			}
+		})
+	}
+}
+
+// TestLoadLegacyOrgDomain: прежний ключ org_domain — допустимый, не опечатка.
+func TestLoadLegacyOrgDomain(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.toml")
+	if err := os.WriteFile(path, []byte("org_domain = \"company.example\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got := cfg.InternalDomains(); len(got) != 1 || got[0] != "company.example" {
+		t.Errorf("InternalDomains() = %v", got)
+	}
+}
+
 // TestLoadHiddenFolders: [ui] hidden_folders читается списком (iter2 UI-1:
 // техпапки, которые пользователь хочет скрыть полностью).
 func TestLoadHiddenFolders(t *testing.T) {
@@ -163,7 +206,9 @@ func TestValidate(t *testing.T) {
 		{"пустой username", func(c *Config) { c.Username = "" }, "username"},
 		{"server не https", func(c *Config) { c.Server = "http://mail.example" }, "https"},
 		{"page_size ноль", func(c *Config) { c.PageSize = 0 }, "page_size"},
+		{"page_size 501", func(c *Config) { c.PageSize = 501 }, "page_size"},
 		{"max_attachment_mb ноль", func(c *Config) { c.MaxAttachmentMB = 0 }, "max_attachment_mb"},
+		{"max_attachment_mb 381", func(c *Config) { c.MaxAttachmentMB = 381 }, "max_attachment_mb"},
 		{"interval_sec меньше 30", func(c *Config) { c.Notify.IntervalSec = 10 }, "interval_sec"},
 		{"min_importance мусор", func(c *Config) { c.Notify.MinImportance = "urgent" }, "min_importance"},
 		{"language не ru", func(c *Config) { c.UI.Language = "en" }, "language"},
@@ -186,12 +231,14 @@ func TestValidate(t *testing.T) {
 	}
 }
 
-// TestValidateOK: валидный конфиг проходит без ошибок.
+// TestValidateOK: валидный конфиг проходит без ошибок; границы включительно.
 func TestValidateOK(t *testing.T) {
 	cfg := Defaults()
 	cfg.Server = "https://mail.company.example"
 	cfg.Username = `COMPANY\ivanov`
 	cfg.OrgDomain = "company.example"
+	cfg.PageSize = 500
+	cfg.MaxAttachmentMB = 380
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("Validate: %v", err)
 	}

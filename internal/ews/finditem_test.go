@@ -12,7 +12,7 @@ import (
 // TestFindItemRequestGolden: запрос по distinguished-папке inbox структурно
 // совпадает с эталоном testdata/finditem_request.xml.golden (шаблон §5).
 func TestFindItemRequestGolden(t *testing.T) {
-	req, err := newFindMessagesRequest(parentFolderIdsRequest{
+	req, err := newFindMessagesRequest(parentFolderIDsRequest{
 		DistinguishedFolderID: &distinguishedFolderIDRequest{ID: "inbox"},
 	}, 50, 0)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestFindItemRequestGolden(t *testing.T) {
 // TestFindItemRequestFolderID: вариант с t:FolderId (обычная папка из
 // FindFolder) — вместо DistinguishedFolderId.
 func TestFindItemRequestFolderID(t *testing.T) {
-	req, err := newFindMessagesRequest(parentFolderIdsRequest{
+	req, err := newFindMessagesRequest(parentFolderIDsRequest{
 		FolderID: &folderIDRequest{ID: "AQApA0000001", ChangeKey: "AQAAAB000001"},
 	}, 25, 25)
 	if err != nil {
@@ -67,7 +67,7 @@ func TestFindMessagesBadParams(t *testing.T) {
 	for _, tc := range []struct{ pageSize, offset int }{
 		{0, 0}, {-1, 0}, {50, -1},
 	} {
-		if _, err := newFindMessagesRequest(parentFolderIdsRequest{}, tc.pageSize, tc.offset); err == nil {
+		if _, err := newFindMessagesRequest(parentFolderIDsRequest{}, tc.pageSize, tc.offset); err == nil {
 			t.Errorf("pageSize=%d offset=%d: жду ошибку, получила nil", tc.pageSize, tc.offset)
 		}
 	}

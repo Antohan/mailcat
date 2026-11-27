@@ -34,7 +34,7 @@ func TestGetAttachmentRequestGolden(t *testing.T) {
 // (сервер не дёргается вообще).
 func TestGetAttachmentLimitExceeded(t *testing.T) {
 	var calls atomic.Int64
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -83,7 +83,7 @@ func TestGetAttachmentOK(t *testing.T) {
 // TestGetAttachmentUnknownSize: ContentLength=0 (размер неизвестен) — запрос
 // уходит, содержимое возвращается.
 func TestGetAttachmentUnknownSize(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(fixture(t, "getattachment_response.xml"))
 	}))
 	defer srv.Close()

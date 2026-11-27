@@ -43,7 +43,7 @@ func keychainCmd() *exec.Cmd {
 
 // openCmd собирает команду /usr/bin/open path (отдельно — для теста).
 func openCmd(path string) *exec.Cmd {
-	return exec.Command("/usr/bin/open", path)
+	return exec.Command("/usr/bin/open", path) // #nosec G204 -- бинарник фиксирован, shell не используется
 }
 
 // NewLogger возвращает slog-логгер, пишущий в файл path: каталог создаётся с
@@ -60,12 +60,25 @@ func NewLogger(path string) (*slog.Logger, func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, nil, fmt.Errorf("каталог лога %s: %w", filepath.Dir(path), err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- путь лога из конфига пользователя
 	if err != nil {
 		return nil, nil, fmt.Errorf("файл лога %s: %w", path, err)
 	}
 	closer := func() { _ = f.Close() }
 	return slog.New(slog.NewTextHandler(f, nil)), closer, nil
+}
+
+// CheckFilePerm предупреждает (возвращает строки-предупреждения), если файл
+// доступен шире, чем 0600 (SECURITY.md §6). Каталог не проверяется: файл CA
+// может лежать где угодно, права нужны только самому файлу.
+func CheckFilePerm(path string) []string {
+	st, err := os.Stat(path)
+	if err != nil || st.Mode().Perm()&0o077 == 0 {
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"файл %s доступен другим пользователям (права %v) — выполните: chmod 600 %s",
+		path, st.Mode().Perm(), path)}
 }
 
 // CheckFilePerms предупреждает (возвращает строки-предупреждения), если файл
@@ -78,10 +91,5 @@ func CheckFilePerms(path string) []string {
 			"каталог %s доступен другим пользователям (права %v) — выполните: chmod 700 %s",
 			dir, st.Mode().Perm(), dir))
 	}
-	if st, err := os.Stat(path); err == nil && st.Mode().Perm()&0o077 != 0 {
-		warns = append(warns, fmt.Sprintf(
-			"файл %s доступен другим пользователям (права %v) — выполните: chmod 600 %s",
-			path, st.Mode().Perm(), path))
-	}
-	return warns
+	return append(warns, CheckFilePerm(path)...)
 }

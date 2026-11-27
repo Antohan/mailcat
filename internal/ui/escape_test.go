@@ -8,6 +8,8 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
+	"unicode/utf8"
 
 	"github.com/rivo/tview"
 
@@ -65,5 +67,24 @@ func TestAttachmentModalUsesEscape(t *testing.T) {
 func TestTviewEscapeSemantics(t *testing.T) {
 	if got := tview.Escape("[green]"); got == "[green]" {
 		t.Errorf("tview.Escape не экранирует [green]: %q", got)
+	}
+}
+
+// TestFormatMessageListItemTruncateBeforeEscape (C-4): тема усекается до
+// tview.Escape. Обрезка escaped-строки рвала тег — на экране одиночная
+// скобка и ширина больше maxW.
+func TestFormatMessageListItemTruncateBeforeEscape(t *testing.T) {
+	m := mail.MessageSummary{Subject: "[red]" + strings.Repeat("длинная тема ", 10)}
+	const maxW = 16 // subjectIndent (10) + "[red]" (5) + «…»
+	row := FormatMessageListItem(m, orgDomains, time.Now(), false, maxW)
+	shown := tview.Unescape(row[2])
+	if n := utf8.RuneCountInString(shown); n > maxW {
+		t.Errorf("ширина %d > %d: %q", n, maxW, shown)
+	}
+	if strings.Count(shown, "[") != strings.Count(shown, "]") {
+		t.Errorf("одиночные скобки после усечения: %q", shown)
+	}
+	if !strings.HasSuffix(shown, "…") {
+		t.Errorf("нет многоточия: %q", shown)
 	}
 }

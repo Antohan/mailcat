@@ -33,25 +33,25 @@ func IsExternalEmail(email string, orgDomains ...string) bool {
 }
 
 // HostFacts — сведения о хосте ссылки для реестра (PLAN.md этап 3):
-// IDN=true для punycode (xn--) и не-ASCII хостов; Ascii — punycode-форма
+// IDN=true для punycode (xn--) и не-ASCII хостов; ASCII — punycode-форма
 // (для обычных хостов — сам хост в нижнем регистре).
 type HostFacts struct {
 	Host  string // исходный хост
 	IDN   bool   // требуется внимание: xn-- или не-ASCII
-	Ascii string // punycode-форма (показывается пользователю)
+	ASCII string // punycode-форма (показывается пользователю)
 }
 
 // HostInfoOf анализирует хост ссылки. Ошибки idna не критичны: ASCII-форма
 // тогда остаётся исходным хостом.
 func HostInfoOf(host string) HostFacts {
-	info := HostFacts{Host: host, Ascii: strings.ToLower(host)}
+	info := HostFacts{Host: host, ASCII: strings.ToLower(host)}
 	if host == "" {
 		return info
 	}
 	if strings.Contains(strings.ToLower(host), "xn--") || !isASCII(host) {
 		info.IDN = true
 		if ascii, err := idna.ToASCII(host); err == nil {
-			info.Ascii = ascii
+			info.ASCII = ascii
 		}
 	}
 	return info
@@ -81,6 +81,10 @@ var dangerousExtensions = map[string]bool{
 	".exe": true, ".js": true, ".vbs": true, ".ps1": true, ".bat": true,
 	".cmd": true, ".lnk": true, ".hta": true, ".scr": true, ".jar": true,
 	".msi": true, ".docm": true, ".xlsm": true,
+	".app": true, ".command": true, ".tool": true, ".scpt": true,
+	".applescript": true, ".workflow": true, ".pkg": true, ".mpkg": true,
+	".dmg": true, ".webloc": true, ".inetloc": true, ".fileloc": true,
+	".terminal": true,
 }
 
 // IsDangerousExtension сообщает, требует ли имя файла предупреждения перед

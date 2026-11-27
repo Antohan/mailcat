@@ -43,7 +43,7 @@ func (c *Client) GetAttachment(ctx context.Context, att AttachmentMeta, maxBytes
 func newGetAttachmentRequest(attachmentID string) *getAttachmentRequest {
 	return &getAttachmentRequest{
 		AttachmentShape: attachmentShapeRequest{BaseShape: "IdOnly"},
-		AttachmentIDs: attachmentIdsRequest{
+		AttachmentIDs: attachmentIDsRequest{
 			AttachmentID: attachmentIDRequest{ID: attachmentID},
 		},
 	}
@@ -52,7 +52,7 @@ func newGetAttachmentRequest(attachmentID string) *getAttachmentRequest {
 type getAttachmentRequest struct {
 	XMLName         xml.Name               `xml:"http://schemas.microsoft.com/exchange/services/2006/messages GetAttachment"`
 	AttachmentShape attachmentShapeRequest `xml:"AttachmentShape"`
-	AttachmentIDs   attachmentIdsRequest   `xml:"AttachmentIds"`
+	AttachmentIDs   attachmentIDsRequest   `xml:"AttachmentIds"`
 }
 
 // attachmentShapeRequest — m:AttachmentShape с t:BaseShape (namespace BaseShape
@@ -61,7 +61,7 @@ type attachmentShapeRequest struct {
 	BaseShape string `xml:"http://schemas.microsoft.com/exchange/services/2006/types BaseShape"`
 }
 
-type attachmentIdsRequest struct {
+type attachmentIDsRequest struct {
 	XMLName      xml.Name            `xml:"http://schemas.microsoft.com/exchange/services/2006/messages AttachmentIds"`
 	AttachmentID attachmentIDRequest `xml:"http://schemas.microsoft.com/exchange/services/2006/types AttachmentId"`
 }

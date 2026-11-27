@@ -28,6 +28,7 @@ type LinkRegistry struct {
 	links []LinkInfo
 }
 
+// NewLinkRegistry — пустой реестр ссылок одного письма.
 func NewLinkRegistry() *LinkRegistry { return &LinkRegistry{} }
 
 // List возвращает зарегистрированные ссылки по порядку.
@@ -52,7 +53,7 @@ func (r *LinkRegistry) register(rawURL, text string) string {
 		N:        len(r.links) + 1,
 		URL:      rawURL,
 		Text:     text,
-		Host:     facts.Ascii,
+		Host:     facts.ASCII,
 		Mismatch: security.LinkMismatch(text, rawURL),
 		IDN:      facts.IDN,
 	}

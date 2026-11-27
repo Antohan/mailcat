@@ -50,9 +50,8 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 </soap:Envelope>
 ```
 
-Необязательный SOAP-заголовок (использовать только при необходимости):
-`<soap:Header><t:RequestServerVersion Version="Exchange2016"/></soap:Header>` —
-если сервер отклоняет запросы без версии, начни с `Exchange2013_SP1`.
+Необязательный SOAP-заголовок (только если сервер требует версию):
+`<soap:Header><t:RequestServerVersion Version="Exchange2013_SP1"/></soap:Header>`.
 
 ## 4. FindFolder — список папок
 
@@ -252,6 +251,10 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
   Это read-only свойство — показываем «вы приняли/под вопросом/не ответили».
 - С `CalendarView` НЕ используется `IndexedPageItemView` — пагинации нет, ставим
   разумный `MaxEntriesReturned`.
+- Потолок запроса `MaxEntriesReturned="500"`: встречи сверх этого за период не
+  запрашиваются. Индикатор усечения не реализуется — это решение итерации: при
+  обычной плотности календаря до потолка не доходит, проверить на живом
+  сервере нельзя.
 - С `CalendarView` запрещены `SortOrder` и `Restriction` (ErrorInvalidOperation,
   правило протокола): ответ всегда упорядочен сервером по `Start` по возрастанию.
 - Даты — xs:dateTime c смещением; в запросе используем UTC (`Z`), в UI показываем в
@@ -263,21 +266,32 @@ m     = http://schemas.microsoft.com/exchange/services/2006/messages   (преф
 `deleteditems`, `outbox`, `junkemail`, `calendar`, `contacts`, `tasks`,
 `msgfolderroot`, `root`.
 
-**FieldURI, используемые в проекте** (и только они):
+**FieldURI, используемые в проекте** (и только они). `item:IsRead` приходит с
+`BaseShape` `Default` и в `AdditionalProperties` не запрашивается — HTTP 500 (§5).
+
+Приходят в ответе (`BaseShape` `Default`):
 
 | FieldURI | Что это |
 |---|---|
-| `item:Subject`, `item:DateTimeReceived`, `item:DateTimeSent` | тема, даты |
-| `item:IsRead`, `item:HasAttachments` | флаги |
+| `item:Subject`, `item:IsRead`, `item:HasAttachments` | тема и флаги письма |
+| `message:From` | отправитель |
+| `folder:DisplayName` | имя папки |
+| `calendar:Start`, `calendar:End` | время встречи |
+| `calendar:CalendarItemType` | Single/Occurrence/Exception |
+
+Можно запросить (`AdditionalProperties`; шаблоны §6, §8):
+
+| FieldURI | Что это |
+|---|---|
+| `item:DateTimeReceived`, `item:DateTimeSent` | даты получения и отправки |
 | `item:TextBody` | тело (текст) |
-| `message:From`, `message:Sender` | отправитель |
 | `message:ToRecipients`, `message:CcRecipients` | получатели |
 | `message:InternetMessageId` | Message-ID |
-| `folder:DisplayName` | имя папки (при IdOnly) |
-| `calendar:Start`, `calendar:End`, `calendar:Location` | встреча |
-| `calendar:Organizer`, `calendar:MyResponseType` | встреча |
+| `calendar:Location`, `calendar:Organizer`, `calendar:MyResponseType` | место, организатор, свой ответ |
 | `calendar:RequiredAttendees`, `calendar:OptionalAttendees` | участники |
-| `calendar:CalendarItemType` | Single/Occurrence/Exception |
+
+`message:Sender` справочник не относит ни к одному списку; в шаблонах проекта
+не используется.
 
 **Ошибки EWS**, которые надо различать (часть `m:*ResponseMessage ResponseClass="Error"`):
 `NoError`, `ErrorAccessDenied` (проблема прав), `ErrorFolderNotFound`,

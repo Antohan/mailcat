@@ -99,6 +99,56 @@ func TestReadOnlyEWSOperations(t *testing.T) {
 	}
 }
 
+// TestEWSSkillMatchesReference держит шаблоны скилла в согласии со
+// справочником: три расхождения ниже проверены на живом Exchange 2019 и
+// дают HTTP 500 / ErrorInvalidOperation (EWS-REFERENCE.md §5, §6, §8).
+func TestEWSSkillMatchesReference(t *testing.T) {
+	path := filepath.Join(repoRoot(t), ".opencode", "skills", "ews-reference", "SKILL.md")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("чтение скилла ews-reference: %v", err)
+	}
+	for _, block := range fencedBlocks(string(data)) {
+		if strings.Contains(block, `BodyType="Best"`) {
+			t.Errorf("скилл ews-reference: BodyType=\"Best\" — живой Exchange 2019 отвечает HTTP 500 (EWS-REFERENCE.md §6)")
+		}
+		parts := strings.Split(block, "<t:AdditionalProperties>")
+		for _, part := range parts[1:] {
+			if end := strings.Index(part, "</t:AdditionalProperties>"); end >= 0 {
+				part = part[:end]
+			}
+			if strings.Contains(part, "item:IsRead") {
+				t.Errorf("скилл ews-reference: item:IsRead в AdditionalProperties — HTTP 500 (EWS-REFERENCE.md §5)")
+			}
+		}
+		if strings.Contains(block, "<m:CalendarView") && strings.Contains(block, "SortOrder") {
+			t.Errorf("скилл ews-reference: SortOrder вместе с CalendarView — ErrorInvalidOperation (EWS-REFERENCE.md §8)")
+		}
+	}
+}
+
+// fencedBlocks возвращает содержимое ```-блоков markdown-файла.
+func fencedBlocks(md string) []string {
+	var blocks []string
+	var cur strings.Builder
+	in := false
+	for _, line := range strings.Split(md, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			if in {
+				blocks = append(blocks, cur.String())
+				cur.Reset()
+			}
+			in = !in
+			continue
+		}
+		if in {
+			cur.WriteString(line)
+			cur.WriteString("\n")
+		}
+	}
+	return blocks
+}
+
 func TestNoInsecureSkipVerify(t *testing.T) {
 	root := repoRoot(t)
 	for _, path := range sourceFiles(t, root, false) {

@@ -30,7 +30,7 @@ func notifyCmd(title, body string, sound bool) *exec.Cmd {
 	if sound {
 		script += " sound name \"default\""
 	}
-	return exec.Command("/usr/bin/osascript", "-e", script)
+	return exec.Command("/usr/bin/osascript", "-e", script) // #nosec G204 -- бинарник фиксирован, shell не используется
 }
 
 // Notify показывает уведомление в Центре уведомлений macOS. Ошибки выполнения
