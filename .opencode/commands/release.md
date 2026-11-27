@@ -16,6 +16,7 @@ code — the only writes are the release records below.
    - every task checkbox in that plan is ticked and every DoD point of the
      plan is met;
    - `/check` (`./scripts/check.sh`) is green;
+   - `./scripts/env-check.sh` is green (agents, commands, skills, plugin loaded);
    - `CHANGELOG.md` has an entry for every task of the plan.
 2. The manual smoke scenarios (`docs/TESTING.md §5`) need VPN and the live
    server, and visual changes need the user's «ок» — ask the user which were
