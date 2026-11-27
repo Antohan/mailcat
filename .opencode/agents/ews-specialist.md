@@ -33,8 +33,10 @@ type findItemRequest struct {
    `docs/TESTING.md §4`.
 6. Paging: next `Offset` = previous `IndexedPagingOffset`; stop at
    `IncludesLastItemInRange=true`. CalendarView has no paging.
-7. After editing XML code, check the templates are well-formed:
-   `xmllint --noout <file>` (for extracted blocks).
+7. After editing XML code, check the templates are well-formed: wrap the
+   fragment in the §3 envelope with all namespaces and run
+   `xmllint --noout` on the wrapped document — a bare fragment fails with
+   false namespace errors.
 8. Token discipline: open only the section of the reference you need, answer in
    at most ten lines, do not restate the docs, do not print whole files.
 

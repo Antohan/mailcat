@@ -1,5 +1,5 @@
 ---
-name: EWS Reference
+name: ews-reference
 description: Точные SOAP-шаблоны Exchange Web Services для mailcat — использовать при любой работе с EWS/XML, чтобы не выдумывать схему
 ---
 
@@ -37,13 +37,9 @@ FindItem (paging):
 ```xml
 <m:FindItem Traversal="Shallow">
   <m:ItemShape>
-    <t:BaseShape>IdOnly</t:BaseShape>
+    <t:BaseShape>Default</t:BaseShape>
     <t:AdditionalProperties>
-      <t:FieldURI FieldURI="item:Subject"/>
       <t:FieldURI FieldURI="item:DateTimeReceived"/>
-      <t:FieldURI FieldURI="item:IsRead"/>
-      <t:FieldURI FieldURI="item:HasAttachments"/>
-      <t:FieldURI FieldURI="message:From"/>
     </t:AdditionalProperties>
   </m:ItemShape>
   <m:IndexedPageItemView MaxEntriesReturned="50" Offset="0" BasePoint="Beginning"/>
@@ -59,7 +55,6 @@ GetItem (read):
 <m:GetItem>
   <m:ItemShape>
     <t:BaseShape>Default</t:BaseShape>
-    <t:BodyType BodyType="Best"/>
     <t:AdditionalProperties>
       <t:FieldURI FieldURI="item:TextBody"/>
       <t:FieldURI FieldURI="message:ToRecipients"/>
@@ -77,7 +72,8 @@ GetAttachment (download):
 </m:GetAttachment>
 ```
 
-CalendarView (meetings; NO IndexedPageItemView, BaseShape=Default):
+CalendarView (meetings; NO IndexedPageItemView, SortOrder or
+Restriction, BaseShape=Default):
 ```xml
 <m:FindItem Traversal="Shallow">
   <m:ItemShape>
@@ -90,9 +86,6 @@ CalendarView (meetings; NO IndexedPageItemView, BaseShape=Default):
   </m:ItemShape>
   <m:CalendarView StartDate="2026-11-01T00:00:00Z" EndDate="2026-11-30T23:59:59Z"
                   MaxEntriesReturned="500"/>
-  <m:SortOrder><t:FieldOrder Order="Ascending">
-    <t:FieldURI FieldURI="calendar:Start"/>
-  </t:FieldOrder></m:SortOrder>
   <m:ParentFolderIds><t:DistinguishedFolderId Id="calendar"/></m:ParentFolderIds>
 </m:FindItem>
 ```
@@ -111,4 +104,7 @@ CalendarView (meetings; NO IndexedPageItemView, BaseShape=Default):
 - Allowed DistinguishedFolderId: inbox, sentitems, drafts, deleteditems, outbox,
   junkemail, calendar, contacts, tasks, msgfolderroot, root.
 
-After generating XML code, run the templates through `xmllint --noout`.
+After generating XML code, wrap each fragment in the envelope from
+docs/EWS-REFERENCE.md §3 (with all three namespaces) and run
+`xmllint --noout` on the wrapped document — a bare fragment without namespace
+declarations fails with false errors.
