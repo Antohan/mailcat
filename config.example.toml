@@ -20,8 +20,8 @@ ca_path = "~/.config/mailcat/company-root-ca.pem"
 org_domains = ["company.example", "company.example.ru"]
 
 # Параметры чтения.
-page_size = 50                 # писем на страницу в списках
-max_attachment_mb = 100        # отказ скачивать вложения больше этого размера
+page_size = 50                 # писем на страницу: 1–500
+max_attachment_mb = 100        # отказ скачивать вложения больше этого размера: 1–380
 
 [ui]
 language = "ru"                # MVP поддерживает только "ru"
