@@ -1,17 +1,16 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 4 — `docs/PLAN-ITER4.md`, задача C-5 (права файла CA).
-Читать: задачу C-5, `internal/platform/platform.go` (`CheckFilePerms` 73), `cmd/mailcat/main.go:89–92`, `cmd/mailcat/doctor.go` шаг 2.
-Старт: `/stage C-5`.
+Итерация 4 — `docs/PLAN-ITER4.md`, задача C-6 (безопасные имена файлов).
+Читать: задачу C-6, `internal/security/filesafe.go` (`SafeFileName` 31, `CreateUnique` 56), `internal/security/filesafe_test.go`.
+Старт: `/stage C-6`.
 
 ## Сделано
+- d1a0a34 — iter4:C-5: права `ca_path` (0644 → предупреждение при старте и в doctor).
 - d635d9d — iter4:C-4: усечение строк списка до tview.Escape, тест на `[red]`.
-- 7ff57b5 — iter4:C-3: macOS-типы вложений в списке опасных.
 
 ## Открыто
-- C-4: скриншот до/после (`[red[…` → `[red]…`) в отчёте, «ок» пользователя — TODO.
-- Живой smoke, TODO: C-3 — предупреждение `.command`/`.app`/`.dmg` и `.pdf`; A-4 — `/stage` на `main`; A-3 — `/release`. «ок» на V-35…V-53 нет; S3–S7 — TODO.
+- Живой smoke, TODO: C-5 — CA 0644 даёт предупреждение; C-4 — скриншот до/после (`[red[…` → `[red]…`), «ок» пользователя; C-3 — `.command`/`.app`/`.dmg`; A-4 — `/stage` на `main`; A-3 — `/release`. «ок» на V-35…V-53 нет; S3–S7 — TODO.
 - Отложено: item:Importance, write-операции, Catppuccin, Preview; doctor печатает `hp`/`ca_path`/логин без Sanitize (вне C-1).
 
 ## Не трогать
@@ -23,3 +22,4 @@
 - close-task.sh: журнал только на dev; сбой git — отказ до записи; temp — mktemp рядом с планом; порядок шагов задачи один, CURRENT — первая непустая строка без `#`.
 - Вывод ошибок doctor — только `security.Sanitize(err.Error())`; ключи конфига — строго по Config, `org_domain` допустим, 500/380 не поднимать.
 - Опасные расширения — Windows/Office + 13 macOS-типов (C-3; `SECURITY.md §4` — A-9); список писем — `truncateEllipsis` до `tview.Escape`, `senderLabel` без Escape (C-4).
+- Права `ca_path` — только `platform.CheckFilePerm` (каталог не проверяется); в doctor CA проверяет шаг 2, стартовая проверка при `doctor` пропущена (C-5).
