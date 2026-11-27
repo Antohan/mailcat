@@ -224,7 +224,7 @@ A-5…A-9. Внутри кода порядок свободный.
 
 ### Код
 
-- [ ] **C-1. Doctor: санитизация ошибок.**
+- [x] **C-1. Doctor: санитизация ошибок.**
       Что делает: `mailcat doctor` печатает текст ошибок через
       `security.Sanitize`, как уже делает `runFolders` (`cmd/mailcat/main.go:153`).
       Проверка: в `cmd/mailcat/doctor_test.go` ошибка с escape-последовательностью
