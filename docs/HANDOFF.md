@@ -1,10 +1,11 @@
 # mailcat — HANDOFF
 
 ## Дальше
-Итерация 4 — `docs/PLAN-ITER4.md`, задача A-7 (`token-report.py`: корень запуска и полнота метрик).
-Читать: задачу A-7, `scripts/token-report.py`; старт `/stage A-7`.
+Итерация 4 — `docs/PLAN-ITER4.md`, задача A-8 (статика в гейтах и `check.sh`).
+Читать: задачу A-8, `scripts/check.sh`, `Makefile`, `.golangci.yaml`; старт `/stage A-8`.
 
 ## Сделано
+- ec01223 — iter4:A-7: `token-report.py` — корень от `__file__`, ошибка git вместо «с начала», отрицания, цена по распознанным задачам.
 - 627653c — iter4:A-6: политика моделей, `ews-specialist` read-only (`edit`/`shell`/`webfetch`), `env-check.sh` проверяет права.
 - f7137e5 — iter4:A-5: `scripts/env-check.sh` проверяет агентов, команды, скиллы, плагин, steps, CURRENT.
 
@@ -21,3 +22,4 @@
 - Вывод ошибок doctor — только `security.Sanitize(err.Error())`; ключи конфига — строго по Config, `org_domain` допустим, 500/380 не поднимать; опасные расширения — Windows/Office + 13 macOS-типов, список писем — `truncateEllipsis` до `tview.Escape`, `senderLabel` без Escape (C-3/C-4; `SECURITY.md §4` — A-9).
 - Права `ca_path` — только `platform.CheckFilePerm` (каталог не проверяется); в doctor CA проверяет шаг 2, стартовая проверка при `doctor` пропущена (C-5).
 - `env-check.sh`: проверки — только из вывода opencode, `x-opencode-directory` обязателен, stderr вне JSON; три deny эксперта и edit у ревьюера; в `check.sh` не входит. Редирект https→http покрыт `TestRedirectSchemeDowngradeRejected` — дубль не добавлять.
+- `token-report.py`: корень — от `__file__`, он же в `git -C` и фильтре `directory`; без `main`/ошибки git — «Отчёт недоступен», нулевой период только по `--since`; обрыв — по тексту последнего ответа без отрицания (`NEGATION`, 40 символов); цена — «по распознанным задачам», сессии без ID печатаются отдельно (A-7).
