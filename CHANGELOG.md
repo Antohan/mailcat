@@ -2,6 +2,12 @@
 
 > Формат записи — «Журнал решений» в docs/PLAN-ITER4.md. Новые записи — сверху.
 
+## 2026-11-27 · iter4:A-5 · env-check.sh: среда агента
+
+- Сделано: `scripts/env-check.sh` одной командой проверяет загрузку агентов (`go-implementer` с моделью и `steps` 160, `ews-specialist`, `security-reviewer` без права правки), команд `check`/`release`/`stage`, скиллов `ews-reference` (из репозитория), `tui-fundamentals`, `golang-tui`, плагина `superpowers` и `docs/CURRENT`; строка `OK`/`FAIL: …`, выход 1 при провале. Право запуска в `opencode.json`, раздел README «Среда агента», условие в шаге 1 `/release`.
+- Решения: JSON разбирает python3 из stdin; `x-opencode-directory` передаётся всегда — без него сервис отвечает в контексте домашнего каталога; stderr CLI отделён от JSON-потока. Проверку запрета правки `ews-specialist` (A-6) не добавлял — сегодня она бы падала.
+- Отклонения от плана/золотых правил: нет. Ревью до коммита: 4/4 файла, КРИТИЧНО/ВАЖНО нет; исправлены неблокирующие замечания (stderr/JSON, вывод `state` плагина), префиксный glob в `opencode.json` общий для всех скриптов — не этой задачи.
+
 ## 2026-11-27 · iter4:C-8 · NTLM-память и лог схемы
 
 - Сделано: после первого 401+NTLM `authTransport` ставит `ntlmChosen` (`atomic.Bool`) — следующие запросы сессии идут сразу через NTLM; «схема basic принята сервером» пишется только при 2xx. Тесты: `TestAuthNTLMRemembered` (во втором запросе нет Basic), `TestAuthDeniedNoNTLM` (401 без NTLM не пишет «принята»).
