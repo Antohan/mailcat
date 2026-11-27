@@ -11,7 +11,10 @@ import (
 	"strings"
 )
 
-const maxFileNameLen = 200
+const (
+	maxFileNameLen    = 200
+	maxUniqueAttempts = 10000
+)
 
 // allowedNameChars: A-Za-z0-9 точка подчёркивание пробел дефис; прочее — '_'.
 func allowedNameRune(r rune) rune {
@@ -30,10 +33,17 @@ func allowedNameRune(r rune) rune {
 // с сохранением расширения.
 func SafeFileName(name string) string {
 	name = filepath.Base(strings.TrimSpace(name))
-	if name == "" || name == "." || name == ".." || name == string(filepath.Separator) {
+	if name == string(filepath.Separator) {
 		return "attachment"
 	}
 	name = strings.Map(allowedNameRune, name)
+	// WHY: имя из одних точек скрыто, а ведущая точка прячет файл в Finder;
+	// срезаем точки и пробелы одним куском, иначе «. .bashrc» оставляет точку.
+	// Не делать: проверять только "." и ".." — «...» и «.bashrc» пройдут.
+	name = strings.TrimSpace(strings.TrimLeft(name, ". \t"))
+	if strings.Trim(name, ".") == "" {
+		return "attachment"
+	}
 	if len(name) > maxFileNameLen {
 		ext := filepath.Ext(name)
 		cut := maxFileNameLen - len(ext)
@@ -57,7 +67,7 @@ func CreateUnique(dir, name string) (*os.File, string, error) {
 	base := SafeFileName(name)
 	ext := filepath.Ext(base)
 	stem := strings.TrimSuffix(base, ext)
-	for i := 0; ; i++ {
+	for i := 0; i < maxUniqueAttempts; i++ {
 		candidate := base
 		if i > 0 {
 			candidate = fmt.Sprintf("%s (%d)%s", stem, i, ext)
@@ -71,6 +81,8 @@ func CreateUnique(dir, name string) (*os.File, string, error) {
 			return nil, "", fmt.Errorf("создание файла вложения %s: %w", path, err)
 		}
 	}
+	return nil, "", fmt.Errorf("не удалось подобрать имя для %s в %s: %d конфликтов",
+		base, dir, maxUniqueAttempts)
 }
 
 // DownloadDir возвращает (и создаёт с правами 0700) каталог сохранения

@@ -4,6 +4,7 @@ package security
 // фильтрация символов, длина, уникальность в каталоге.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,6 +22,12 @@ func TestSafeFileName(t *testing.T) {
 		{"", "attachment"},
 		{".", "attachment"},
 		{"..", "attachment"},
+		{"...", "attachment"},
+		{".bashrc", "bashrc"},
+		{". .", "attachment"},
+		{". .bashrc", "bashrc"},
+		{".. .x.txt", "x.txt"},
+		{"... .bashrc", "bashrc"},
 	}
 	for _, tc := range cases {
 		if got := SafeFileName(tc.in); got != tc.want {
@@ -90,6 +97,25 @@ func TestCreateUnique(t *testing.T) {
 	if f, _, err := CreateUnique(filepath.Join(dir, "нет"), "a.txt"); err == nil {
 		_ = f.Close()
 		t.Errorf("нет ошибки для отсутствующего каталога")
+	}
+}
+
+// TestCreateUniqueExhausted: после 10 000 конфликтов имён — ошибка, а не
+// бесконечный перебор.
+func TestCreateUniqueExhausted(t *testing.T) {
+	dir := t.TempDir()
+	names := []string{"report.pdf"}
+	for i := 1; i < maxUniqueAttempts; i++ {
+		names = append(names, fmt.Sprintf("report (%d).pdf", i))
+	}
+	for _, n := range names {
+		if err := os.WriteFile(filepath.Join(dir, n), nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if f, _, err := CreateUnique(dir, "report.pdf"); err == nil {
+		_ = f.Close()
+		t.Errorf("нет ошибки после %d конфликтов", maxUniqueAttempts)
 	}
 }
 
