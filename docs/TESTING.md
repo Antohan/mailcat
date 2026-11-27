@@ -46,20 +46,30 @@
 ```
 findfolder_response.xml      finditem_request.xml.golden
 finditem_response_p1.xml     finditem_response_p2.xml
-getitem_response.xml         getattachment_response.xml
-calendar_response.xml        soap_fault.xml
+getitem_response.xml         getitem_calendar_response.xml
+getattachment_response.xml   calendar_response.xml
+soap_fault.xml
 ```
 Файлы — реальные по структуре шаблоны из EWS-REFERENCE.md с выдуманными данными.
-При изменении схемы — обновлять фикстуры осознанно (не генерить из кода, иначе
-тест теряет смысл).
+Эталон запроса лежит в файле только у FindItem; остальные пять шаблонов
+(FindFolder, GetItem, GetAttachment, CalendarView, описание встречи) сверяются
+через `assertXMLLike` в тестах пакета `internal/ews`. `getitem_calendar_response.xml`
+— ответ GetItem встречи с календарным телом. При изменении схемы — обновлять
+фикстуры осознанно (не генерить из кода, иначе тест теряет смысл).
 
 ## 5. Ручные smoke-сценарии (живой сервер, VPN включён)
 
-Прогонять в конце этапов 1, 2, 4, 5; отмечать в PR/коммите.
+Прогонять в конце итерации; номера пройденных smoke (S1…S8) отмечать в журнале
+релиза.
 
-**S1 — doctor:** `mailcat doctor` — все 4 шага OK. Отрицательные проверки:
-выключить VPN → шаг 1 с подсказкой про VPN; указать неверный ca_path → шаг 2
-с объяснением; неверный пароль → шаг 3.
+**S1 — doctor:** `mailcat doctor` — четыре шага по порядку, каждый с `OK`:
+1) TCP-соединение с хостом:портом; 2) TLS-рукопожатие с `ca_path` (права CA
+шире 0600 — предупреждение, шаг продолжается); 3) аутентификация паролем из
+Keychain (Basic/NTLM); 4) список папок — найдено N, первые десять с числом
+писем и непрочитанных. Отрицательные проверки: выключить VPN → шаг 1 с
+подсказкой про VPN; неверный `ca_path` → шаг 2 с объяснением и без предложения
+обхода; неверный пароль → шаг 3 с командой обновления записи Keychain;
+`ErrorAccessDenied` → шаг 4 с «спросите ИТ-отдел».
 
 **S2 — folders:** `mailcat folders` — список папок с непрочитанными.
 
@@ -97,3 +107,16 @@ calendar_response.xml        soap_fault.xml
 останавливают релиз; отсутствующий инструмент — FAIL с командой установки,
 а не пропуск. Разобранные в ревью ложные срабатывания gosec подавляются явно —
 `// #nosec <ID> -- причина` на строке замечания.
+
+## 7. Сетевые требования (SECURITY.md §7) и тесты
+
+| Требование | Тест |
+|---|---|
+| Только `https://` к серверу | `TestNewClientRejectsNonHTTPS`; `internal/config/config_test.go` — `server` с `http://` отклоняется `Validate` |
+| Редирект на другой хост запрещён | `TestRedirectHostChangeRejected` |
+| Понижение https→http на том же хосте запрещено | `TestRedirectSchemeDowngradeRejected` |
+| Отмена запроса по контексту | `TestRequestContextTimeout` |
+| Истечение дедлайна запроса — понятная ошибка таймаута | `TestDoDeadlineExceeded` |
+
+Тесты живут в пакете `internal/ews` (кроме проверки конфига) и, как остальные
+юнит-тесты, ходят только на localhost мок-сервера (§3).

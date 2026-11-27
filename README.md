@@ -106,7 +106,7 @@ internal/notify/    правила уведомлений и фоновый watc
 internal/platform/  обвязка macOS: /usr/bin/open, файловый лог
 internal/ui/        экраны tview (почта, календарь), палитра — theme.go
 docs/               планы итераций, архитектура, EWS, безопасность, тесты
-scripts/check.sh    gofmt, vet, build, test
+scripts/            гейты (check, release-checks), close-task, env-check, token-report
 ```
 
 ## Разработка
@@ -116,7 +116,10 @@ scripts/check.sh    gofmt, vet, build, test
 `PLAN-ITER3.md`, `PLAN-ITER3.1.md`) хранятся в `docs/` как история.
 Ход работ и решения агента — `CHANGELOG.md` (запись на каждую задачу);
 формат планов итераций — `docs/PLAN-TEMPLATE.md`.
-Скрипты разработки: `./scripts/check.sh` — гейт качества; закрытие задачи —
+Скрипты и гейты: `./scripts/check.sh` — `gofmt`, `golangci-lint`
+(staticcheck), `go vet`, `go build`, `go test`; `./scripts/release-checks.sh` —
+`govulncheck` и `gosec` для `/release` (нет инструмента — FAIL с командой
+установки); `./scripts/env-check.sh` — среда агента; закрытие задачи —
 `./scripts/close-task.sh <ID>` (галочка в плане и коммит журнала с handoff);
 `./scripts/token-report.py` — расход токенов с последнего релиза.
 Архитектура — `docs/ARCHITECTURE.md`, точные SOAP-шаблоны —
