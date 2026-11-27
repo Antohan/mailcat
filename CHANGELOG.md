@@ -2,6 +2,12 @@
 
 > Формат записи — «Журнал решений» в docs/PLAN-ITER4.md. Новые записи — сверху.
 
+## 2026-11-27 · iter4:C-4 · список писем: усечение до экранирования
+
+- Сделано: `FormatMessageListItem` принимает `maxW` и усекает строки отправителя и темы через `truncateEllipsis` до `tview.Escape` (`maxW = 0` — полный текст для `appendRows`); `senderLabel` возвращает `Sanitize` без Escape; `clampMessageColumns` передаёт ширину и больше не режет escaped-текст. Тест `TestFormatMessageListItemTruncateBeforeEscape` — тема с `[red]`: скобки парные, ширина ≤ maxW.
+- Решения: усечение перенесено внутрь `FormatMessageListItem`, чтобы Sanitize → truncate → Escape были в одном месте и не разъезжались с appendRows.
+- Отклонения от плана/золотых правил: нет. Скриншот до/после: `[red[…` → `[red]…` (ширина 30). Ревью до коммита: 5/5 файлов, КРИТИЧНО/ВАЖНО нет.
+
 ## 2026-11-27 · iter4:C-3 · macOS-типы вложений в списке опасных
 
 - Сделано: `dangerousExtensions` дополнен 13 macOS-типами (`.app`, `.command`, `.tool`, `.scpt`, `.applescript`, `.workflow`, `.pkg`, `.mpkg`, `.dmg`, `.webloc`, `.inetloc`, `.fileloc`, `.terminal`); тест — каждый новый тип, верхний регистр, двойное расширение `отчёт.pdf.command`, безопасные `.pdf`/`.zip`/`.png` не помечаются.
