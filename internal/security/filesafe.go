@@ -73,7 +73,7 @@ func CreateUnique(dir, name string) (*os.File, string, error) {
 			candidate = fmt.Sprintf("%s (%d)%s", stem, i, ext)
 		}
 		path := filepath.Join(dir, candidate)
-		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600) // #nosec G304 -- путь собран внутри после проверки имени
 		if err == nil {
 			return f, path, nil
 		}

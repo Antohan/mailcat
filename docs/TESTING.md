@@ -86,6 +86,14 @@ calendar_response.xml        soap_fault.xml
 
 ## 6. Статический контроль
 
-`/check` (команда opencode) = `gofmt -l .` пусто → `go vet ./...` →
-`go build ./...` → `go test ./...`. Перед коммитом — обязательно.
-Дополнительно (вручную, по желанию): `govulncheck ./...` на этапе 5.
+`/check` (команда opencode) = `./scripts/check.sh`: `gofmt -l .` пусто →
+`golangci-lint run ./...` (`.golangci.yaml`, staticcheck включён) →
+`go vet ./...` → `go build ./...` → `go test ./...`. Перед коммитом — обязательно.
+Инструменты ищутся в `PATH`, затем в `$GOBIN`, затем в первом каталоге
+`$(go env GOPATH)/bin`.
+
+`/release` дополнительно требует `./scripts/release-checks.sh`:
+`govulncheck ./...` и `gosec ./...`. Найденная уязвимость или замечание
+останавливают релиз; отсутствующий инструмент — FAIL с командой установки,
+а не пропуск. Разобранные в ревью ложные срабатывания gosec подавляются явно —
+`// #nosec <ID> -- причина` на строке замечания.

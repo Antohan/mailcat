@@ -43,7 +43,7 @@ func keychainCmd() *exec.Cmd {
 
 // openCmd собирает команду /usr/bin/open path (отдельно — для теста).
 func openCmd(path string) *exec.Cmd {
-	return exec.Command("/usr/bin/open", path)
+	return exec.Command("/usr/bin/open", path) // #nosec G204 -- бинарник фиксирован, shell не используется
 }
 
 // NewLogger возвращает slog-логгер, пишущий в файл path: каталог создаётся с
@@ -60,7 +60,7 @@ func NewLogger(path string) (*slog.Logger, func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, nil, fmt.Errorf("каталог лога %s: %w", filepath.Dir(path), err)
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600) // #nosec G304 -- путь лога из конфига пользователя
 	if err != nil {
 		return nil, nil, fmt.Errorf("файл лога %s: %w", path, err)
 	}

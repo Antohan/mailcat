@@ -184,7 +184,7 @@ func keychainPasswordFor(cfg *config.Config) (string, error) {
 	if answer != "y" && answer != "Y" && answer != "д" && answer != "Д" {
 		return "", err
 	}
-	cmd := exec.Command("security", "add-generic-password", "-a", cfg.Username, "-s", "mailcat", "-w")
+	cmd := exec.Command("security", "add-generic-password", "-a", cfg.Username, "-s", "mailcat", "-w") // #nosec G204 -- бинарник фиксирован, shell не используется
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	if addErr := cmd.Run(); addErr != nil {
 		return "", fmt.Errorf("создание записи Keychain (попробуйте вручную: security add-generic-password -a %s -s mailcat -w): %w", cfg.Username, addErr)

@@ -73,7 +73,7 @@ func Defaults() *Config {
 // вызовом Validate, чтобы UI/doctor могли показать все проблемы сразу.
 func Load(path string) (*Config, error) {
 	path = ExpandHome(path)
-	raw, err := os.ReadFile(path)
+	raw, err := os.ReadFile(path) // #nosec G304 -- путь конфига задаёт пользователь
 	if err != nil {
 		return nil, fmt.Errorf("не удалось прочитать конфигурацию %s: %w", path, err)
 	}

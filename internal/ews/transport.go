@@ -55,7 +55,7 @@ func newTLSConfig(caPath string) (*tls.Config, error) {
 	if caPath == "" {
 		return cfg, nil
 	}
-	pem, err := os.ReadFile(caPath) // сам файл — 0600, см. SECURITY.md §6
+	pem, err := os.ReadFile(caPath) // #nosec G304 -- путь CA из конфига; права файла проверены (SECURITY.md §6)
 	if err != nil {
 		return nil, fmt.Errorf("чтение CA: %w", err)
 	}
