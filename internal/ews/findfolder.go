@@ -48,7 +48,7 @@ func newFindFoldersRequest() *findFolderRequest {
 		FolderShape: folderShapeRequest{
 			BaseShape: "Default",
 		},
-		ParentFolderIDs: parentFolderIdsRequest{
+		ParentFolderIDs: parentFolderIDsRequest{
 			DistinguishedFolderID: &distinguishedFolderIDRequest{ID: "msgfolderroot"},
 		},
 	}
@@ -60,7 +60,7 @@ type findFolderRequest struct {
 	XMLName         xml.Name               `xml:"http://schemas.microsoft.com/exchange/services/2006/messages FindFolder"`
 	Traversal       string                 `xml:"Traversal,attr"`
 	FolderShape     folderShapeRequest     `xml:"FolderShape"`
-	ParentFolderIDs parentFolderIdsRequest `xml:"ParentFolderIds"`
+	ParentFolderIDs parentFolderIDsRequest `xml:"ParentFolderIds"`
 }
 
 // folderShapeRequest — m:FolderShape c t:BaseShape.
@@ -68,9 +68,9 @@ type folderShapeRequest struct {
 	BaseShape string `xml:"http://schemas.microsoft.com/exchange/services/2006/types BaseShape"`
 }
 
-// parentFolderIdsRequest — m:ParentFolderIds: ровно одна ссылка на папку —
+// parentFolderIDsRequest — m:ParentFolderIds: ровно одна ссылка на папку —
 // либо DistinguishedFolderId, либо FolderId (EWS-REFERENCE.md §4–§5, §8).
-type parentFolderIdsRequest struct {
+type parentFolderIDsRequest struct {
 	XMLName               xml.Name                      `xml:"http://schemas.microsoft.com/exchange/services/2006/messages ParentFolderIds"`
 	DistinguishedFolderID *distinguishedFolderIDRequest `xml:",omitempty"`
 	FolderID              *folderIDRequest              `xml:",omitempty"`
@@ -91,14 +91,14 @@ type folderIDRequest struct {
 }
 
 // responseHeader — общая шапка m:*ResponseMessage: ResponseClass="Error"
-// превращается в *EWSError (EWS-REFERENCE.md §9).
+// превращается в *ResponseError (EWS-REFERENCE.md §9).
 type responseHeader struct {
 	ResponseClass string `xml:"ResponseClass,attr"`
 	ResponseCode  string `xml:"ResponseCode"`
 	MessageText   string `xml:"MessageText"`
 }
 
-// err превращает ResponseClass="Error" в *EWSError (Success/Warning — nil).
+// err превращает ResponseClass="Error" в *ResponseError (Success/Warning — nil).
 func (h responseHeader) err() error {
 	return checkResponseClass(h.ResponseClass, h.ResponseCode, h.MessageText)
 }

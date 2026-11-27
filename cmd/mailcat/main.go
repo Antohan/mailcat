@@ -43,7 +43,7 @@ func main() {
 	code := run(os.Args[1:], os.Stdout, os.Stderr, mainRuntime())
 	// Временные копии вложений не переживают выход (PLAN.md этап 5).
 	if err := security.CleanupTempDir(); err != nil {
-		fmt.Fprintln(os.Stderr, "внимание: не удалось очистить временные файлы:", err)
+		_, _ = fmt.Fprintln(os.Stderr, "внимание: не удалось очистить временные файлы:", err)
 	}
 	osExit(code)
 }
@@ -55,7 +55,7 @@ var osExit = os.Exit
 // явно, чтобы работать без запуска процесса в тестах.
 func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 	if len(argv) == 0 {
-		fmt.Fprintln(stderr, "не указана команда")
+		_, _ = fmt.Fprintln(stderr, "не указана команда")
 		usage(stderr)
 		return 2
 	}
@@ -66,7 +66,7 @@ func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 		usage(stdout)
 		return 0
 	default:
-		fmt.Fprintf(stderr, "неизвестная команда: %s\n", argv[0])
+		_, _ = fmt.Fprintf(stderr, "неизвестная команда: %s\n", argv[0])
 		usage(stderr)
 		return 2
 	}
@@ -75,26 +75,26 @@ func run(argv []string, stdout, stderr io.Writer, rt runtime) int {
 	cfg, err := config.Load(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			fmt.Fprintf(stderr, "Не найден конфигурационный файл: %s\n"+
+			_, _ = fmt.Fprintf(stderr, "Не найден конфигурационный файл: %s\n"+
 				"Скопируйте config.example.toml в этот путь и заполните свои значения.\n", path)
 			return 1
 		}
-		fmt.Fprintf(stderr, "%v\n", err)
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(stderr, "Конфигурация некорректна: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "Конфигурация некорректна: %v\n", err)
 		return 1
 	}
 	// SECURITY.md §6: предупреждать о широких правах конфига/каталога.
 	for _, warn := range platform.CheckFilePerms(path) {
-		fmt.Fprintf(stderr, "внимание: %s\n", warn)
+		_, _ = fmt.Fprintf(stderr, "внимание: %s\n", warn)
 	}
 
 	log, closer, lerr := platform.NewLogger(cfg.Log.File)
 	if lerr != nil {
 		log, closer, _ = platform.NewLogger("")
-		fmt.Fprintf(stderr, "внимание: файловый лог недоступен: %v\n", lerr)
+		_, _ = fmt.Fprintf(stderr, "внимание: файловый лог недоступен: %v\n", lerr)
 	}
 	defer closer()
 
@@ -130,11 +130,11 @@ func buildClient(cfg *config.Config, rt runtime, log *slog.Logger) (*ews.Client,
 func runTUI(stderr io.Writer, cfg *config.Config, rt runtime, log *slog.Logger) int {
 	client, err := buildClient(cfg, rt, log)
 	if err != nil {
-		fmt.Fprintf(stderr, "%v\n", err)
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 	if err := rt.newUI(cfg, client, log); err != nil {
-		fmt.Fprintf(stderr, "ошибка интерфейса: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "ошибка интерфейса: %v\n", err)
 		return 1
 	}
 	return 0
@@ -145,17 +145,17 @@ func runTUI(stderr io.Writer, cfg *config.Config, rt runtime, log *slog.Logger) 
 func runFolders(stdout, stderr io.Writer, cfg *config.Config, rt runtime, log *slog.Logger) int {
 	client, err := buildClient(cfg, rt, log)
 	if err != nil {
-		fmt.Fprintf(stderr, "%v\n", err)
+		_, _ = fmt.Fprintf(stderr, "%v\n", err)
 		return 1
 	}
 	list, err := rt.findFolders(context.Background(), client)
 	if err != nil {
-		fmt.Fprintf(stderr, "%s\n", security.Sanitize(err.Error()))
+		_, _ = fmt.Fprintf(stderr, "%s\n", security.Sanitize(err.Error()))
 		return 1
 	}
 	folders := mail.Folders(list)
 	for _, f := range folders {
-		fmt.Fprintf(stdout, "%s — писем: %d, непрочитанных: %d\n",
+		_, _ = fmt.Fprintf(stdout, "%s — писем: %d, непрочитанных: %d\n",
 			security.Sanitize(f.DisplayName), f.TotalCount, f.UnreadCount)
 	}
 	return 0
@@ -169,8 +169,8 @@ func keychainPasswordFor(cfg *config.Config) (string, error) {
 	if err == nil {
 		return pass, nil
 	}
-	fmt.Fprintln(os.Stderr, "Запись mailcat не найдена в Keychain (или пароль устарел).")
-	fmt.Fprintf(os.Stderr, "Создать запись для %s? Введите y и пароль будет запрошен скрыто (y/n): ", cfg.Username)
+	_, _ = fmt.Fprintln(os.Stderr, "Запись mailcat не найдена в Keychain (или пароль устарел).")
+	_, _ = fmt.Fprintf(os.Stderr, "Создать запись для %s? Введите y и пароль будет запрошен скрыто (y/n): ", cfg.Username)
 	var answer string
 	_, _ = fmt.Fscanln(os.Stdin, &answer)
 	if answer != "y" && answer != "Y" && answer != "д" && answer != "Д" {
@@ -185,9 +185,9 @@ func keychainPasswordFor(cfg *config.Config) (string, error) {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "Использование: mailcat <команда>")
-	fmt.Fprintln(w, "Команды:")
-	fmt.Fprintln(w, "  run     — почтовый TUI")
-	fmt.Fprintln(w, "  doctor  — пошаговая диагностика подключения")
-	fmt.Fprintln(w, "  folders — список папок в stdout (дымовый тест EWS)")
+	_, _ = fmt.Fprintln(w, "Использование: mailcat <команда>")
+	_, _ = fmt.Fprintln(w, "Команды:")
+	_, _ = fmt.Fprintln(w, "  run     — почтовый TUI")
+	_, _ = fmt.Fprintln(w, "  doctor  — пошаговая диагностика подключения")
+	_, _ = fmt.Fprintln(w, "  folders — список папок в stdout (дымовый тест EWS)")
 }

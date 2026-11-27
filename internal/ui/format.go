@@ -152,20 +152,20 @@ func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.
 	}
 }
 
-// truncateEllipsis — обрезка строки под max клеток с «…» в конце.
+// truncateEllipsis — обрезка строки под width клеток с «…» в конце.
 // WHY: своё, а не встроенное многоточие tview.Table — tview сравнивает
 // байтовую длину напечатанного (end-start) с шириной в клетках, у кириллицы
 // байты вдвое больше клеток и условие «текст не влез» всегда ложно.
 // Порог по рунам, не по клеткам — best effort, как и прочие ширины здесь.
-func truncateEllipsis(s string, max int) string {
-	if max < 1 {
+func truncateEllipsis(s string, width int) string {
+	if width < 1 {
 		return ""
 	}
-	if utf8.RuneCountInString(s) <= max {
+	if utf8.RuneCountInString(s) <= width {
 		return s
 	}
 	r := []rune(s)
-	return string(r[:max-1]) + "…"
+	return string(r[:width-1]) + "…"
 }
 
 // dotLine красит точку статуса тегом: непрочитанный — colorUnread (в тёмной
@@ -387,7 +387,7 @@ func initials(name, email string) string {
 // строка 1 — аватар-инициалы (4 клетки на accent) + «Имя <email>» + дата
 // справа (паддинг до width); строка 2 — «Кому: …» (переносит TextView);
 // линия во всю ширину колонки; тема жирным — как заголовок тела, дальше
-// showDetails печатает тело. width — ширина колонки чтения в клетках.
+// тело печатает messageView. width — ширина колонки чтения в клетках.
 // Паддинг даты считает печатную ширину tview.TaggedStringWidth (цвет-теги не
 // в счёт), усечение имени — truncateEllipsis по рунам (best effort, WHY у
 // неё). Все данные EWS — Sanitize + tview.Escape (инвариант escape).

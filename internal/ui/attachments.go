@@ -81,7 +81,7 @@ func (a *App) confirmDangerous(name string, onYes func()) {
 	modal := tview.NewModal().
 		SetText(dangerousConfirmText(name)).
 		AddButtons([]string{"Открыть (риск)", "Отмена"}).
-		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
+		SetDoneFunc(func(buttonIndex int, _ string) {
 			a.pages.RemovePage(pageConfirm)
 			if buttonIndex == 0 {
 				onYes()
@@ -122,7 +122,7 @@ func (a *App) saveAttachment(att mail.Attachment, open bool) {
 			return
 		}
 		writeErr := func(e error) {
-			f.Close()
+			_ = f.Close()
 			a.tapp.QueueUpdateDraw(func() {
 				a.showError(fmt.Errorf("запись вложения %s: %w", filepath.Base(path), e))
 			})

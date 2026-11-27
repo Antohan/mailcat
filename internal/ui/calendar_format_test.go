@@ -250,7 +250,7 @@ func TestAgendaSegments(t *testing.T) {
 		Location: "https://zoom.example/j/987654321?pwd=abcdef", MyResponseType: "Accept",
 	}
 	reg := mail.NewLinkRegistry()
-	blocks := AgendaSegments(ev, reg, false, nov(t, 17, 9, 0))
+	blocks := agendaSegments(ev, reg, false, nov(t, 17, 9, 0))
 	if len(blocks) != 2 {
 		t.Fatalf("строк в блоке = %d, хочу 2", len(blocks))
 	}
@@ -280,7 +280,7 @@ func TestAgendaSegments(t *testing.T) {
 
 	// Обычное место остаётся текстом в скобках, muted, во второй строке.
 	reg = mail.NewLinkRegistry()
-	plain := AgendaSegments(mail.Event{
+	plain := agendaSegments(mail.Event{
 		Start: nov(t, 17, 14, 30), End: nov(t, 17, 15, 0), Subject: "Планирование",
 		Location: "Переговорная 3", MyResponseType: "Tentative",
 	}, reg, false, nov(t, 17, 9, 0))
@@ -298,7 +298,7 @@ func TestAgendaSegments(t *testing.T) {
 	}
 
 	// Событие без места: вторая строка пустая, но остаётся (двухстрочный ритм).
-	noPlace := AgendaSegments(mail.Event{
+	noPlace := agendaSegments(mail.Event{
 		Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30), Subject: "Без места",
 	}, mail.NewLinkRegistry(), false, nov(t, 17, 9, 0))
 	if len(noPlace) != 2 || len(noPlace[1]) != 0 {
@@ -306,7 +306,7 @@ func TestAgendaSegments(t *testing.T) {
 	}
 
 	// Прошедшая встреча: всё muted (конец раньше now).
-	past := AgendaSegments(ev, mail.NewLinkRegistry(), false, nov(t, 17, 11, 0))
+	past := agendaSegments(ev, mail.NewLinkRegistry(), false, nov(t, 17, 11, 0))
 	for _, seg := range agendaSegs(past) {
 		if got, _, _ := seg.style.Decompose(); got != colorTextSecondary {
 			t.Errorf("прошедший сегмент %q не muted: %v", seg.text, got)
@@ -315,7 +315,7 @@ func TestAgendaSegments(t *testing.T) {
 
 	// Выбранное событие: всё onAccent (на акцентной заливке primary тёмный,
 	// ★ совпал бы с фоном).
-	sel := AgendaSegments(ev, mail.NewLinkRegistry(), true, nov(t, 17, 11, 0))
+	sel := agendaSegments(ev, mail.NewLinkRegistry(), true, nov(t, 17, 11, 0))
 	for _, seg := range agendaSegs(sel) {
 		if got, _, _ := seg.style.Decompose(); got != colorOnAccent {
 			t.Errorf("сегмент %q не onAccent: %v", seg.text, got)
@@ -324,7 +324,7 @@ func TestAgendaSegments(t *testing.T) {
 
 	// Текст из EWS — враждебный: управляющие символы вычищает Sanitize ещё до
 	// раскладки/отрисовки (SECURITY.md §3); tview.Escape не нужен — tcell.
-	dirty := AgendaSegments(mail.Event{
+	dirty := agendaSegments(mail.Event{
 		Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30),
 		Subject: "Синк\x1b[31m", Location: "Зал\x07",
 	}, mail.NewLinkRegistry(), false, nov(t, 17, 9, 0))
@@ -336,7 +336,7 @@ func TestAgendaSegments(t *testing.T) {
 // TestAgendaWrap: блок события переносится по словам под ширину панели
 // (V-42), длинное слово режется принудительно, текст не теряется.
 func TestAgendaWrap(t *testing.T) {
-	blocks := AgendaSegments(mail.Event{
+	blocks := agendaSegments(mail.Event{
 		Start: nov(t, 17, 10, 0), End: nov(t, 17, 10, 30),
 		Subject:  "Синк по релизу с командой платформы и поддержкой",
 		Location: "Переговорная 3", MyResponseType: "Accept",
@@ -461,7 +461,7 @@ func TestNearestEvent(t *testing.T) {
 // primary; будущих нет — muted «Больше событий нет»; тема через Sanitize.
 func TestNearestLine(t *testing.T) {
 	now := nov(t, 17, 14, 30)
-	segs := NearestLine([]mail.Event{
+	segs := nearestLine([]mail.Event{
 		{Start: nov(t, 17, 15, 0), End: nov(t, 17, 15, 30), Subject: "Digital\x1b[31m Corp. Daily"},
 		{Start: nov(t, 17, 16, 0), End: nov(t, 17, 16, 30), Subject: "Позже"},
 	}, now)
@@ -485,7 +485,7 @@ func TestNearestLine(t *testing.T) {
 		}
 	}
 
-	empty := NearestLine(nil, now)
+	empty := nearestLine(nil, now)
 	if got := segText(empty); got != "Больше событий нет" {
 		t.Errorf("пустой футер = %q", got)
 	}
@@ -567,7 +567,7 @@ func TestCalendarNearestFooter(t *testing.T) {
 	}
 }
 
-// TestOnDaySelectedAgenda: повестка дня собирается через AgendaSegments —
+// TestOnDaySelectedAgenda: повестка дня собирается через agendaSegments —
 // выбранный блок onAccent, остальные primary, маркеры и реестр ссылок видны
 // в блоках, dayLinks наполняется для модала g; пустой день — без выбора,
 // Enter без действия.

@@ -56,7 +56,7 @@ func TestNotificationTexts(t *testing.T) {
 	if body != "" {
 		t.Errorf("тема утекла при show_subject=false: %q", body)
 	}
-	if title == "" || "Секретная тема" == title {
+	if title == "" || title == "Секретная тема" {
 		t.Errorf("заголовок без темы: %q", title)
 	}
 }

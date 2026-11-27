@@ -46,7 +46,7 @@ func TestAuthBasicAccepted(t *testing.T) {
 			http.Error(w, "нет Basic", http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprint(w, "ok")
+		_, _ = fmt.Fprint(w, "ok")
 	}))
 	defer srv.Close()
 
@@ -55,7 +55,7 @@ func TestAuthBasicAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("статус = %d, хочу 200", resp.StatusCode)
 	}
@@ -80,7 +80,7 @@ func TestAuthDeniedNoNTLM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("статус = %d, хочу 401", resp.StatusCode)
 	}
@@ -106,7 +106,7 @@ func TestAuthNTLMSwitch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v (клиент не должен падать на NTLM-челлендже)", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Errorf("статус = %d, хочу 401 (handshake в моке не завершается)", resp.StatusCode)
 	}
@@ -144,7 +144,7 @@ func TestAuthNTLMBodyReplay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if lastBody != string(body) {
 		t.Errorf("тело при NTLM-попытке = %q, хочу исходное %q", lastBody, string(body))
 	}
@@ -160,7 +160,7 @@ func TestAuthSchemeLogged(t *testing.T) {
 			http.Error(w, "denied", http.StatusUnauthorized)
 			return
 		}
-		fmt.Fprint(w, "ok")
+		_, _ = fmt.Fprint(w, "ok")
 	}))
 	defer basicSrv.Close()
 	if _, err := newTestClient(t, basicSrv, Credentials{Username: "ivanov", Password: "parol"}, log).Get(basicSrv.URL); err != nil {
@@ -173,7 +173,7 @@ func TestAuthSchemeLogged(t *testing.T) {
 		t.Errorf("в логе нет упоминания схемы basic: %s", buf.String())
 	}
 
-	ntlmSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ntlmSrv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("WWW-Authenticate", "NTLM")
 		http.Error(w, "challenge", http.StatusUnauthorized)
 	}))
@@ -183,7 +183,7 @@ func TestAuthSchemeLogged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if bytes.Contains(buf.Bytes(), []byte("parol")) {
 		t.Errorf("в лог попал пароль: %s", buf.String())
 	}
@@ -218,7 +218,7 @@ func TestRedirectHostChangeRejected(t *testing.T) {
 // TestRequestContextTimeout: отменённый контекст прерывает запрос.
 func TestRequestContextTimeout(t *testing.T) {
 	done := make(chan struct{})
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		<-done
 	}))
 	defer srv.Close()

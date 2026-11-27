@@ -63,7 +63,7 @@ type Page struct {
 
 // PollSingle выполняет один шаг опроса (выделен для тестов без тикера):
 // новые письма → фильтр правил → уведомления; обновляет lastTop.
-func (w *Watcher) PollSingle(ctx context.Context, fetch func() (Page, error), unread func() int) error {
+func (w *Watcher) PollSingle(_ context.Context, fetch func() (Page, error), unread func() int) error {
 	page, err := fetch()
 	if err != nil {
 		return err

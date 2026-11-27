@@ -39,7 +39,7 @@ func TestRedirectSchemeDowngradeRejected(t *testing.T) {
 	client := newTestClient(t, srv, Credentials{Username: "u", Password: "p"}, nil)
 	resp, err := client.Get(srv.URL)
 	if err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		t.Fatal("редирект https→http должен быть отклонён")
 	}
 	if !strings.Contains(err.Error(), "запрещён") && !strings.Contains(err.Error(), "https") {
@@ -51,7 +51,7 @@ func TestRedirectSchemeDowngradeRejected(t *testing.T) {
 // скачанное содержимое превышает лимит — отказ ПОСЛЕ декодирования, до
 // выдачи данных наружу (§5).
 func TestGetAttachmentUnknownSizeOverLimit(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write(fixture(t, "getattachment_response.xml"))
 	}))
 	defer srv.Close()
@@ -73,7 +73,7 @@ func TestDoResponseSizeLimit(t *testing.T) {
 	maxResponseBytes = 128 // 128 байт потолок на время теста
 	defer func() { maxResponseBytes = old }()
 
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = io.Copy(w, io.LimitReader(zeroReader{}, 4096)) // 4 КБ «конверта»
 	}))
 	defer srv.Close()
@@ -92,7 +92,7 @@ func TestDoResponseSizeLimit(t *testing.T) {
 // лимите и неизвестном размере (регресс после пост-проверки).
 func TestGetAttachmentStillWorksAfterLimits(t *testing.T) {
 	var calls atomic.Int64
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		calls.Add(1)
 		_, _ = w.Write(fixture(t, "getattachment_response.xml"))
 	}))

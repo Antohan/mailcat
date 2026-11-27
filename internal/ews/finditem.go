@@ -45,7 +45,7 @@ func NextOffset(p Page) (int, bool) {
 // FindMessages возвращает страницу писем обычной папки (FolderId из
 // FindFolder), новые сверху (SortOrder Descending по DateTimeReceived).
 func (c *Client) FindMessages(ctx context.Context, folder FolderID, pageSize, offset int) (Page, error) {
-	req, err := newFindMessagesRequest(parentFolderIdsRequest{
+	req, err := newFindMessagesRequest(parentFolderIDsRequest{
 		FolderID: &folderIDRequest{ID: folder.ID, ChangeKey: folder.ChangeKey},
 	}, pageSize, offset)
 	if err != nil {
@@ -57,7 +57,7 @@ func (c *Client) FindMessages(ctx context.Context, folder FolderID, pageSize, of
 // FindDistinguishedMessages — то же для distinguished-папки (inbox, sentitems,
 // ... — EWS-REFERENCE.md §9).
 func (c *Client) FindDistinguishedMessages(ctx context.Context, folderID string, pageSize, offset int) (Page, error) {
-	req, err := newFindMessagesRequest(parentFolderIdsRequest{
+	req, err := newFindMessagesRequest(parentFolderIDsRequest{
 		DistinguishedFolderID: &distinguishedFolderIDRequest{ID: folderID},
 	}, pageSize, offset)
 	if err != nil {
@@ -80,7 +80,7 @@ func (c *Client) doFindMessages(ctx context.Context, req *findItemRequest) (Page
 }
 
 // newFindMessagesRequest строит запрос по шаблону EWS-REFERENCE.md §5.
-func newFindMessagesRequest(parent parentFolderIdsRequest, pageSize, offset int) (*findItemRequest, error) {
+func newFindMessagesRequest(parent parentFolderIDsRequest, pageSize, offset int) (*findItemRequest, error) {
 	if pageSize < 1 {
 		return nil, fmt.Errorf("некорректный размер страницы: %d (нужно ≥ 1)", pageSize)
 	}
@@ -124,7 +124,7 @@ type findItemRequest struct {
 	IndexedPageItemView *indexedPageItemViewRequest `xml:",omitempty"`
 	CalendarView        *calendarViewRequest        `xml:",omitempty"`
 	SortOrder           *sortOrderRequest           `xml:"SortOrder,omitempty"`
-	ParentFolderIDs     parentFolderIdsRequest      `xml:"ParentFolderIds"`
+	ParentFolderIDs     parentFolderIDsRequest      `xml:"ParentFolderIds"`
 }
 
 // itemShapeRequest — m:ItemShape: BaseShape + опциональные

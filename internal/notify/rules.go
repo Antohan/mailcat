@@ -44,8 +44,8 @@ func NotificationTexts(m mail.MessageSummary, showSubject bool) (title, body str
 	return title, body
 }
 
-func passesImportance(min string) bool {
-	return min == "" || min == "low" || min == "normal"
+func passesImportance(level string) bool {
+	return level == "" || level == "low" || level == "normal"
 }
 
 func matchesSenders(email string, senders []string) bool {

@@ -58,6 +58,21 @@ func TestDoctorAllOK(t *testing.T) {
 	}
 }
 
+// errWriter ломается на первой записи — закрытый stderr или полный диск.
+type errWriter struct{}
+
+func (errWriter) Write([]byte) (int, error) { return 0, errors.New("write: broken pipe") }
+
+// TestDoctorWriteError: отчёт не записался — код 1, а не «всё OK».
+func TestDoctorWriteError(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	writeCfg(t, home)
+	if code := runDoctor(errWriter{}, loadCfg(t, home), okDeps()); code != 1 {
+		t.Fatalf("code = %d, хочу 1", code)
+	}
+}
+
 // TestDoctorVPN: TCP недоступен — подсказка про VPN, код 1, шаги 2–4 не идут.
 func TestDoctorVPN(t *testing.T) {
 	home := t.TempDir()
@@ -130,7 +145,7 @@ func TestDoctorAccessDenied(t *testing.T) {
 	writeCfg(t, home)
 	deps := okDeps()
 	deps.findFolders = func(context.Context, *ews.Client) ([]ews.Folder, error) {
-		return nil, &ews.EWSError{Code: "ErrorAccessDenied"}
+		return nil, &ews.ResponseError{Code: "ErrorAccessDenied"}
 	}
 	var out bytes.Buffer
 	code := runDoctor(&out, loadCfg(t, home), deps)

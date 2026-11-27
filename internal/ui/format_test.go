@@ -11,8 +11,9 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/rivo/tview"
 	"mailcat/internal/mail"
+
+	"github.com/rivo/tview"
 )
 
 var orgDomains = []string{"company.example"}

@@ -99,7 +99,7 @@ func TestDoHTTPStatusErrors(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("status_%d", tc.status), func(t *testing.T) {
-			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				http.Error(w, "отказ", tc.status)
 			}))
 			defer srv.Close()
@@ -123,7 +123,7 @@ func TestDoHTTPStatusErrors(t *testing.T) {
 // ответа (наблюдалось на живом сервере: HTTP 500 + ErrorInvalidRequest) —
 // код ошибки из fault важнее голого статуса, вытаскиваем его.
 func TestDoFaultOnHTTPError(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/"><s:Body><s:Fault><faultcode xmlns:a="http://schemas.microsoft.com/exchange/services/2006/types">a:ErrorInvalidRequest</faultcode><faultstring xml:lang="ru-RU">The request is invalid.</faultstring></s:Fault></s:Body></s:Envelope>`))
 	}))
@@ -152,7 +152,7 @@ func TestDoSuccess(t *testing.T) {
 			t.Errorf("в теле запроса нет операции Ping: %s", body)
 		}
 		gotCT = r.Header.Get("Content-Type")
-		fmt.Fprint(w, `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"`+
+		_, _ = fmt.Fprint(w, `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"`+
 			` xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">`+
 			`<soap:Body><m:PingResponse><m:Value>ок</m:Value></m:PingResponse></soap:Body></soap:Envelope>`)
 	}))
@@ -177,7 +177,7 @@ func TestDoSuccess(t *testing.T) {
 // TestDoTLSErrorExplanation: сертификат сервера не в приватном пуле — ошибка
 // на русском с объяснением и без предложения обхода (SECURITY.md §1).
 func TestDoTLSErrorExplanation(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	defer srv.Close()
 
 	// Пул из «чужого» CA, не подписавшего сертификат тестового сервера.
@@ -208,7 +208,7 @@ func TestDoTLSErrorExplanation(t *testing.T) {
 // TestDoNetworkErrorVPNHint: сервер недоступен — подсказка про VPN
 // (AGENTS.md: Exchange виден только через VPN).
 func TestDoNetworkErrorVPNHint(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {}))
 	url := srv.URL
 	srv.Close() // порт больше не слушается
 
@@ -228,7 +228,7 @@ func TestDoNetworkErrorVPNHint(t *testing.T) {
 // TestDoDeadlineExceeded: дедлайн контекста истекает — понятная ошибка таймаута.
 func TestDoDeadlineExceeded(t *testing.T) {
 	release := make(chan struct{})
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		<-release
 	}))
 	defer srv.Close()
@@ -257,7 +257,7 @@ func TestEWSErrorUserHint(t *testing.T) {
 		"NoError":                  "",
 	}
 	for code, want := range cases {
-		e := &EWSError{Code: code, Message: "текст"}
+		e := &ResponseError{Code: code, Message: "текст"}
 		hint := e.UserHint()
 		if want == "" {
 			if hint != "" {

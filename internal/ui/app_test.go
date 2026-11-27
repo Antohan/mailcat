@@ -1,7 +1,7 @@
 package ui
 
 // Тесты санитизации на границе UI по итогам security-ревью этапа 2:
-// 1) текст ошибок EWS (EWSError.MessageText/faultstring) — серверный,
+// 1) текст ошибок EWS (ResponseError.MessageText/faultstring) — серверный,
 //    до терминала только через Sanitize;
 // 2) строки для tview.Table/List — tview.Escape (теги [red]/["region"]
 //    интерпретируются этими виджетами безусловно).

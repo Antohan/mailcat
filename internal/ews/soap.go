@@ -17,13 +17,6 @@ import (
 	"time"
 )
 
-// Пространства имён EWS/SOAP (docs/EWS-REFERENCE.md §3).
-const (
-	nsSoap     = "http://schemas.xmlsoap.org/soap/envelope/"
-	nsTypes    = "http://schemas.microsoft.com/exchange/services/2006/types"
-	nsMessages = "http://schemas.microsoft.com/exchange/services/2006/messages"
-)
-
 // Таймауты запросов (docs/SECURITY.md §7).
 const (
 	requestTimeout    = 30 * time.Second // общий на запрос
@@ -62,7 +55,7 @@ func NewClient(url string, creds Credentials, caPath string, log *slog.Logger) (
 // Do отправляет операцию EWS (request — типизированный элемент вида m:FindItem)
 // внутри SOAP-конверта и разбирает ответ в response (указатель на структуру
 // вида m:FindItemResponse). HTTP-статусы, soap:Fault и ошибки конверта
-// превращаются в типизированные ошибки: *HTTPError, *SoapFaultError, *EWSError
+// превращаются в типизированные ошибки: *HTTPError, *SoapFaultError, *ResponseError
 // (последний ставят сами операции по ResponseClass).
 func (c *Client) Do(ctx context.Context, request any, response any) error {
 	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
@@ -90,7 +83,7 @@ func (c *Client) Do(ctx context.Context, request any, response any) error {
 	if err != nil {
 		return transportError(err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		// WHY: Exchange кладёт soap:Fault прямо в тело не-200 ответа
 		// Why: живой сервер отвечал HTTP 500 + ErrorInvalidRequest, а голый
@@ -236,13 +229,13 @@ func (e *SoapFaultError) Error() string {
 	return fmt.Sprintf("SOAP-fault %s: %s", e.Code, e.String)
 }
 
-// EWSError — ResponseClass="Error" из m:*ResponseMessage (EWS-REFERENCE.md §9).
-type EWSError struct {
+// ResponseError — ResponseClass="Error" из m:*ResponseMessage (EWS-REFERENCE.md §9).
+type ResponseError struct {
 	Code    string // ResponseCode, например ErrorAccessDenied
 	Message string // MessageText
 }
 
-func (e *EWSError) Error() string {
+func (e *ResponseError) Error() string {
 	if e.Message == "" {
 		return "EWS: " + e.Code
 	}
@@ -250,7 +243,7 @@ func (e *EWSError) Error() string {
 }
 
 // UserHint возвращает человеко-понятную подсказку для известных кодов EWS.
-func (e *EWSError) UserHint() string {
+func (e *ResponseError) UserHint() string {
 	switch e.Code {
 	case "ErrorAccessDenied":
 		return "нет прав на операцию — спросите ИТ-отдел"
@@ -268,10 +261,10 @@ func (e *EWSError) UserHint() string {
 }
 
 // checkResponseClass превращает ResponseClass="Error" ответа операции
-// в *EWSError; Success и Warning ошибкой не считаются.
+// в *ResponseError; Success и Warning ошибкой не считаются.
 func checkResponseClass(class, code, messageText string) error {
 	if class != "Error" {
 		return nil
 	}
-	return &EWSError{Code: code, Message: messageText}
+	return &ResponseError{Code: code, Message: messageText}
 }

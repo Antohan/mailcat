@@ -68,7 +68,7 @@ func newFindEventsRequest(start, end time.Time) *findItemRequest {
 		// WHY: без SortOrder (и Restriction) — с CalendarView EWS их запрещает
 		// (ErrorInvalidOperation, живой сервер 15.2.2562); ответ всегда идёт
 		// по calendar:Start по возрастанию, порядок задаёт сам сервер.
-		ParentFolderIDs: parentFolderIdsRequest{
+		ParentFolderIDs: parentFolderIDsRequest{
 			DistinguishedFolderID: &distinguishedFolderIDRequest{ID: "calendar"},
 		},
 	}
@@ -139,7 +139,7 @@ func newEventBodyRequest(itemID, changeKey string) *getItemRequest {
 				{FieldURI: "item:TextBody"},
 			}},
 		},
-		ItemIDs: itemIdsRequest{
+		ItemIDs: itemIDsRequest{
 			ItemID: xmlItemIDRequest{ID: itemID, ChangeKey: changeKey},
 		},
 	}

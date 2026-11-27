@@ -54,13 +54,13 @@ func TestCreateUnique(t *testing.T) {
 	}
 	st1, err := f1.Stat()
 	if err != nil {
-		f1.Close()
+		_ = f1.Close()
 		t.Fatal(err)
 	}
 	if _, err := f1.Write([]byte("x")); err != nil {
 		t.Errorf("файл не открыт на запись: %v", err)
 	}
-	f1.Close()
+	_ = f1.Close()
 	if p1 != filepath.Join(dir, "report (1).pdf") {
 		t.Errorf("первый конфликт = %q", p1)
 	}
@@ -72,7 +72,7 @@ func TestCreateUnique(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f2.Close()
+	_ = f2.Close()
 	if p2 != filepath.Join(dir, "report (2).pdf") {
 		t.Errorf("второй конфликт = %q", p2)
 	}
@@ -81,14 +81,14 @@ func TestCreateUnique(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	f3.Close()
+	_ = f3.Close()
 	if p3 != filepath.Join(dir, "free.txt") {
 		t.Errorf("свободное имя = %q", p3)
 	}
 
 	// Несуществующий каталог — ошибка, а не паника/тишина.
 	if f, _, err := CreateUnique(filepath.Join(dir, "нет"), "a.txt"); err == nil {
-		f.Close()
+		_ = f.Close()
 		t.Errorf("нет ошибки для отсутствующего каталога")
 	}
 }

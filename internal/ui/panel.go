@@ -58,7 +58,7 @@ func (h *panelHeader) setActive(active bool) {
 
 // Draw рисует заголовок и добивает строку hairline-разделителем.
 func (h *panelHeader) Draw(screen tcell.Screen) {
-	h.Box.DrawForSubclass(screen, h)
+	h.DrawForSubclass(screen, h)
 	x, y, w, _ := h.GetRect()
 	if w <= 0 {
 		return
@@ -112,7 +112,7 @@ func newDivider() *divider {
 // WHY: цвет textSecondary, не hairline — по той же причине, что и линии
 // заголовков выше: hairline на белой поверхности не читается.
 func (d *divider) Draw(screen tcell.Screen) {
-	d.Box.DrawForSubclass(screen, d)
+	d.DrawForSubclass(screen, d)
 	x, y, w, h := d.GetRect()
 	rule := tcell.StyleDefault.Foreground(colorTextSecondary).Background(colorPanelBg)
 	for yy := y; yy < y+h; yy++ {

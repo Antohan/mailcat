@@ -1,4 +1,4 @@
-// Пакет ews — read-only клиент Exchange Web Services (mailcat).
+// Package ews — клиент Exchange Web Services (mailcat), только чтение.
 // Конверты операций — строго по docs/EWS-REFERENCE.md; TLS-изоляция и запрет
 // секретов в логах — по docs/SECURITY.md.
 package ews

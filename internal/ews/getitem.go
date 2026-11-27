@@ -74,7 +74,7 @@ func newGetItemRequest(itemID, changeKey string) *getItemRequest {
 				{FieldURI: "item:DateTimeSent"},
 			}},
 		},
-		ItemIDs: itemIdsRequest{
+		ItemIDs: itemIDsRequest{
 			ItemID: xmlItemIDRequest{ID: itemID, ChangeKey: changeKey},
 		},
 	}
@@ -83,10 +83,10 @@ func newGetItemRequest(itemID, changeKey string) *getItemRequest {
 type getItemRequest struct {
 	XMLName   xml.Name         `xml:"http://schemas.microsoft.com/exchange/services/2006/messages GetItem"`
 	ItemShape itemShapeRequest `xml:"ItemShape"`
-	ItemIDs   itemIdsRequest   `xml:"ItemIds"`
+	ItemIDs   itemIDsRequest   `xml:"ItemIds"`
 }
 
-type itemIdsRequest struct {
+type itemIDsRequest struct {
 	XMLName xml.Name `xml:"http://schemas.microsoft.com/exchange/services/2006/messages ItemIds"`
 	// t:ItemId — namespace types, не родительский messages (EWS-REFERENCE.md §6).
 	ItemID xmlItemIDRequest `xml:"http://schemas.microsoft.com/exchange/services/2006/types ItemId"`
