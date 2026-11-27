@@ -927,13 +927,13 @@ func (s *mailScreen) clampMessageColumns(_ tcell.Screen, x, y, w, h int) (int, i
 			// V-25: серия отправителя считается здесь заново — текст ячейки
 			// хранить нельзя, при resize он пересобирается (WHY выше).
 			repeat := i > 0 && sameSenderRun(s.items[i-1], s.items[i], now)
-			parts := FormatMessageListItem(s.items[i], s.app.cfg.InternalDomains(), now, repeat)
+			parts := FormatMessageListItem(s.items[i], s.app.cfg.InternalDomains(), now, repeat, maxW)
 			if c := s.messages.GetCell(row, 0); c != nil {
 				c.SetText(strings.Repeat(" ", listPadLeft) +
-					dotLine(truncateEllipsis(parts[0], maxW), !s.items[i].IsRead))
+					dotLine(parts[0], !s.items[i].IsRead))
 			}
 			if c := s.messages.GetCell(row+1, 0); c != nil {
-				c.SetText(strings.Repeat(" ", listPadLeft) + truncateEllipsis(parts[2], maxW))
+				c.SetText(strings.Repeat(" ", listPadLeft) + parts[2])
 			}
 		}
 	}
@@ -990,7 +990,7 @@ func (s *mailScreen) appendRows(added []mail.MessageSummary) {
 					SetSelectable(false)) // без Expansion: расширил бы колонку 0
 		}
 		repeat := prev >= 0 && sameSenderRun(s.items[prev], m, now)
-		parts := FormatMessageListItem(m, s.app.cfg.InternalDomains(), now, repeat)
+		parts := FormatMessageListItem(m, s.app.cfg.InternalDomains(), now, repeat, 0)
 		row := s.messages.GetRowCount()
 		s.itemRows = append(s.itemRows, row)
 		// dotLine: точка своим цветом тегом (muted у прочитанных, П.1);

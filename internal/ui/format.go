@@ -79,15 +79,17 @@ func dayBucket(now, t time.Time) int {
 // senderLabel — колонка отправителя (UI-2): имя из t:Name, при отсутствии —
 // локальная часть адреса (youtrack@… ×20 — нечитаемо). Полный адрес остаётся
 // в заголовке выбранного письма (SECURITY.md §4.1 — адрес доступен всегда).
+// Возвращает Sanitize без Escape: усечение делает FormatMessageListItem до
+// Escape — резать escaped-строку нельзя (WHY там).
 func senderLabel(a mail.Address) string {
 	if name := strings.TrimSpace(a.Name); name != "" {
-		return tview.Escape(security.Sanitize(name))
+		return security.Sanitize(name)
 	}
 	email := a.Email
 	if i := strings.IndexByte(email, '@'); i > 0 {
 		email = email[:i]
 	}
-	return tview.Escape(security.Sanitize(email))
+	return security.Sanitize(email)
 }
 
 // listPadLeft/listPadRight — горизонтальные поля пункта списка (V-17): точка
@@ -130,8 +132,9 @@ func sameSenderRun(prev, cur mail.MessageSummary, now time.Time) bool {
 // [строка 1, время, строка 2]. Строка 1 — точка статуса + [ВНЕШН]
 // фиксированной ширины + отправитель (t:Name, fallback — локальная часть
 // адреса); время — отдельная правая колонка (appendRows ставит AlignRight,
-// панели не «дышет»); строка 2 — тема с отступом под отправителя, усечение
-// с «…» делает truncateEllipsis в DrawFunc (WHY у неё). Цвета и жирность
+// панели не «дышет»); строка 2 — тема с отступом под отправителя. maxW > 0 —
+// усечение строк 1 и 2 с «…» до Escape (WHY ниже); maxW = 0 — полный текст
+// для appendRows. Цвета и жирность
 // назначает appendRows через SetTextColor, а не теги в тексте: выделенная
 // строка Table перекрашивается целиком через SetSelectedStyle, теги бы
 // пробивались (исключение — точка статуса, WHY у dotLine). Текст из EWS
@@ -139,16 +142,25 @@ func sameSenderRun(prev, cur mail.MessageSummary, now time.Time) bool {
 // теги цветов/регионов безусловно (ревью этапа 2).
 // repeat (V-25) — письмо продолжает серию отправителя (sameSenderRun): имя
 // не печатается, но точка и [ВНЕШН] остаются у каждой строки (SECURITY §4).
-func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.Time, repeat bool) []string {
+func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.Time, repeat bool, maxW int) []string {
 	mark := fmt.Sprintf("%-*s", externalMarkCol, ExternalMark(m.From.Email, orgDomains))
 	name := senderLabel(m.From)
 	if repeat {
 		name = ""
 	}
+	line1 := messageDot + " " + mark + name
+	subject := subjectIndent + security.Sanitize(m.Subject)
+	// WHY: усечение до tview.Escape, а не после. Escape расширяет строку
+	// ("[" → "[]"), и обрезка escaped-текста рвёт тег: на экране одиночная
+	// скобка и ширина больше maxW. Не делать: truncateEllipsis(Escape(...)).
+	if maxW > 0 {
+		line1 = truncateEllipsis(line1, maxW)
+		subject = truncateEllipsis(subject, maxW)
+	}
 	return []string{
-		messageDot + " " + mark + name,
+		tview.Escape(line1),
 		FormatShortDate(now, m.Received),
-		subjectIndent + tview.Escape(security.Sanitize(m.Subject)),
+		tview.Escape(subject),
 	}
 }
 
@@ -156,7 +168,8 @@ func FormatMessageListItem(m mail.MessageSummary, orgDomains []string, now time.
 // WHY: своё, а не встроенное многоточие tview.Table — tview сравнивает
 // байтовую длину напечатанного (end-start) с шириной в клетках, у кириллицы
 // байты вдвое больше клеток и условие «текст не влез» всегда ложно.
-// Порог по рунам, не по клеткам — best effort, как и прочие ширины здесь.
+// Вызывать до tview.Escape: escaped-строку резать нельзя (WHY в
+// FormatMessageListItem). Порог по рунам, не по клеткам — best effort.
 func truncateEllipsis(s string, width int) string {
 	if width < 1 {
 		return ""
